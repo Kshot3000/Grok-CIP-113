@@ -121,3 +121,8 @@
  .amort-panel .fine-print{margin-top:16px}
  @media(max-width:650px){.amort-metrics{grid-template-columns:1fr}.amort-metrics>div+div{margin-top:14px}}
 }
+.check-result.warning>.icon{color:var(--amber)}
+.check-result.note>.icon{color:#8cbce6}
+.check-result.blocker>.icon{color:var(--red)}
+.review-results{padding:0}
+.review-results .check-result:first-child{padding-top:2px}
