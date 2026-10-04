@@ -20,7 +20,7 @@ test('Midnight connection checks v4 status and reads only public address',async(
   let requested;let status={status:'connected',networkId:'preview'};
   const provider={name:'Midnight test',apiVersion:'4.0.1',connect:async(n)=>{requested=n;return{getConnectionStatus:async()=>status,getUnshieldedAddress:async()=>({unshieldedAddress:'mn_addr_preview1test'})};}};
   const wallet=await connectMidnight(provider,'preview');assert.equal(requested,'preview');assert.equal(wallet.address,'mn_addr_preview1test');
-  status={status:'connected',networkId:'mainnet'};await assert.rejects(connectMidnight(provider,'preview'),/selected network/);
+  status={status:'connected',networkId:'mainnet'};await assert.rejects(connectMidnight(provider,'preview'),/not Preview/);
   status={status:'disconnected'};await assert.rejects(connectMidnight(provider,'preview'));
 });
 test('unavailable or malformed live data is rejected instead of replaced with fixtures',async()=>{

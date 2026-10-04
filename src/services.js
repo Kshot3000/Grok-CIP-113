@@ -39,25 +39,57 @@ export function cardanoWallets(root=globalThis) {
 export function midnightWallets(root=globalThis) {
   return Object.entries(root.midnight??{}).filter(([,w])=>w&&typeof w.connect==='function'&&/^4\./.test(w.apiVersion??'')).map(([id,w])=>({id,name:w.name??id,provider:w}));
 }
-export async function connectCardano(provider,network) {
-  const api=await provider.enable(),id=await api.getNetworkId();
-  if(id!==NETWORKS[network].id)throw new Error(`Switch your wallet to ${network==='mainnet'?'Mainnet':'a test network'} and reconnect.`);
+function assertCardanoApi(api) {
+  if(!api||typeof api.getNetworkId!=='function'||typeof api.getChangeAddress!=='function')throw new Error('The wallet did not provide a complete CIP-30 API. Update the wallet or try another one.');
+  return api;
+}
+async function readCardanoState(api,network) {
+  const id=await api.getNetworkId();
+  // CIP-30 defines exactly two network ids: 0 (testnet) and 1 (mainnet).
+  // Anything else is a broken wallet response, not a network to switch to.
+  if(id!==0&&id!==1)throw new Error('The wallet reported an unrecognised network. Reconnect and try again.');
+  if(id!==NETWORKS[network].id)throw new Error(`Switch your wallet to ${NETWORKS[network].name}${network==='mainnet'?'':' testnet'} and reconnect.`);
   const address=normalizeWalletAddress(await api.getChangeAddress());
   if(decodeAddress(address).network!==id)throw new Error('Wallet address and reported network do not match.');
+  return {id,address};
+}
+export async function connectCardano(provider,network) {
+  const api=assertCardanoApi(await provider.enable());
+  const {id,address}=await readCardanoState(api,network);
   return {name:provider.name,api,networkId:id,address,connectedAt:Date.now()};
 }
 export async function refreshCardano(wallet,network) {
-  const id=await wallet.api.getNetworkId(),address=normalizeWalletAddress(await wallet.api.getChangeAddress());
-  if(id!==NETWORKS[network].id||decodeAddress(address).network!==id||address!==wallet.address)throw new Error('Wallet account or network changed. Reconnect to continue.');
+  const {id,address}=await readCardanoState(assertCardanoApi(wallet.api),network);
+  if(id!==wallet.networkId||address!==wallet.address)throw new Error('Wallet account or network changed. Reconnect to continue.');
   return wallet;
 }
-export async function connectMidnight(provider,network) {
-  if(!/^4\./.test(provider.apiVersion??''))throw new Error('Use a Midnight wallet with connector API v4.');
-  const api=await provider.connect(NETWORKS[network].midnight),status=await api.getConnectionStatus();
-  if(status?.networkId!==NETWORKS[network].midnight||status?.status!=='connected')throw new Error('Midnight wallet is not connected to the selected network.');
+async function readMidnightAddress(api) {
+  if(!api||typeof api.getUnshieldedAddress!=='function')throw new Error('The wallet did not provide a complete Midnight API. Update the wallet or try another one.');
   // Never fetch balances or secret material. Read only the public unshielded address.
   const result=await api.getUnshieldedAddress();
   const address=typeof result==='string'?result:result?.unshieldedAddress;
-  if(typeof address!=='string'||!address.startsWith('mn_addr'))throw new Error('The wallet did not provide a valid public address.');
-  return {name:provider.name,api,address,network,version:provider.apiVersion};
+  if(typeof address!=='string'||!address.startsWith('mn_addr')||address.length<20||address.length>250)throw new Error('The wallet did not provide a valid public address.');
+  return address;
+}
+async function readMidnightState(api,network) {
+  if(!api||typeof api.getConnectionStatus!=='function')throw new Error('The wallet did not provide a complete Midnight API. Update the wallet or try another one.');
+  const status=await api.getConnectionStatus();
+  // Compare against the network's Midnight id from the NETWORKS table, never
+  // against the app's network key — the two coincide today by convention only.
+  if(status?.status!=='connected')throw new Error('Midnight wallet is not connected.');
+  if(status.networkId!==NETWORKS[network].midnight)throw new Error(`Midnight wallet is connected to ${status.networkId??'an unknown network'}, not ${NETWORKS[network].name}. Switch networks in the wallet and reconnect.`);
+  return status;
+}
+export async function connectMidnight(provider,network) {
+  if(!/^4\./.test(provider.apiVersion??''))throw new Error('Use a Midnight wallet with connector API v4.');
+  const api=await provider.connect(NETWORKS[network].midnight);
+  const status=await readMidnightState(api,network);
+  const address=await readMidnightAddress(api);
+  return {name:provider.name,api,address,network:NETWORKS[network].midnight,networkId:status.networkId,version:provider.apiVersion};
+}
+export async function refreshMidnight(wallet,network) {
+  await readMidnightState(wallet.api,network);
+  const address=await readMidnightAddress(wallet.api);
+  if(address!==wallet.address)throw new Error('Midnight account changed. Reconnect to continue.');
+  return wallet;
 }
