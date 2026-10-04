@@ -83,6 +83,29 @@
  #sub-result .simulation-result,#seizure-result .simulation-result{margin:20px 0 4px}
 }
 
+/* Transfer sequence lab (v1.10). */
+@layer components {
+ .seq-steps{list-style:none;padding:0;margin:0 0 18px;display:flex;flex-direction:column;gap:8px}
+ .seq-steps li{display:flex;align-items:center;gap:11px;border:1px solid var(--line);background:#0e151c;border-radius:8px;padding:10px 13px;font-size:.8125rem}
+ .seq-steps strong{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+ .seq-num{font-family:Consolas,monospace;font-size:.6875rem;color:var(--green);background:#1a2c25;border:1px solid #34503e;border-radius:6px;width:22px;height:22px;display:grid;place-items:center;flex-shrink:0}
+ .seq-balances{padding:16px 18px 6px;border-bottom:1px solid #273941}
+ .seq-balances h4{font-size:.6875rem;letter-spacing:1.1px;color:var(--muted);margin-bottom:12px}
+ .seq-balances dl{display:grid;grid-template-columns:1fr 1fr;gap:8px 22px}
+ .seq-balances dl>div{display:flex;justify-content:space-between;gap:12px;font-size:.8125rem;padding-bottom:10px}
+ .seq-balances dt{color:var(--muted)}
+ .seq-balances dd{font-variant-numeric:tabular-nums}
+ .seq-step{border-bottom:1px solid #273941}
+ .seq-step:last-child{border-bottom:0}
+ .seq-step-head{display:flex;align-items:center;gap:10px;padding:14px 18px 0;font-size:.8125rem;flex-wrap:wrap}
+ .seq-step-head>.icon{width:16px;height:16px;flex-shrink:0}
+ .seq-step.pass .seq-step-head>.icon{color:var(--green)}
+ .seq-step.fail .seq-step-head>.icon{color:var(--red)}
+ .seq-step-head span{margin-left:auto;font-size:.6875rem;color:var(--muted)}
+ #seq-result .simulation-result{margin:20px 0 4px}
+ @media(max-width:650px){.seq-balances dl{grid-template-columns:1fr}.seq-step-head span{margin-left:26px}}
+}
+
 /* RealFi amortization schedule (v1.6). */
 @layer pages {
  .amort-panel{margin-top:24px}

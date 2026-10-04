@@ -53,6 +53,73 @@ export function simulateTransfer(design, input) {
   return {allowed:checks.every(c=>c.pass),invalid:false,checks};
 }
 
+// Ledger accounts for the transfer-sequence model: the issuer starts holding
+// the full designed supply and the three fictional participants start at
+// zero. The issuer is a modeled account like any other — it is on the
+// allowlist and holds a modeled eligibility credential, and it is never
+// frozen — so sequences can also model tokens flowing back to the issuer.
+export const LEDGER_ACCOUNTS = Object.freeze({
+  issuer:{ name:'Issuer (initial holder)', allowed:true, credential:true, frozen:false },
+  ...PARTICIPANTS,
+});
+
+// Exact decimal rendering of a BigInt base-unit amount. No Number conversion
+// anywhere, so amounts past 2^53 render digit-for-digit; trailing fractional
+// zeros are trimmed ('1.500000' at 6 decimals renders as '1.5').
+export function formatUnits(baseUnits, decimals=6) {
+  if(typeof baseUnits!=='bigint') throw new Error('Base units must be a BigInt.');
+  if(!Number.isInteger(decimals)||decimals<0||decimals>6) throw new Error('Decimals must be between 0 and 6.');
+  const negative=baseUnits<0n, abs=negative?-baseUnits:baseUnits, scale=10n**BigInt(decimals);
+  const whole=abs/scale, fraction=abs%scale;
+  const rendered=fraction===0n||decimals===0?whole.toString():`${whole}.${fraction.toString().padStart(decimals,'0').replace(/0+$/,'')}`;
+  return negative?`-${rendered}`:rendered;
+}
+
+// A sequence of modeled transfers against a running ledger — the studio's
+// single-transfer checks, applied in order, where one step changes the
+// balances the next step is checked against. A blocked step leaves every
+// balance unchanged and later steps are still evaluated, so a designer can
+// see the knock-on effect of a denial (an onward transfer from an account
+// that never received its funding fails on balance, not on surprise).
+// Local simulation only: the ledger is fictional, no wallet is read, and
+// nothing here executes a validator or produces a transaction.
+export function simulateTransferSequence(design, transfers) {
+  const errors=validateDesign(design);
+  let supply=0n;
+  try { supply=toUnits(design.supply,design.decimals); } catch { /* An invalid design reports its errors below; the ledger stays at zero. */ }
+  const balances={};
+  for(const k of Object.keys(LEDGER_ACCOUNTS)) balances[k]=k==='issuer'?supply:0n;
+  const finish=steps=>({
+    invalid:errors.length>0, errors,
+    steps,
+    balances:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),
+    transferredBaseUnits:steps.filter(s=>s.allowed).reduce((sum,s)=>sum+BigInt(s.amountBaseUnits),0n).toString(),
+    appliedCount:steps.filter(s=>s.allowed).length,
+  });
+  if(errors.length) return finish([]);
+  if(!Array.isArray(transfers)||transfers.length<1||transfers.length>12) throw new Error('A transfer sequence needs between 1 and 12 modeled transfers.');
+  const steps=transfers.map((t,i)=>{
+    if(!t||typeof t!=='object'||Array.isArray(t)) throw new Error(`Transfer ${i+1} must describe a sender, a recipient, and an amount.`);
+    let amount=null, amountError='';
+    try { amount=toUnits(t.amount,design.decimals); if(amount<=0n) throw new Error('Amount must be greater than zero.'); }
+    catch(e) { amountError=e.message; }
+    if(amountError) return {from:t.from,to:t.to,amount:String(t.amount??''),amountBaseUnits:null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:amountError}]};
+    const from=LEDGER_ACCOUNTS[t.from], to=LEDGER_ACCOUNTS[t.to];
+    if(!from||!to) return {from:t.from,to:t.to,amount:String(t.amount),amountBaseUnits:amount.toString(),allowed:false,checks:[{name:'Known accounts',pass:false,detail:'Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.'}]};
+    const checks=[
+      {name:'Sender balance',pass:balances[t.from]>=amount,detail:balances[t.from]>=amount?`The modeled sender holds ${formatUnits(balances[t.from],design.decimals)} ${design.ticker} when this step runs.`:`The modeled sender holds only ${formatUnits(balances[t.from],design.decimals)} ${design.ticker} when this step runs — earlier steps in the sequence count.`},
+      {name:'Transfer access',pass:!design.allowlist||to.allowed,detail:design.allowlist?'Recipient must be on the modeled allowlist.':'Open access is enabled.'},
+      {name:'Transfer limit',pass:!design.limitEnabled||amount<=toUnits(design.limit,design.decimals),detail:design.limitEnabled?`Up to ${design.limit} ${design.ticker} per modeled transfer — the cap is per transfer, not cumulative.`:'No per-transfer cap is modeled.'},
+      {name:'Issuer controls',pass:!design.pausable||(!design.paused&&!from.frozen&&!to.frozen),detail:design.pausable?(design.paused?'Issuer has paused all transfers.':from.frozen?'The sender is frozen.':to.frozen?'The recipient is frozen.':'Transfers are active and neither party is frozen.'):'Pause and freeze controls are disabled.'},
+      {name:'Eligibility requirement',pass:!design.identity||to.credential,detail:design.identity?'Recipient must have modeled eligibility. This is not a verified credential or Midnight proof.':'No eligibility credential is required by this model.'},
+    ];
+    const allowed=checks.every(c=>c.pass);
+    if(allowed) { balances[t.from]-=amount; balances[t.to]+=amount; }
+    return {from:t.from,to:t.to,amount:String(t.amount),amountBaseUnits:amount.toString(),allowed,checks};
+  });
+  return finish(steps);
+}
+
 // CIP-113 Layer-3 substandards, modeled from the Cardano Foundation reference
 // platform (checked 2026-10-04). These are local models of the documented
 // validator checks — nothing here reads an on-chain denylist, verifies a real
