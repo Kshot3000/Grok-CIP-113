@@ -37,3 +37,16 @@
  .preview-details>div,.preview-details strong{font-size:.8125rem}
  @media(max-width:650px){.template strong{font-size:.8125rem}.template small{font-size:.75rem}.template-grid{grid-template-columns:1fr 1fr}.template{min-height:104px;align-items:flex-start;padding:15px 10px}.template-icon{margin-top:3px}.ecosystem-strip>a,.ecosystem-strip>span{font-size:.75rem}.ecosystem-strip{align-items:flex-start}.section-heading>span{font-size:.75rem}}
 }
+
+/* Substandard lab (v1.1). */
+@layer components {
+ .preset-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+ .chip{border:1px solid #31414b;background:#151e26;color:#cfdae1;font-size:.75rem;padding:8px 13px;border-radius:20px;line-height:1.4}
+ .chip:hover{border-color:#586e7a;color:#fff}
+ .chip.selected{background:#21332b;border-color:#77b38b;color:#b8edc9}
+ .chip:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+ .substandard-note{margin:18px 0 2px}
+ .substandards-guide{margin-top:24px}
+ .substandards-guide .fine-print{max-width:760px;line-height:1.7}
+ #sub-result .simulation-result,#seizure-result .simulation-result{margin:20px 0 4px}
+}

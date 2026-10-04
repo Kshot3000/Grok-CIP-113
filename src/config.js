@@ -32,10 +32,10 @@ export const PREVIEW_REFERENCE = Object.freeze({
 });
 
 export const TEMPLATES = [
-  { id:'rwa', name:'Real-world asset', short:'RWA', icon:'building', description:'Ownership with clear boundaries', tokenName:'Prism Real Asset', ticker:'PRA', decimals:6, supply:'1000000', limit:'10000', allowlist:true, limitEnabled:true, pausable:true, identity:true, accent:'mint' },
-  { id:'credit', name:'Private credit', short:'CREDIT', icon:'chart', description:'Rules for a lending lifecycle', tokenName:'Prism Credit', ticker:'PCR', decimals:6, supply:'500000', limit:'25000', allowlist:true, limitEnabled:true, pausable:true, identity:true, accent:'blue' },
-  { id:'stable', name:'Stablecoin concept', short:'STABLE', icon:'coins', description:'Model issuer-managed transfers', tokenName:'Prism Dollar Concept', ticker:'PDC', decimals:6, supply:'1000000', limit:'50000', allowlist:true, limitEnabled:true, pausable:true, identity:false, accent:'amber' },
-  { id:'community', name:'Community access', short:'ACCESS', icon:'users', description:'Membership, made programmable', tokenName:'Prism Community', ticker:'PASS', decimals:0, supply:'10000', limit:'1', allowlist:false, limitEnabled:true, pausable:false, identity:false, accent:'purple' },
+  { id:'rwa', name:'Real-world asset', short:'RWA', icon:'building', description:'Ownership with clear boundaries', tokenName:'Prism Real Asset', ticker:'PRA', decimals:6, supply:'1000000', limit:'10000', allowlist:true, limitEnabled:true, pausable:true, identity:true, substandard:'kyc-extended', accent:'mint' },
+  { id:'credit', name:'Private credit', short:'CREDIT', icon:'chart', description:'Rules for a lending lifecycle', tokenName:'Prism Credit', ticker:'PCR', decimals:6, supply:'500000', limit:'25000', allowlist:true, limitEnabled:true, pausable:true, identity:true, substandard:'kyc', accent:'blue' },
+  { id:'stable', name:'Stablecoin concept', short:'STABLE', icon:'coins', description:'Model issuer-managed transfers', tokenName:'Prism Dollar Concept', ticker:'PDC', decimals:6, supply:'1000000', limit:'50000', allowlist:true, limitEnabled:true, pausable:true, identity:false, substandard:'freeze-seize', accent:'amber' },
+  { id:'community', name:'Community access', short:'ACCESS', icon:'users', description:'Membership, made programmable', tokenName:'Prism Community', ticker:'PASS', decimals:0, supply:'10000', limit:'1', allowlist:false, limitEnabled:true, pausable:false, identity:false, substandard:'generic', accent:'purple' },
 ];
 
 export const SOURCES = [

@@ -1,6 +1,6 @@
 # Primary sources
 
-Checked **2026-10-03**. Standards, deployments, APIs, and products may change.
+Checked **2026-10-03**; substandard module references re-checked **2026-10-04**. Standards, deployments, APIs, and products may change.
 
 | Source | Used for |
 | --- | --- |
@@ -9,6 +9,9 @@ Checked **2026-10-03**. Standards, deployments, APIs, and products may change.
 | [CIP-30](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0030) | Wallet discovery, enablement, network ID, and change address. |
 | [Core implementation](https://github.com/cardano-foundation/cip113-programmable-tokens) | Reference implementation and architecture links. |
 | [Programmable Tokens Platform](https://github.com/cardano-foundation/cip113-programmable-tokens-platform) | R&D/audit status, testnet implementation, and optional registry API surface. |
+| [Freeze-and-seize module](https://github.com/cardano-foundation/cip113-programmable-tokens-platform/tree/main/src/modules/freeze-and-seize) | Denylist semantics: both transfer parties checked against the on-chain sorted-list denylist; authorised freeze/seizure of denylisted holders. Modeled locally in the substandard lab. |
+| [KYC module walkthrough](https://github.com/cardano-foundation/cip113-programmable-tokens-platform/tree/main/docs/modules/kyc) | Sender-certificate model: trusted-entity list, signature, sender binding, ~30-day expiry, global-state pause flag; recipients unchecked. Modeled locally. |
+| [KYC-extended walkthrough](https://github.com/cardano-foundation/cip113-programmable-tokens-platform/tree/main/docs/modules/kyc-extended) | Recipient allowlist anchored by a Merkle Patricia Forestry root, entry TTL/expiry, publisher lag, and the self-transfer exemption. Modeled locally. |
 | [Preview bootstrap source](https://github.com/cardano-foundation/cip113-programmable-tokens-platform/blob/main/src/programmable-tokens-offchain-java/src/main/resources/protocol-bootstraps-preview.json) | Schema-3 reference transaction, base script hash, and protocol-parameters policy snapshot. |
 | [Midnight connector API](https://github.com/midnightntwrk/midnight-dapp-connector-api) | API v4 discovery, network-aware connection, connection status, and public unshielded address. |
 | [Midnight network endpoints](https://docs.midnight.network/relnotes/network) | Mainnet provider migration and distinct test networks. |

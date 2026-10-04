@@ -9,7 +9,7 @@ export const PARTICIPANTS = Object.freeze({
 
 export function fromTemplate(id='rwa') {
   const t=TEMPLATES.find(t=>t.id===id) ?? TEMPLATES[0];
-  return { template:t.id, tokenName:t.tokenName, ticker:t.ticker, decimals:t.decimals, supply:t.supply, limit:t.limit, allowlist:t.allowlist, limitEnabled:t.limitEnabled, pausable:t.pausable, identity:t.identity, paused:false };
+  return { template:t.id, tokenName:t.tokenName, ticker:t.ticker, decimals:t.decimals, supply:t.supply, limit:t.limit, allowlist:t.allowlist, limitEnabled:t.limitEnabled, pausable:t.pausable, identity:t.identity, substandard:t.substandard ?? 'generic', paused:false };
 }
 
 export function toUnits(value, decimals=6) {
@@ -30,6 +30,7 @@ export function validateDesign(d) {
   if(!Number.isInteger(d?.decimals)||d.decimals<0||d.decimals>6) errors.push('Choose 0–6 decimal places.');
   for(const k of ['allowlist','limitEnabled','pausable','identity','paused']) if(typeof d?.[k]!=='boolean') errors.push(`Invalid ${k} setting.`);
   if(!TEMPLATES.some(t=>t.id===d?.template)) errors.push('Unknown template.');
+  if(!SUBSTANDARDS.some(s=>s.id===d?.substandard)) errors.push('Unknown substandard module.');
   try { if(toUnits(d.supply,d.decimals)<=0n) errors.push('Supply must be greater than zero.'); } catch(e) { errors.push(`Supply: ${e.message}`); }
   if(d?.limitEnabled) try { const cap=toUnits(d.limit,d.decimals); if(cap<=0n||cap>toUnits(d.supply,d.decimals)) errors.push('Transfer limit must be positive and no larger than supply.'); } catch(e) {errors.push(`Transfer limit: ${e.message}`);}
   return [...new Set(errors)];
@@ -52,6 +53,66 @@ export function simulateTransfer(design, input) {
   return {allowed:checks.every(c=>c.pass),invalid:false,checks};
 }
 
+// CIP-113 Layer-3 substandards, modeled from the Cardano Foundation reference
+// platform (checked 2026-10-04). These are local models of the documented
+// validator checks — nothing here reads an on-chain denylist, verifies a real
+// certificate signature, or consults a real allowlist.
+export const SUBSTANDARDS = Object.freeze([
+  { id:'generic', name:'PRISM generic rules', short:'Generic rules', source:null,
+    summary:'PRISM’s own rule toggles — allowlist, transfer cap, issuer pause/freeze, and modeled eligibility. A design aid, not a Foundation reference module.' },
+  { id:'freeze-seize', name:'Freeze-and-seize', short:'Freeze-and-seize', source:`${CONFIG.platform}/tree/main/src/modules/freeze-and-seize`,
+    summary:'Foundation reference module for regulated tokens: an on-chain denylist is consulted on every transfer, and authorised issuers can freeze or seize tokens held by denylisted credentials.' },
+  { id:'kyc', name:'KYC (sender certificate)', short:'KYC', source:`${CONFIG.platform}/tree/main/docs/modules/kyc`,
+    summary:'Foundation reference module: every transfer must carry a fresh certificate, signed by a trusted KYC entity, proving the sender was verified. Recipients are not checked.' },
+  { id:'kyc-extended', name:'KYC extended (sender + recipient)', short:'KYC extended', source:`${CONFIG.platform}/tree/main/docs/modules/kyc-extended`,
+    summary:'Everything in basic KYC, plus the recipient must appear in the issuer’s allowlist — anchored on chain by a Merkle Patricia Forestry root fingerprint — with an unexpired entry. Self-transfers skip the recipient check.' },
+]);
+export const substandardById = id => SUBSTANDARDS.find(s=>s.id===id);
+
+function boolFields(input, fields) {
+  if(!input||typeof input!=='object') throw new Error('Choose a substandard scenario.');
+  for(const f of fields) if(typeof input[f]!=='boolean') throw new Error(`Scenario field ${f} must be true or false.`);
+}
+
+export function simulateSubstandardTransfer(substandard, s={}) {
+  if(substandard==='freeze-seize') {
+    boolFields(s,['senderDenylisted','recipientDenylisted']);
+    const checks=[
+      {name:'Sender not denylisted',pass:!s.senderDenylisted,detail:s.senderDenylisted?'The sender credential appears in the modeled on-chain denylist (a sorted linked list, checked with a covering-node proof). The reference validator rejects the transfer.':'Sender credential is absent from the modeled denylist.'},
+      {name:'Recipient not denylisted',pass:!s.recipientDenylisted,detail:s.recipientDenylisted?'The recipient credential appears in the modeled on-chain denylist. Freeze-and-seize checks both parties, not just the sender.':'Recipient credential is absent from the modeled denylist.'},
+    ];
+    return {allowed:checks.every(c=>c.pass),checks};
+  }
+  if(substandard==='kyc'||substandard==='kyc-extended') {
+    boolFields(s,['certPresent','certTrustedIssuer','certSignatureValid','certNamesSender','certExpired','paused']);
+    const checks=[
+      {name:'Trusted KYC entity',pass:s.certPresent&&s.certTrustedIssuer,detail:!s.certPresent?'No KYC certificate is attached to the modeled transfer.':s.certTrustedIssuer?'The certificate signer is in the issuer’s modeled trusted-entity list.':'The certificate signer is not in the issuer’s trusted-entity list.'},
+      {name:'Certificate signature',pass:s.certPresent&&s.certSignatureValid,detail:!s.certPresent?'There is no certificate whose signature could verify.':s.certSignatureValid?'The modeled certificate signature verifies against the trusted entity’s key.':'The certificate signature does not verify.'},
+      {name:'Certificate names this sender',pass:s.certPresent&&s.certNamesSender,detail:!s.certPresent?'There is no certificate naming any sender.':s.certNamesSender?'The certificate is bound to the sender spending the token.':'The certificate names a different wallet; a certificate cannot be borrowed.'},
+      {name:'Certificate still valid',pass:s.certPresent&&!s.certExpired,detail:!s.certPresent?'There is no certificate with a validity window.':s.certExpired?'The certificate has expired. Certificates are short-lived (the reference walkthrough uses about 30 days) and are not revoked retroactively — expiry is the cutoff.':'The transaction deadline falls within the certificate’s validity window.'},
+      {name:'Transfers not paused',pass:!s.paused,detail:s.paused?'The issuer pause flag in the modeled global state is set; every transfer fails while it is set.':'The modeled global state is not paused.'},
+    ];
+    if(substandard==='kyc-extended') {
+      boolFields(s,['recipientAllowlisted','recipientEntryExpired','selfTransfer']);
+      checks.push(
+        {name:'Recipient in allowlist',pass:s.selfTransfer||s.recipientAllowlisted,detail:s.selfTransfer?'Self-transfer: the reference module skips the recipient check when sender and recipient are the same wallet.':s.recipientAllowlisted?'A modeled inclusion proof reconstructs the on-chain allowlist fingerprint.':'No valid inclusion proof against the modeled allowlist fingerprint (a Merkle Patricia Forestry root).'},
+        {name:'Recipient entry current',pass:s.selfTransfer||(s.recipientAllowlisted&&!s.recipientEntryExpired),detail:s.selfTransfer?'Self-transfer: no recipient entry is consulted.':!s.recipientAllowlisted?'There is no allowlist entry whose expiry could be checked.':s.recipientEntryExpired?'The allowlist entry’s validity window (TTL) has elapsed; expired members are pruned by the issuer’s publisher.':'The allowlist entry is within its validity window.'},
+      );
+    }
+    return {allowed:checks.every(c=>c.pass),checks};
+  }
+  throw new Error('Choose a modeled reference substandard (freeze-and-seize, KYC, or KYC extended). Generic PRISM rules are evaluated by the transfer simulator.');
+}
+
+export function simulateSeizure(s={}) {
+  boolFields(s,['actorAuthorised','holderDenylisted']);
+  const checks=[
+    {name:'Authorised issuer action',pass:s.actorAuthorised,detail:s.actorAuthorised?'The actor is a modeled authorised party for this token.':'Only authorised parties may invoke freeze or seizure in the reference module; it is a third-party action, not a holder action.'},
+    {name:'Holder is denylisted',pass:s.holderDenylisted,detail:s.holderDenylisted?'The holder credential is on the modeled denylist, so its tokens may be frozen or seized.':'Freeze and seizure apply only to denylisted credentials; a holder in good standing cannot be seized.'},
+  ];
+  return {allowed:checks.every(c=>c.pass),checks};
+}
+
 export function makeManifest(design, network) {
   const errors=validateDesign(design);
   if(errors.length) throw new Error(errors.join(' '));
@@ -61,6 +122,7 @@ export function makeManifest(design, network) {
     design:{...design}, token:{name:design.tokenName.trim(),ticker:design.ticker,decimals:design.decimals,initialSupplyBaseUnits:toUnits(design.supply,design.decimals).toString()},
     status:'design-only',
     implementation:{standard:'CIP-113',standardStatus:'Proposed',source:CONFIG.cip,reference:CONFIG.platform,
+      substandard:{id:design.substandard,name:substandardById(design.substandard).name,reference:substandardById(design.substandard).source,modeledLocally:true},
       required:['Reviewed issuance and transfer validators','Registered token policy and protocol deployment','Validated state and transaction builders','Independent security review'],
       midnight:{mode:design.identity?'planned-eligibility-attestation':'none',proofVerified:false,bridgeDeployed:false},
       realfi:{affiliation:false,productIssued:false},
@@ -73,11 +135,13 @@ export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   const m=JSON.parse(raw);
   if(m?.kind!=='prism.cip113-design'||m.version!==1||!NETWORKS[m.network]) throw new Error('This is not a supported PRISM design manifest.');
-  const errors=validateDesign(m.design);
+  // Manifests written before substandards existed default to the generic rule set.
+  const rawDesign=m.design&&m.design.substandard===undefined?{...m.design,substandard:'generic'}:m.design;
+  const errors=validateDesign(rawDesign);
   if(errors.length) throw new Error(errors.join(' '));
   // Whitelist fields; imported objects never become app configuration or API endpoints.
   const design={};
-  for(const k of Object.keys(fromTemplate())) design[k]=m.design[k];
+  for(const k of Object.keys(fromTemplate())) design[k]=rawDesign[k];
   return {design,network:m.network};
 }
 

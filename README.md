@@ -11,6 +11,7 @@ Built by **[KShot · @kshot9000](https://x.com/kshot9000)** for the Cardano comm
 | Workspace | Functionality |
 | --- | --- |
 | Token studio | Four editable templates, validated token identity and precision, configurable allowlist / transfer cap / issuer controls / eligibility, and exact BigInt transfer modeling. |
+| Substandard lab | Each template presets a CIP-113 Layer-3 substandard — freeze-and-seize, KYC, or KYC extended from the Foundation reference platform (community template uses PRISM’s generic rules). The Test step models the modules’ documented checks one by one: denylist on both parties, authorised-only seizure, the five sender-certificate checks, recipient allowlist membership and expiry, and the self-transfer exemption. Local simulation only; legacy design files without a substandard import as generic. |
 | Design files | Local draft persistence, versioned JSON export, validated import, and developer handoff. No server account is required. |
 | Cardano wallets | Real CIP-30 discovery and permission flow, network checks, public payment address, account-change detection, and app disconnection. Read only. |
 | Network explorer | Live Koios chain tip and native asset lookup, refresh and failure states, no invented metrics. |
@@ -82,7 +83,7 @@ scripts/           Dependency-free build and local server
 docs/              Integration handoff and launch copy
 ```
 
-Tests cover exact amount precision, denial paths, malformed imports, UTF-8 token name limits, collateral calculations, eligibility thresholds, Bech32 checksums, official CIP-19 vectors, original-payment-credential ownership, wallet network / account changes, Midnight API compatibility, and malformed API data. Wallet unit tests use explicit mocks; they do not claim live wallet-extension or chain transactions.
+Tests cover exact amount precision, denial paths, malformed imports, UTF-8 token name limits, collateral calculations, eligibility thresholds, Bech32 checksums, official CIP-19 vectors, original-payment-credential ownership, wallet network / account changes, Midnight API compatibility, and malformed API data. A dedicated substandard suite covers every documented denial path of the modeled modules — denylisted sender/recipient, seizure authority, each KYC certificate check failing independently, allowlist membership and entry expiry, the self-transfer exemption — plus template presets, manifest round-trips, and legacy-manifest defaults. Wallet unit tests use explicit mocks; they do not claim live wallet-extension or chain transactions.
 
 ## Build with the community
 
