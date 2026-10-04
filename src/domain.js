@@ -220,6 +220,37 @@ export function creditScenario({principal,rate,months,collateral,advance}) {
   return {interest,total:p+interest,ceiling,ltv:p/c*100,headroom:ceiling-p,withinLimit:p<=ceiling};
 }
 
+// Amortized repayment model for the same private-credit scenario the simple-
+// interest calculator describes: equal monthly payments, each month's interest
+// charged on the remaining balance, the rest reducing principal. This is the
+// structure most term loans actually use, so the lab shows both side by side —
+// amortizing interest is lower than simple interest on the full principal for
+// the same rate and term, because the balance declines. Illustrative math
+// only: no fees, taxes, insurance, defaults, prepayment, or rate changes, and
+// not a loan offer or any product's terms. The final payment is adjusted to
+// the exact remaining balance plus its interest, so the schedule always ends
+// at precisely zero instead of a floating-point residue.
+export function amortizationSchedule(input={}) {
+  const [p,r,n]=[Number(input.principal),Number(input.rate),Number(input.months)];
+  if(!Number.isFinite(p)||p<=0||p>1e12) throw new Error('Use a positive principal up to 1,000,000,000,000.');
+  if(!Number.isFinite(r)||r<0||r>100) throw new Error('Use an annual interest rate between 0 and 100%.');
+  if(!Number.isInteger(n)||n<1||n>360) throw new Error('Use a whole number of months between 1 and 360.');
+  const monthlyRate=r/100/12;
+  const levelPayment=monthlyRate===0?p/n:p*monthlyRate/(1-(1+monthlyRate)**-n);
+  const schedule=[];
+  let balance=p,totalInterest=0,totalPaid=0;
+  for(let month=1;month<=n;month++) {
+    const interest=balance*monthlyRate;
+    let principalPart=levelPayment-interest;
+    let payment=levelPayment;
+    if(month===n||principalPart>=balance) { principalPart=balance; payment=balance+interest; }
+    balance-=principalPart;
+    totalInterest+=interest; totalPaid+=payment;
+    schedule.push({month,payment,interest,principal:principalPart,balance:Math.max(0,balance)});
+  }
+  return {monthlyPayment:levelPayment,totalInterest,total:totalPaid,schedule};
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
