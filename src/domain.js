@@ -167,12 +167,46 @@ export function registryDatumPreview(design, network) {
 
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
-  const m=JSON.parse(raw);
+  let m;
+  try { m=JSON.parse(raw); } catch { throw new Error('This file is not valid JSON.'); }
   if(m?.kind!=='prism.cip113-design'||m.version!==1||!NETWORKS[m.network]) throw new Error('This is not a supported PRISM design manifest.');
+  if(!m.design||typeof m.design!=='object'||Array.isArray(m.design)) throw new Error('This manifest has no design section.');
+  // Amounts must arrive as decimal strings. A JSON number would already have
+  // lost precision before this code runs (JSON.parse rounds past 2^53), which
+  // would silently change the designed supply in a tool whose promise is
+  // BigInt-exact amounts — so numbers are rejected, never converted.
+  for(const k of ['supply','limit']) if(typeof m.design[k]!=='string') throw new Error(`Design ${k} must be a decimal string, not a JSON ${Array.isArray(m.design[k])?'array':typeof m.design[k]}. Re-export the design from PRISM.`);
+  // Canonicalise incidental whitespace so the imported design, its token
+  // summary, and the preview all describe the same asset.
+  const rawDesign={...m.design,
+    tokenName:typeof m.design.tokenName==='string'?m.design.tokenName.trim():m.design.tokenName,
+    supply:m.design.supply.trim(), limit:m.design.limit.trim()};
   // Manifests written before substandards existed default to the generic rule set.
-  const rawDesign=m.design&&m.design.substandard===undefined?{...m.design,substandard:'generic'}:m.design;
+  if(rawDesign.substandard===undefined) rawDesign.substandard='generic';
   const errors=validateDesign(rawDesign);
   if(errors.length) throw new Error(errors.join(' '));
+  // The token summary is a second copy of the design's identity. If the two
+  // copies disagree, the file was edited after export — reject it instead of
+  // silently importing one copy and re-exporting the other.
+  if(!m.token||typeof m.token!=='object'||Array.isArray(m.token)) throw new Error('This manifest is missing its token summary. Re-export the design from PRISM.');
+  const expected={name:rawDesign.tokenName,ticker:rawDesign.ticker,decimals:rawDesign.decimals,initialSupplyBaseUnits:toUnits(rawDesign.supply,rawDesign.decimals).toString()};
+  for(const k of Object.keys(expected)) if(m.token[k]!==expected[k]) throw new Error(`Manifest token summary does not match its design (${k}). The file may have been edited after export — re-export it from PRISM.`);
+  // Honesty claims are verified, not trusted. Sections written by every PRISM
+  // export may be absent in a hand-trimmed file, but when present they must
+  // not claim a deployment, a verified proof, an affiliation, or a standard
+  // status PRISM cannot back. (The design's substandard is authoritative;
+  // implementation is descriptive metadata.)
+  if(m.status!==undefined&&m.status!=='design-only') throw new Error('This manifest claims a status other than design-only. PRISM designs are not deployed assets — re-export it from PRISM.');
+  const impl=m.implementation;
+  if(impl!==undefined) {
+    if(!impl||typeof impl!=='object'||Array.isArray(impl)) throw new Error('This manifest has a malformed implementation section.');
+    if(impl.standard!==undefined&&impl.standard!=='CIP-113') throw new Error('This manifest names a standard other than CIP-113.');
+    if(impl.standardStatus!==undefined&&impl.standardStatus!=='Proposed') throw new Error('This manifest claims a CIP-113 status other than Proposed, which does not match the published specification.');
+    for(const [section,key,label] of [['midnight','proofVerified','a verified Midnight proof'],['midnight','bridgeDeployed','a deployed Midnight bridge'],['realfi','affiliation','a RealFi affiliation'],['realfi','productIssued','an issued RealFi product']]) {
+      const v=impl[section]?.[key];
+      if(v!==undefined&&v!==false) throw new Error(`This manifest claims ${label}, which PRISM cannot back. Re-export it from PRISM.`);
+    }
+  }
   // Whitelist fields; imported objects never become app configuration or API endpoints.
   const design={};
   for(const k of Object.keys(fromTemplate())) design[k]=rawDesign[k];
