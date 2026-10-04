@@ -25,6 +25,33 @@ export async function queryAsset(network,policy,nameHex) {
   if(!Array.isArray(data))throw new Error('Unexpected asset response.');
   return data[0]??null;
 }
+// Pure parser for a Koios tx_info response about the pinned Preview
+// deployment transaction. Anything other than exactly one row naming the
+// pinned hash, in a block, with valid contract execution is rejected — a
+// deployment is only ever shown as verified from a response that proves it.
+export function parseDeploymentTx(rows, expectedHash) {
+  if(!Array.isArray(rows)||rows.length!==1)throw new Error('Koios did not return exactly one record for the deployment transaction.');
+  const v=rows[0];
+  if(v?.tx_hash!==expectedHash)throw new Error('Koios returned a different transaction than the pinned deployment.');
+  if(!Number.isSafeInteger(v.block_height)||v.block_height<=0)throw new Error('The deployment transaction is not confirmed in a block yet.');
+  if(!Number.isSafeInteger(v.epoch_no)||v.epoch_no<0)throw new Error('The deployment record has no valid epoch.');
+  if(!Number.isFinite(Number(v.tx_timestamp))||Number(v.tx_timestamp)<=0)throw new Error('The deployment record has no valid confirmation time.');
+  if(v.valid_contract!==true)throw new Error('Koios does not report valid contract execution for the deployment transaction.');
+  return {txHash:v.tx_hash,blockHeight:v.block_height,epoch:v.epoch_no,timestamp:Number(v.tx_timestamp)*1000,validContract:true};
+}
+
+// Live verification of the Foundation's pinned Preview reference deployment:
+// the platform repository's configuration (fetched fresh) must still match
+// the values pinned in src/config.js field by field, AND Koios Preview must
+// confirm that exact deployment transaction on chain. Either check failing
+// means nothing is reported as verified.
+export async function getPreviewDeployment() {
+  const reference=await getReference();
+  if(reference.scriptHash!==PREVIEW_REFERENCE.scriptHash||reference.protocolPolicy!==PREVIEW_REFERENCE.protocolPolicy)throw new Error('The upstream reference configuration no longer matches the pinned deployment. Review it upstream before trusting this check.');
+  const rows=await fetchJson(`${NETWORKS.preview.koios}/tx_info`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({_tx_hashes:[PREVIEW_REFERENCE.txHash]})});
+  const deployment=parseDeploymentTx(rows,PREVIEW_REFERENCE.txHash);
+  return {...deployment,scriptHash:reference.scriptHash,protocolPolicy:reference.protocolPolicy,source:PREVIEW_REFERENCE.source,observed:PREVIEW_REFERENCE.observed,fetchedAt:Date.now()};
+}
 export async function getRegistry() {
   if(!CONFIG.registryApi)throw new Error('No registry indexer is configured. Connect a Foundation-compatible backend in src/config.js.');
   const origin=new URL(CONFIG.registryApi);
