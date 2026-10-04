@@ -1,0 +1,107 @@
+# PRISM · Cardano programmable token studio
+
+**Your asset. Your rules.** An open-source workspace for exploring CIP-113 programmable assets, real-world finance, and privacy-aware eligibility.
+
+Built by **[KShot · @kshot9000](https://x.com/kshot9000)** for the Cardano community.
+
+**[Open the website](https://kshot3000.github.io/Grok-CIP-113/)** · **[CIP-113 specification](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0113)** · **[Report an issue](https://github.com/Kshot3000/Grok-CIP-113/issues)**
+
+## What works
+
+| Workspace | Functionality |
+| --- | --- |
+| Token studio | Four editable templates, validated token identity and precision, configurable allowlist / transfer cap / issuer controls / eligibility, and exact BigInt transfer modeling. |
+| Design files | Local draft persistence, versioned JSON export, validated import, and developer handoff. No server account is required. |
+| Cardano wallets | Real CIP-30 discovery and permission flow, network checks, public payment address, account-change detection, and app disconnection. Read only. |
+| Network explorer | Live Koios chain tip and native asset lookup, refresh and failure states, no invented metrics. |
+| Smart-wallet tool | Actual CIP-19 Bech32 validation and CIP-113 address derivation using the original payment credential as owner. Optional Foundation Preview reference with explicit snapshot fallback. |
+| RealFi lab | A simple-interest and collateral scenario calculator plus links to RealFi’s official USDrf / sUSDrf app. |
+| Midnight privacy | Real DApp Connector API v4 wallet discovery, selected-network connection, and public unshielded address. Local fictional eligibility sandbox. |
+| Community | Branded Open Graph / X share image, X sharing draft, source links, creator profile, donation address copy and locally generated QR. |
+
+## The boundary of this release
+
+**This is a design and research workspace, not a token issuer, lending platform, or deployed ZK application.**
+
+- CIP-113 was present in the upstream repository when checked on **2026-10-03**, with frontmatter status **Proposed**. A merged specification is not a network-wide deployment or certification.
+- PRISM’s manifest is an application-specific design format. It is **not** a CIP-defined registry datum, compiled Plutus blueprint, token policy, signed transaction, or minted asset.
+- Transfer and eligibility tests run in JavaScript. They do not execute on-chain scripts, check spendable balances, verify identity, or generate zero-knowledge proofs.
+- The Midnight wallet connector is real. A Compact circuit, deployed contract, proof service, issuer / revocation system, and Cardano attestation verifier are **not deployed** by PRISM.
+- PRISM has no affiliation with RealFi, Midnight, or the Cardano Foundation. RealFi interactions happen at [app.realfi.co](https://app.realfi.co/); scenario rates are fictional inputs, not product rates.
+- No wallet transaction signing, message signing, transaction submission, asset custody, minting, redemption, staking, or payment initiation is implemented.
+- The Foundation’s reference platform identifies itself as R&D with an independent security audit pending. Review and pin all dependencies before implementing a production system.
+
+## Run locally
+
+Requires Node.js 22 or newer. There are **no npm dependencies and no install step**.
+
+```sh
+git clone https://github.com/Kshot3000/Grok-CIP-113.git
+cd Grok-CIP-113
+npm test
+npm run dev
+```
+
+Open `http://localhost:4173`. Run `npm run build` for a static `dist/` directory. The site supports a repository subpath and uses hash navigation, so deep links work on GitHub Pages without server rewrites.
+
+## GitHub Pages
+
+The included workflow runs tests, builds the site, and publishes `dist/` on pushes to `main`.
+
+If this is the first deployment, set **Settings → Pages → Source → GitHub Actions**. The workflow also requests automatic enablement; if repository permissions prevent that, enable Pages in settings and rerun the workflow. No personal access token or paid service is needed.
+
+## Configuration
+
+`src/config.js` contains creator identity, the donation address, verified source URLs, network endpoints, and optional registry API configuration. Change the `site` URL if hosting elsewhere.
+
+`registryApi` is intentionally empty. To enable registry reads, set it to the HTTPS origin of your hosted, Foundation-compatible programmable-token backend, with CORS for your site. PRISM calls the read-only `GET /api/v1/registry/protocols` endpoint and validates its basic response shape. An indexer is authoritative only for the deployments and network it actually indexes; independently verify deployment identity.
+
+Do not put Blockfrost tokens, mnemonics, signing keys, or service secrets in frontend configuration. This website needs none.
+
+## Data, privacy, and networks
+
+- Network data comes directly from Koios for the selected network. Failed requests display an unavailable state; old or fictitious values are not presented as live. A block older than five minutes is labeled delayed.
+- The Preview reference is repository configuration, not an assertion that an address is safe, current, funded, or deployed. The bundled reference was checked on 2026-10-03 and is explicitly marked as a snapshot if refresh fails.
+- A Cardano wallet exposes mainnet versus testnet via CIP-30. It cannot establish which testnet the user selected. Confirm Preview versus Preprod in the wallet.
+- Wallet state is kept in memory. Only a valid design is saved to local storage. No analytics or tracking cookies are included. Local draft persistence may be unavailable in restricted browser modes; JSON export remains available.
+- The eligibility sandbox does not save or transmit its fictional input values. Do not enter real personal data.
+- Public API providers and external sites receive ordinary network requests when used. Wallet permission is requested only after a user chooses to connect. App disconnection clears PRISM state; revoke permissions inside the wallet to fully remove access.
+- Donation copy and QR contain the exact user-supplied Cardano mainnet address. PRISM never initiates the transfer.
+
+## Project layout
+
+```text
+src/app.js          UI, routes, local persistence, and interactions
+src/domain.js       Exact-quantity token rules and scenario models
+src/cardano.js      Bech32 address validation and smart-wallet derivation
+src/services.js     Live APIs and read-only wallet adapters
+src/config.js       Identity, endpoints, templates, and source references
+src/styles.css      Responsive visual system and accessibility states
+tests/             Meaningful domain and integration-boundary tests
+scripts/           Dependency-free build and local server
+docs/              Integration handoff and launch copy
+```
+
+Tests cover exact amount precision, denial paths, malformed imports, UTF-8 token name limits, collateral calculations, eligibility thresholds, Bech32 checksums, official CIP-19 vectors, original-payment-credential ownership, wallet network / account changes, Midnight API compatibility, and malformed API data. Wallet unit tests use explicit mocks; they do not claim live wallet-extension or chain transactions.
+
+## Build with the community
+
+Use the site’s **Build guide** and [integration handoff](docs/INTEGRATION.md). Contributions that add reviewed testnet transaction flows, a verifiable registry adapter, or real Midnight proof verification are welcome. Keep simulated behavior visibly distinct from real transactions and preserve the no-secret frontend boundary.
+
+See [community launch copy](docs/LAUNCH.md) for a ready-to-share introduction. The website’s X button opens a draft; it does not publish automatically.
+
+## Support
+
+Follow **[@kshot9000](https://x.com/kshot9000)**. Optional ADA donations support KShot’s independent tools:
+
+```text
+addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v
+```
+
+Cardano mainnet only. Review the full address in your wallet.
+
+## Sources and attribution
+
+This original UI and model are informed by the **CIP-113 authors and contributors**, the **Cardano Foundation**, the **Midnight network contributors**, and **RealFi**. All source references are surfaced in the app. See [SOURCES.md](docs/SOURCES.md) for the specific documentation checked. No endorsement or partnership is implied.
+
+MIT license for PRISM’s original code. Upstream specifications and implementations retain their own licenses.
