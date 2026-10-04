@@ -6,7 +6,7 @@ const roundTrip=(template,network='preview')=>makeManifest(fromTemplate(template
 const tampered=(template,fn,network='preview')=>{const m=roundTrip(template,network);fn(m);return JSON.stringify(m);};
 
 test('genuine manifests for every template still import and round-trip exactly',()=>{
-  for(const t of ['rwa','credit','stable','community']){
+  for(const t of ['rwa','credit','stable','community','carbon','ticket']){
     const m=roundTrip(t);
     assert.deepEqual(parseManifest(JSON.stringify(m)),{design:fromTemplate(t),network:'preview'});
     assert.equal(JSON.stringify(makeManifest(parseManifest(JSON.stringify(m)).design,'preview').token),JSON.stringify(m.token));

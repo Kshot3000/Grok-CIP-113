@@ -36,6 +36,8 @@ export const TEMPLATES = [
   { id:'credit', name:'Private credit', short:'CREDIT', icon:'chart', description:'Rules for a lending lifecycle', tokenName:'Prism Credit', ticker:'PCR', decimals:6, supply:'500000', limit:'25000', allowlist:true, limitEnabled:true, pausable:true, identity:true, substandard:'kyc', accent:'blue' },
   { id:'stable', name:'Stablecoin concept', short:'STABLE', icon:'coins', description:'Model issuer-managed transfers', tokenName:'Prism Dollar Concept', ticker:'PDC', decimals:6, supply:'1000000', limit:'50000', allowlist:true, limitEnabled:true, pausable:true, identity:false, substandard:'freeze-seize', accent:'amber' },
   { id:'community', name:'Community access', short:'ACCESS', icon:'users', description:'Membership, made programmable', tokenName:'Prism Community', ticker:'PASS', decimals:0, supply:'10000', limit:'1', allowlist:false, limitEnabled:true, pausable:false, identity:false, substandard:'generic', accent:'purple' },
+  { id:'carbon', name:'Carbon credit', short:'CARBON', icon:'leaf', description:'One credit, one verified tonne', tokenName:'Prism Carbon Credit', ticker:'PCC', decimals:0, supply:'250000', limit:'10000', allowlist:true, limitEnabled:true, pausable:true, identity:true, substandard:'kyc', accent:'teal' },
+  { id:'ticket', name:'Event ticket', short:'TICKET', icon:'ticket', description:'Resale caps that fight scalping', tokenName:'Prism Event Ticket', ticker:'PTIX', decimals:0, supply:'5000', limit:'4', allowlist:false, limitEnabled:true, pausable:true, identity:false, substandard:'generic', accent:'rose' },
 ];
 
 export const SOURCES = [
