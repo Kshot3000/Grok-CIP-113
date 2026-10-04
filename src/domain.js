@@ -164,6 +164,60 @@ export function simulateTransferSequence(design, transfers) {
   return finish(steps);
 }
 
+// Editing model for the sequence lab's custom builder. The simulator above
+// accepts any well-formed 1–12 step list; these helpers are how the studio
+// edits one. Every helper is pure — it returns a new list of new step
+// objects and never mutates its input — and validates account names against
+// the modeled ledger, so a step the simulator would reject as an unknown
+// account can never be constructed here. Amounts stay decimal strings: the
+// simulator reports an unrepresentable amount as a blocked step, which is
+// the builder's feedback, not an editing error.
+export const MAX_SEQUENCE_STEPS = 12;
+
+function checkedStep(step) {
+  if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error('A transfer step must describe a sender, a recipient, and an amount.');
+  if(!LEDGER_ACCOUNTS[step.from]||!LEDGER_ACCOUNTS[step.to]) throw new Error('Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.');
+  if(typeof step.amount!=='string') throw new Error('A transfer amount must be a decimal string.');
+  return {from:step.from,to:step.to,amount:step.amount};
+}
+function checkedSteps(steps) {
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_SEQUENCE_STEPS) throw new Error(`A transfer sequence needs between 1 and ${MAX_SEQUENCE_STEPS} modeled transfers.`);
+  return steps.map(checkedStep);
+}
+function checkedIndex(steps, index) {
+  if(!Number.isInteger(index)||index<0||index>=steps.length) throw new Error('Choose a step in the sequence.');
+}
+export function copySequenceSteps(steps) { return checkedSteps(steps); }
+export function blankSequenceStep() { return {from:'issuer',to:'approved',amount:'100'}; }
+export function addSequenceStep(steps, step = blankSequenceStep()) {
+  const list = checkedSteps(steps);
+  if(list.length>=MAX_SEQUENCE_STEPS) throw new Error(`A transfer sequence holds at most ${MAX_SEQUENCE_STEPS} modeled transfers.`);
+  return [...list, checkedStep(step)];
+}
+export function removeSequenceStep(steps, index) {
+  const list = checkedSteps(steps);
+  checkedIndex(list, index);
+  if(list.length<=1) throw new Error('A transfer sequence needs at least one modeled transfer.');
+  return list.filter((_,i)=>i!==index);
+}
+export function moveSequenceStep(steps, index, direction) {
+  const list = checkedSteps(steps);
+  checkedIndex(list, index);
+  if(direction!==-1&&direction!==1) throw new Error('Move a step one place up or down.');
+  const target = index+direction;
+  if(target<0||target>=list.length) return list; // Already at the edge: an unchanged copy.
+  [list[index],list[target]] = [list[target],list[index]];
+  return list;
+}
+export function updateSequenceStep(steps, index, patch) {
+  const list = checkedSteps(steps);
+  checkedIndex(list, index);
+  if(!patch||typeof patch!=='object'||Array.isArray(patch)) throw new Error('Describe the change to the step.');
+  for(const k of Object.keys(patch)) if(!['from','to','amount'].includes(k)) throw new Error(`A transfer step has no ${k} field.`);
+  list[index] = checkedStep({...list[index], ...patch});
+  return list;
+}
+
 // CIP-113 Layer-3 substandards, modeled from the Cardano Foundation reference
 // platform (checked 2026-10-04). These are local models of the documented
 // validator checks — nothing here reads an on-chain denylist, verifies a real

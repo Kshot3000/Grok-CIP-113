@@ -126,3 +126,19 @@
 .check-result.blocker>.icon{color:var(--red)}
 .review-results{padding:0}
 .review-results .check-result:first-child{padding-top:2px}
+
+/* Sequence builder (v1.12): editable custom transfer sequences. */
+.seq-custom-note{margin:-6px 0 14px}
+.seq-editor{margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.seq-edit-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:#0e151c;border-radius:8px;padding:10px 13px;flex-wrap:wrap}
+.seq-edit-row select.seq-from,.seq-edit-row select.seq-to{flex:1 1 150px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+.seq-arrow{color:var(--muted)}
+.seq-amount{position:relative;flex:0 1 140px}
+.seq-amount input{width:100%;min-height:38px;padding:8px 46px 8px 10px}
+.seq-amount>span{position:absolute;right:10px;top:11px;font-size:.6875rem;color:#8cabb3}
+.seq-row-actions{display:inline-flex;gap:2px;margin-left:auto}
+.seq-row-actions .icon-btn{width:32px;height:32px}
+.seq-row-actions .icon{width:15px;height:15px}
+.icon.seq-up{transform:rotate(-90deg)}
+.icon.seq-down{transform:rotate(90deg)}
+.seq-add{margin-bottom:18px}
