@@ -131,6 +131,40 @@ export function makeManifest(design, network) {
   };
 }
 
+// Application-specific preview of the design information a CIP-113 registry
+// entry would need to describe. This is NOT a CIP-defined datum: it carries no
+// policy ID, no Plutus Data / CBOR encoding, no registry-node position, and no
+// on-chain proof — those exist only after reviewed validators are deployed and
+// a real registry node is created by the pinned reference implementation.
+// Deterministic by design (no timestamp), so two exports of the same design
+// can be diffed field by field.
+export function registryDatumPreview(design, network) {
+  const errors=validateDesign(design);
+  if(errors.length) throw new Error(errors.join(' '));
+  if(!NETWORKS[network]) throw new Error('Unknown network.');
+  const sub=substandardById(design.substandard);
+  return {
+    kind:'prism.registry-datum-preview', previewVersion:1,
+    applicationSpecific:true, cipDatum:false, registeredOnChain:false,
+    network,
+    token:{name:design.tokenName.trim(),ticker:design.ticker,decimals:design.decimals,initialSupplyBaseUnits:toUnits(design.supply,design.decimals).toString()},
+    transferPolicy:{
+      access:design.allowlist?'allowlist':'open',
+      perTransferLimitBaseUnits:design.limitEnabled?toUnits(design.limit,design.decimals).toString():null,
+      issuerPauseModeled:design.pausable,
+      eligibilityRequired:design.identity,
+    },
+    substandard:{id:design.substandard,name:sub.name,reference:sub.source,modeledLocally:true},
+    registryFieldsStillRequired:[
+      'Token policy ID, issued by reviewed and deployed validators',
+      'Registry node position and membership / non-membership proofs from the live deployment',
+      'Protocol parameters and programmable-logic base script hash of the target deployment',
+      'Datum encoding (Plutus Data / CBOR) produced by the pinned reference implementation',
+    ],
+    note:'This preview is a PRISM design aid, not a CIP-113 registry datum, Plutus blueprint, policy ID, or on-chain registration. PRISM does not register, mint, or deploy anything. A developer must implement the token with the pinned Foundation reference implementation, create the registry entry on a test network, and verify it independently before any production use.',
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   const m=JSON.parse(raw);
