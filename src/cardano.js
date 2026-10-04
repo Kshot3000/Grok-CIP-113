@@ -36,6 +36,51 @@ export function decodeAddress(address) {
   if(![0,1,2,3,6,7].includes(type)||bytes.length!==(type<4?57:29))throw new Error('Use a Shelley base or enterprise address; Byron, pointer, and reward addresses are not supported.');
   return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:[1,3,7].includes(type)};
 }
+export function bytesToHex(bytes) {
+  if(!(bytes instanceof Uint8Array)) throw new Error('Expected bytes to render as hex.');
+  return [...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// CIP-19 header nibble meanings for the address types this codec supports.
+// Base addresses carry a payment credential (bytes 1–28) and a stake
+// credential (bytes 29–56); enterprise addresses carry only the payment
+// credential. Each credential is independently a key hash or a script hash.
+const ADDRESS_TYPES = Object.freeze({
+  0:{kind:'Base',payment:'key',stake:'key'},
+  1:{kind:'Base',payment:'script',stake:'key'},
+  2:{kind:'Base',payment:'key',stake:'script'},
+  3:{kind:'Base',payment:'script',stake:'script'},
+  6:{kind:'Enterprise',payment:'key',stake:null},
+  7:{kind:'Enterprise',payment:'script',stake:null},
+});
+// A read-only structural breakdown of a Shelley address, decoded locally —
+// nothing is looked up on chain, so this says what an address IS, never what
+// it holds or whether any deployment recognises it. The CIP-113 smart-wallet
+// shape is a base address whose payment credential is a script hash (the
+// shared programmable base script) and whose stake-position credential is
+// the owner's original payment credential; matching that shape is reported
+// as `smartWalletShape` only — the same shape could belong to any script
+// payment address, and membership in a CIP-113 deployment is proven by the
+// registry and the deployed base script hash, not by shape alone.
+export function inspectAddress(address) {
+  const decoded=decodeAddress(address);
+  const meta=ADDRESS_TYPES[decoded.type];
+  if(!meta) throw new Error('Unsupported Shelley address type.');
+  const payment={credential:meta.payment,hash:bytesToHex(decoded.bytes.slice(1,29))};
+  const stake=meta.stake?{credential:meta.stake,hash:bytesToHex(decoded.bytes.slice(29,57))}:null;
+  const smartWalletShape=meta.kind==='Base'&&meta.payment==='script';
+  return {
+    address:encodeAddress(decoded.bytes),
+    network:decoded.network,
+    networkName:decoded.network===1?'Mainnet':'Testnet',
+    type:decoded.type,
+    kind:meta.kind,
+    byteLength:decoded.bytes.length,
+    payment,
+    stake,
+    smartWalletShape,
+    ownerCredential:smartWalletShape?stake.hash:null,
+  };
+}
 export function normalizeWalletAddress(raw) {
   const address=raw?.startsWith('addr')?raw:encodeAddress(hexToBytes(raw));
   decodeAddress(address); return address;
