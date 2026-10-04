@@ -1,6 +1,6 @@
 # Primary sources
 
-Checked **2026-10-03**; substandard module references re-checked **2026-10-04**. Standards, deployments, APIs, and products may change.
+Checked **2026-10-03**; substandard module references re-checked **2026-10-04**; CIP-113 frontmatter status and “Path to Active” checklist re-verified **2026-10-04** for the Learn page status tracker. Standards, deployments, APIs, and products may change.
 
 | Source | Used for |
 | --- | --- |

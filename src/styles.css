@@ -38,6 +38,38 @@
  @media(max-width:650px){.template strong{font-size:.8125rem}.template small{font-size:.75rem}.template-grid{grid-template-columns:1fr 1fr}.template{min-height:104px;align-items:flex-start;padding:15px 10px}.template-icon{margin-top:3px}.ecosystem-strip>a,.ecosystem-strip>span{font-size:.75rem}.ecosystem-strip{align-items:flex-start}.section-heading>span{font-size:.75rem}}
 }
 
+/* Learn CIP-113 (v1.2). */
+@layer pages {
+ .status-tracker .status-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 22px;margin-bottom:16px}
+ .status-facts>div{border:1px solid var(--line);border-radius:8px;padding:13px 15px;background:#0e151c}
+ .status-facts span{display:block;font-size:.625rem;letter-spacing:1.1px;color:var(--muted);margin-bottom:6px}
+ .status-facts strong{font-size:.9375rem}
+ .tracker-subhead{margin:24px 0 12px;font-size:.9375rem}
+ .criteria-list{display:flex;flex-direction:column}
+ .criterion{display:flex;gap:14px;align-items:flex-start;padding:15px 2px;border-bottom:1px solid #202e36}
+ .criterion:last-child{border-bottom:0}
+ .criterion-box{width:22px;height:22px;flex-shrink:0;border:1.5px solid #53616a;border-radius:6px;display:grid;place-items:center;color:#10251b;margin-top:2px}
+ .criterion-box.checked{background:var(--green);border-color:var(--green)}
+ .criterion-box.plan{border-color:#3c5048;color:var(--green);background:#16241d}
+ .criterion-box .icon{width:13px;height:13px}
+ .criterion strong{font-size:.875rem;display:block}
+ .criterion small{display:block;color:var(--muted);font-size:.8125rem;line-height:1.65;margin-top:4px}
+ .criterion-state{margin-left:auto;flex-shrink:0;font-size:.625rem;font-weight:650;letter-spacing:1px;color:var(--amber);border:1px solid #4f4534;background:#30291f;padding:4px 8px;border-radius:5px}
+ .criterion-state.plan{color:#a7d9ba;border-color:#3c5048;background:#21332b}
+ .tracker-caveat{margin:22px 0 2px}
+ .learn-path{display:flex;flex-direction:column;gap:16px}
+ .lesson{display:flex;gap:20px;padding:26px}
+ .lesson-num{font-family:Consolas,monospace;font-size:1.05rem;color:var(--green);background:#1a2c25;border:1px solid #34503e;border-radius:9px;width:46px;height:46px;display:grid;place-items:center;flex-shrink:0}
+ .lesson-body h3{font-size:1.0625rem;margin-bottom:10px}
+ .lesson-body p{font-size:.9rem;line-height:1.85}
+ .lesson-detail{margin-top:10px}
+ .lesson-source{display:inline-flex;align-items:center;gap:7px;margin-top:14px;font-size:.75rem;color:var(--muted)}
+ .learn-cta{margin-top:24px;padding:26px;display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap}
+ .learn-cta h2{margin-bottom:8px}
+ .learn-cta p{font-size:.875rem;line-height:1.75;max-width:640px}
+ @media(max-width:1050px){.status-tracker .status-facts{grid-template-columns:repeat(2,1fr)}}
+ @media(max-width:650px){.status-tracker .status-facts{grid-template-columns:1fr}.lesson{padding:21px;gap:14px}.lesson-num{width:38px;height:38px;font-size:.9rem}.criterion{flex-wrap:wrap}.criterion-state{margin-left:36px}}
+}
 /* Substandard lab (v1.1). */
 @layer components {
  .preset-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}

@@ -12,6 +12,7 @@ Built by **[KShot · @kshot9000](https://x.com/kshot9000)** for the Cardano comm
 | --- | --- |
 | Token studio | Four editable templates, validated token identity and precision, configurable allowlist / transfer cap / issuer controls / eligibility, and exact BigInt transfer modeling. |
 | Substandard lab | Each template presets a CIP-113 Layer-3 substandard — freeze-and-seize, KYC, or KYC extended from the Foundation reference platform (community template uses PRISM’s generic rules). The Test step models the modules’ documented checks one by one: denylist on both parties, authorised-only seizure, the five sender-certificate checks, recipient allowlist membership and expiry, and the self-transfer exemption. Local simulation only; legacy design files without a substandard import as generic. |
+| Learn CIP-113 | A six-lesson plain-language learning path paraphrased from the official spec — why programmable tokens exist, shared-custody smart wallets, the withdraw-zero pattern, the registry, substandards, and third-party actions / unfracking — each lesson naming its spec section. Plus a status tracker reproducing the spec’s frontmatter and its own “Path to Active” acceptance checklist verbatim (all four boxes unchecked while the status is Proposed), with the Foundation reference’s R&D / audit-pending caveat kept in place. Status snapshot re-verified against upstream on 2026-10-04. |
 | Design files | Local draft persistence, versioned JSON export, validated import, and developer handoff. No server account is required. |
 | Cardano wallets | Real CIP-30 discovery and permission flow, network checks, public payment address, account-change detection, and app disconnection. Read only. |
 | Network explorer | Live Koios chain tip and native asset lookup, refresh and failure states, no invented metrics. |
@@ -24,7 +25,7 @@ Built by **[KShot · @kshot9000](https://x.com/kshot9000)** for the Cardano comm
 
 **This is a design and research workspace, not a token issuer, lending platform, or deployed ZK application.**
 
-- CIP-113 was present in the upstream repository when checked on **2026-10-03**, with frontmatter status **Proposed**. A merged specification is not a network-wide deployment or certification.
+- CIP-113 was present in the upstream repository when checked on **2026-10-04**, with frontmatter status **Proposed**. A merged specification is not a network-wide deployment or certification.
 - PRISM’s manifest is an application-specific design format. It is **not** a CIP-defined registry datum, compiled Plutus blueprint, token policy, signed transaction, or minted asset.
 - Transfer and eligibility tests run in JavaScript. They do not execute on-chain scripts, check spendable balances, verify identity, or generate zero-knowledge proofs.
 - The Midnight wallet connector is real. A Compact circuit, deployed contract, proof service, issuer / revocation system, and Cardano attestation verifier are **not deployed** by PRISM.
@@ -77,13 +78,14 @@ src/domain.js       Exact-quantity token rules and scenario models
 src/cardano.js      Bech32 address validation and smart-wallet derivation
 src/services.js     Live APIs and read-only wallet adapters
 src/config.js       Identity, endpoints, templates, and source references
+src/learn.js        CIP-113 learning path and status-tracker data (spec-sourced)
 src/styles.css      Responsive visual system and accessibility states
 tests/             Meaningful domain and integration-boundary tests
 scripts/           Dependency-free build and local server
 docs/              Integration handoff and launch copy
 ```
 
-Tests cover exact amount precision, denial paths, malformed imports, UTF-8 token name limits, collateral calculations, eligibility thresholds, Bech32 checksums, official CIP-19 vectors, original-payment-credential ownership, wallet network / account changes, Midnight API compatibility, and malformed API data. A dedicated substandard suite covers every documented denial path of the modeled modules — denylisted sender/recipient, seizure authority, each KYC certificate check failing independently, allowlist membership and entry expiry, the self-transfer exemption — plus template presets, manifest round-trips, and legacy-manifest defaults. Wallet unit tests use explicit mocks; they do not claim live wallet-extension or chain transactions.
+Tests cover exact amount precision, denial paths, malformed imports, UTF-8 token name limits, collateral calculations, eligibility thresholds, Bech32 checksums, official CIP-19 vectors, original-payment-credential ownership, wallet network / account changes, Midnight API compatibility, and malformed API data. A dedicated substandard suite covers every documented denial path of the modeled modules — denylisted sender/recipient, seizure authority, each KYC certificate check failing independently, allowlist membership and entry expiry, the self-transfer exemption — plus template presets, manifest round-trips, and legacy-manifest defaults. A learn suite guards the status tracker and learning path — Proposed status, all four spec acceptance criteria unchecked, every core concept covered, and no overclaiming language. Wallet unit tests use explicit mocks; they do not claim live wallet-extension or chain transactions.
 
 ## Build with the community
 

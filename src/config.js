@@ -5,7 +5,7 @@ export const CONFIG = Object.freeze({
   github: 'https://github.com/Kshot3000/Grok-CIP-113',
   site: 'https://kshot3000.github.io/Grok-CIP-113/',
   donation: 'addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v',
-  verified: '2026-10-03',
+  verified: '2026-10-04',
   cip: 'https://github.com/cardano-foundation/CIPs/tree/master/CIP-0113',
   core: 'https://github.com/cardano-foundation/cip113-programmable-tokens',
   platform: 'https://github.com/cardano-foundation/cip113-programmable-tokens-platform',
