@@ -14,11 +14,13 @@ function convert(data,from,to,pad) {
   if(pad){if(bits)out.push((acc<<(to-bits))&max);}else if(bits>=from||((acc<<(to-bits))&max))throw new Error('Invalid address padding.');
   return out;
 }
-export function encodeAddress(bytes) {
-  const hrp=(bytes[0]&15)===1?'addr':'addr_test';
+export function encodeBech32(hrp, bytes) {
   const data=convert(bytes,8,5,true),p=polymod([...expand(hrp),...data,0,0,0,0,0,0])^1;
   const sum=Array.from({length:6},(_,i)=>(p>>>(5*(5-i)))&31);
   return `${hrp}1${[...data,...sum].map(v=>CHARSET[v]).join('')}`;
+}
+export function encodeAddress(bytes) {
+  return encodeBech32((bytes[0]&15)===1?'addr':'addr_test', bytes);
 }
 export function hexToBytes(hex) {
   if(typeof hex!=='string'||!/^([a-f0-9]{2})+$/i.test(hex))throw new Error('Invalid hexadecimal data.');
@@ -84,6 +86,54 @@ export function inspectAddress(address) {
 export function normalizeWalletAddress(raw) {
   const address=raw?.startsWith('addr')?raw:encodeAddress(hexToBytes(raw));
   decodeAddress(address); return address;
+}
+// BLAKE2b (RFC 7693), unkeyed, implemented with BigInt 64-bit words so the
+// browser needs no dependency and no WebCrypto extension (SubtleCrypto has
+// no BLAKE2b). Only what CIP-14 needs is exposed: a digest of 1–64 bytes.
+const B2_IV=[0x6a09e667f3bcc908n,0xbb67ae8584caa73bn,0x3c6ef372fe94f82bn,0xa54ff53a5f1d36f1n,0x510e527fade682d1n,0x9b05688c2b3e6c1fn,0x1f83d9abfb41bd6bn,0x5be0cd19137e2179n];
+const B2_SIGMA=[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],[14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3],[11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4],[7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8],[9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13],[2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9],[12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11],[13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10],[6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5],[10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],[14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3]];
+const B2_MASK=(1n<<64n)-1n;
+const b2Rotr=(x,r)=>((x>>BigInt(r))|(x<<BigInt(64-r)))&B2_MASK;
+export function blake2b(input, outLength=64) {
+  if(!(input instanceof Uint8Array)) throw new Error('BLAKE2b input must be bytes.');
+  if(!Number.isInteger(outLength)||outLength<1||outLength>64) throw new Error('BLAKE2b digest length must be between 1 and 64 bytes.');
+  const h=[...B2_IV];
+  h[0]^=0x01010000n^BigInt(outLength); // depth 1, fanout 1, no key
+  const compress=(block, count, isLast)=>{
+    const m=Array.from({length:16},(_,i)=>{
+      let w=0n; for(let j=7;j>=0;j--) w=(w<<8n)|BigInt(block[i*8+j]); return w;
+    });
+    const v=[...h,...B2_IV];
+    v[12]^=count&B2_MASK; v[13]^=(count>>64n)&B2_MASK;
+    if(isLast) v[14]=~v[14]&B2_MASK;
+    const G=(a,b,c,d,x,y)=>{v[a]=(v[a]+v[b]+x)&B2_MASK;v[d]=b2Rotr(v[d]^v[a],32);v[c]=(v[c]+v[d])&B2_MASK;v[b]=b2Rotr(v[b]^v[c],24);v[a]=(v[a]+v[b]+y)&B2_MASK;v[d]=b2Rotr(v[d]^v[a],16);v[c]=(v[c]+v[d])&B2_MASK;v[b]=b2Rotr(v[b]^v[c],63);};
+    for(let round=0;round<12;round++){
+      const s=B2_SIGMA[round];
+      G(0,4,8,12,m[s[0]],m[s[1]]);G(1,5,9,13,m[s[2]],m[s[3]]);G(2,6,10,14,m[s[4]],m[s[5]]);G(3,7,11,15,m[s[6]],m[s[7]]);
+      G(0,5,10,15,m[s[8]],m[s[9]]);G(1,6,11,12,m[s[10]],m[s[11]]);G(2,7,8,13,m[s[12]],m[s[13]]);G(3,4,9,14,m[s[14]],m[s[15]]);
+    }
+    for(let i=0;i<8;i++) h[i]^=v[i]^v[i+8];
+  };
+  let offset=0, count=0n;
+  while(input.length-offset>128){const block=input.subarray(offset,offset+128);count+=128n;compress(block,count,false);offset+=128;}
+  const lastBlock=new Uint8Array(128); lastBlock.set(input.subarray(offset));
+  count+=BigInt(input.length-offset);
+  compress(lastBlock,count,true);
+  const out=new Uint8Array(64);
+  for(let i=0;i<8;i++){let w=h[i];for(let j=0;j<8;j++){out[i*8+j]=Number(w&0xffn);w>>=8n;}}
+  return out.slice(0,outLength);
+}
+// CIP-14 user-facing asset fingerprint: the Bech32 ('asset') encoding of
+// the BLAKE2b-160 digest of policyId ‖ assetName (raw bytes, not hex text).
+// Computed entirely locally from the two identifiers a builder already has —
+// no lookup, and nothing about the asset beyond its identity is implied.
+export function assetFingerprint(policyHex, assetNameHex) {
+  if(typeof policyHex!=='string'||!/^[a-f0-9]{56}$/i.test(policyHex)) throw new Error('Policy ID must be 56 hexadecimal characters.');
+  if(typeof assetNameHex!=='string'||!/^(?:[a-f0-9]{2}){0,32}$/i.test(assetNameHex)) throw new Error('Asset name must contain 0–32 bytes of even-length hexadecimal.');
+  const bytes=new Uint8Array(28+assetNameHex.length/2);
+  bytes.set(hexToBytes(policyHex.toLowerCase()),0);
+  if(assetNameHex) bytes.set(hexToBytes(assetNameHex.toLowerCase()),28);
+  return encodeBech32('asset', blake2b(bytes,20));
 }
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');

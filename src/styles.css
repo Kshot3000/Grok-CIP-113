@@ -142,3 +142,11 @@
 .icon.seq-up{transform:rotate(-90deg)}
 .icon.seq-down{transform:rotate(90deg)}
 .seq-add{margin-bottom:18px}
+
+/* CIP-14 asset fingerprint (v1.14): local preview inside the asset lookup form. */
+.fingerprint-preview{border:1px solid var(--line);background:#0e151c;border-radius:8px;padding:13px 15px;margin-bottom:4px}
+.fingerprint-preview .mini-label{font-size:.625rem;color:var(--green);display:block;margin-bottom:8px}
+.fingerprint-preview .break-address{margin-bottom:8px}
+.fingerprint-preview .fine-print{margin:0}
+.fingerprint-preview>p.fine-print{margin:0}
+.asset-data .status-box,.asset-data .notice{margin:4px 0 14px}

@@ -48,5 +48,6 @@ export const SOURCES = [
   { name:'RealFi', label:'REAL-WORLD FINANCE', description:'Official USDrf and sUSDrf product information and app. Independent from PRISM.', href:CONFIG.realfi, icon:'chart' },
   { name:'CIP-30 wallet bridge', label:'CARDANO STANDARD', description:'Browser wallet permissions, addresses, network IDs, and account-change handling.', href:'https://github.com/cardano-foundation/CIPs/tree/master/CIP-0030', icon:'wallet' },
   { name:'CIP-19 address format', label:'CARDANO STANDARD', description:'Binary headers, credentials, and Bech32 encoding behind the smart-wallet derivation utility.', href:'https://github.com/cardano-foundation/CIPs/tree/master/CIP-0019', icon:'fingerprint' },
+  { name:'CIP-14 asset fingerprint', label:'CARDANO STANDARD', description:'The user-facing asset identifier: a Blake2b-160 digest of policy ID and asset name, Bech32-encoded. PRISM computes it locally in the Network explorer and cross-checks the live Koios response against it.', href:'https://github.com/cardano-foundation/CIPs/tree/master/CIP-0014', icon:'fingerprint' },
   { name:'Koios public API', label:'NETWORK DATA', description:'Read-only chain tip and asset information, with explicit failure and freshness states.', href:'https://api.koios.rest/', icon:'globe' },
 ];
