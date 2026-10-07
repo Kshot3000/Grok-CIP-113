@@ -1178,6 +1178,82 @@ export function interestOnlyLoan(input = {}) {
   };
 }
 
+export const LUMP_SUM_PERCENTS = Object.freeze([0, 10, 25, 50, 100]);
+
+// Lump-sum payoff for the same private-credit scenario — the one
+// payoff shape the panels above cannot show. The extra-payment model
+// (v1.22) spreads extra principal evenly over every month; a lump sum
+// is the opposite shape: one larger amount, paid once, in a month the
+// reader chooses. It is applied immediately AFTER that month's
+// scheduled payment, entirely to principal, and the scheduled payment
+// itself never changes — this model holds the payment and shortens
+// the term (the keep-the-payment choice), it does not recast the loan
+// into a lower payment over the original term. The walk replays the
+// SAME level payment amortizationSchedule computes, month by month,
+// so the months before the lump are that schedule's own rows and the
+// continuation is its arithmetic continued on the reduced balance —
+// the model can never drift from the schedule it builds on. The lump
+// actually applied is capped at the balance remaining after the
+// chosen month's payment: asking for more than the loan still owes
+// applies only what is owed and ends the loan that month, and a lump
+// chosen for the final month applies nothing at all, because the
+// final scheduled payment has already ended the loan. A lump of zero
+// IS the plain loan: the returned schedule is the baseline schedule
+// itself. Total paid counts the lump as cash paid, so it always
+// equals the principal plus the interest actually charged. Same
+// assumptions as the schedule itself: no prepayment penalty (whether
+// a real agreement charges one is a term of that agreement, and a
+// penalty would reduce the saving shown), no fees, taxes, insurance,
+// defaults, or rate changes. Illustrative math only — not a loan
+// offer or any product's terms.
+export function lumpSumPayoff(input = {}) {
+  const plain = amortizationSchedule(input); // Validates principal / rate / months.
+  const [p, r, n] = [Number(input.principal), Number(input.rate), Number(input.months)];
+  const lumpMonth = input.lumpMonth === undefined ? Math.max(1, Math.floor(n / 2)) : Number(input.lumpMonth);
+  if (!Number.isInteger(lumpMonth) || lumpMonth < 1 || lumpMonth > n) throw new Error(`Use a lump-sum month between 1 and the ${n}-month term.`);
+  const lump = input.lumpAmount === undefined ? 10000 : Number(input.lumpAmount);
+  if (!Number.isFinite(lump) || lump < 0 || lump > 1e12) throw new Error('Use a lump sum of 0 or more, up to 1,000,000,000,000.');
+  const monthlyRate = r / 100 / 12;
+  const level = plain.monthlyPayment;
+  const atLump = amount => {
+    if (amount === 0) return { lumpApplied: 0, balanceAfterLump: plain.schedule[lumpMonth - 1].balance, payoffMonths: plain.payoffMonths, monthsSaved: 0, totalInterest: plain.totalInterest, interestSaved: 0, totalPaid: plain.total, schedule: plain.schedule };
+    const schedule = [];
+    let balance = p, totalInterest = 0, totalPaid = 0, applied = 0, balanceAfter = null;
+    for (let month = 1; month <= n; month++) {
+      const interest = balance * monthlyRate;
+      let principalPart = level - interest;
+      let payment = level;
+      if (month === n || principalPart >= balance) { principalPart = balance; payment = balance + interest; }
+      balance -= principalPart;
+      totalInterest += interest; totalPaid += payment;
+      const row = { month, payment, interest, principal: principalPart, balance: Math.max(0, balance) };
+      if (month === lumpMonth) { applied = Math.min(amount, balance); balance -= applied; row.lump = applied; row.balance = Math.max(0, balance); balanceAfter = balance; }
+      schedule.push(row);
+      if (balance <= 0) break;
+    }
+    return { lumpApplied: applied, balanceAfterLump: balanceAfter, payoffMonths: schedule.length, monthsSaved: n - schedule.length, totalInterest, interestSaved: plain.totalInterest - totalInterest, totalPaid: totalPaid + applied, schedule };
+  };
+  const chosen = atLump(lump);
+  return {
+    principal: p,
+    rate: r,
+    months: n,
+    lumpMonth,
+    lumpAmount: lump,
+    lumpApplied: chosen.lumpApplied,
+    balanceAfterLump: chosen.balanceAfterLump,
+    monthlyPayment: level,
+    payoffMonths: chosen.payoffMonths,
+    monthsSaved: chosen.monthsSaved,
+    totalInterest: chosen.totalInterest,
+    interestSaved: chosen.interestSaved,
+    totalPaid: chosen.totalPaid,
+    plainTotalInterest: plain.totalInterest,
+    schedule: chosen.schedule,
+    rows: LUMP_SUM_PERCENTS.map(lumpPercent => { const amount = p * lumpPercent / 100; const row = atLump(amount); return { lumpPercent, lumpAmount: amount, lumpApplied: row.lumpApplied, payoffMonths: row.payoffMonths, monthsSaved: row.monthsSaved, totalInterest: row.totalInterest, interestSaved: row.interestSaved }; }),
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
