@@ -760,6 +760,54 @@ export function extraForTargetPayoff(input={}) {
   return {targetMonths:target,extraMonthly:lo/100,monthlyPayment:solved.monthlyPayment,scheduledPayment:solved.scheduledPayment,payoffMonths:solved.payoffMonths,monthsSaved:solved.monthsSaved,totalInterest:solved.totalInterest,interestSaved:solved.interestSaved,total:solved.total,schedule:solved.schedule};
 }
 
+// Refinance comparison for the same scenario: after `paymentsMade` scheduled
+// payments on the current loan, its remaining balance (read off the SAME
+// amortizationSchedule the lab displays, so the comparison can never drift
+// from it) is replaced by a new loan at `newRate` over `newMonths`, with
+// `closingCosts` paid up front in cash — NOT financed into the new loan, so
+// the new principal is exactly the remaining balance. Break-even is found by
+// walking the two actual schedules month by month and accumulating the cash
+// difference (a month a loan has finished contributes $0 for it, which is
+// what makes a longer new term stop "saving" once the old loan would have
+// ended); it is the first month from which the cumulative difference covers
+// the closing costs AND never falls back below them — a first crossing that
+// later evaporates (a longer new term can do exactly that) is not a break-
+// even and yields null, as does a final cumulative difference below the costs. Net benefit
+// compares total remaining cost — the old schedule's remaining payments vs
+// the new schedule's payments plus the closing costs — so a lower monthly
+// payment achieved only by stretching the term shows up honestly as a loss
+// when it is one. Scheduled payments only: the extra-payment field is not
+// part of this model. No prepayment penalty, taxes, insurance, or rate
+// changes — illustrative math, not a loan offer or any product's terms.
+export function refinanceComparison(input={}) {
+  const baseline=amortizationSchedule(input); // Validates principal / rate / months.
+  const n=Number(input.months);
+  const made=input.paymentsMade;
+  if(!Number.isInteger(made)||made<0||made>=n) throw new Error(`Use payments already made between 0 and ${n-1} for a ${n}-month loan — a loan with all ${n} payments made has nothing left to refinance.`);
+  const costs=input.closingCosts===undefined?0:Number(input.closingCosts);
+  if(!Number.isFinite(costs)||costs<0||costs>1e12) throw new Error('Use closing costs of 0 or more, up to 1,000,000,000,000.');
+  const balanceRemaining=made===0?Number(input.principal):baseline.schedule[made-1].balance;
+  const remainingSchedule=baseline.schedule.slice(made);
+  const remainingInterest=remainingSchedule.reduce((s,row)=>s+row.interest,0);
+  const remainingTotal=remainingSchedule.reduce((s,row)=>s+row.payment,0);
+  const refinanced=amortizationSchedule({principal:balanceRemaining,rate:input.newRate,months:input.newMonths}); // Validates newRate / newMonths.
+  const horizon=Math.max(remainingSchedule.length,refinanced.schedule.length);
+  let breakEvenMonths=costs===0?0:null;
+  if(costs>0) { let cumulative=0,lastBelow=-1; for(let m=0;m<horizon;m++) { cumulative+=(remainingSchedule[m]?.payment??0)-(refinanced.schedule[m]?.payment??0); if(cumulative<costs) lastBelow=m; } if(lastBelow<horizon-1) breakEvenMonths=lastBelow+2; }
+  const totalRefinanceCost=refinanced.total+costs;
+  return {
+    paymentsMade:made,
+    balanceRemaining,
+    current:{monthlyPayment:baseline.monthlyPayment,remainingMonths:remainingSchedule.length,remainingInterest,remainingTotal,schedule:remainingSchedule},
+    refinance:{rate:Number(input.newRate),months:Number(input.newMonths),monthlyPayment:refinanced.monthlyPayment,totalInterest:refinanced.totalInterest,total:refinanced.total,schedule:refinanced.schedule},
+    closingCosts:costs,
+    monthlySavings:baseline.monthlyPayment-refinanced.monthlyPayment,
+    interestSaved:remainingInterest-refinanced.totalInterest,
+    netBenefit:remainingTotal-totalRefinanceCost,
+    breakEvenMonths,
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
