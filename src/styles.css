@@ -162,3 +162,14 @@
 .fingerprint-preview .fine-print{margin:0}
 .fingerprint-preview>p.fine-print{margin:0}
 .asset-data .status-box,.asset-data .notice{margin:4px 0 14px}
+
+/* Eligibility cohort preview (v1.21): public-output rows on the Midnight page. */
+.cohort-panel{margin-top:24px}
+.cohort-panel .btn.full{margin-top:18px}
+.cohort-row{padding:14px 18px 4px;border-bottom:1px solid #273941}
+.cohort-row:last-of-type{border-bottom:0}
+.cohort-head{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:.8125rem}
+.cohort-decision{font-size:.6875rem;letter-spacing:.6px;padding:4px 9px;border-radius:5px;border:1px solid #6a414b;color:var(--red);white-space:nowrap}
+.cohort-decision.eligible{border-color:#34503e;color:var(--green)}
+.cohort-row .check-results{padding:4px 0 8px}
+.cohort-row .check-result{padding:7px 0}

@@ -717,3 +717,49 @@ export function checkEligibility({score,minimum,age,adult,region,approved}) {
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
   return {eligible:checks.every(x=>x.pass),checks};
 }
+
+// A fictional cohort for the Midnight page's public-output preview. Each
+// member is constructed to isolate exactly one policy check under the
+// sandbox's default policy (minimum 65, adult required, region required):
+// Amara passes everything, Ben fails only the score, Chandra only the age,
+// Dario only the region, and Elif fails all three — so a policy change's
+// effect on the cohort is attributable to a single check. The private values
+// (score, age, region status) exist only as local model inputs: the
+// evaluation below never copies them into its result, which is the whole
+// point of the preview — a public verifier sees decisions and check
+// outcomes, never the evidence behind them. Fictional people, fictional
+// values; no real person's data belongs in this list.
+export const ELIGIBILITY_COHORT = Object.freeze([
+  Object.freeze({ id:'amara', name:'Amara — fictional participant', score:92, age:34, regionApproved:true }),
+  Object.freeze({ id:'ben', name:'Ben — fictional participant', score:58, age:41, regionApproved:true }),
+  Object.freeze({ id:'chandra', name:'Chandra — fictional participant', score:81, age:17, regionApproved:true }),
+  Object.freeze({ id:'dario', name:'Dario — fictional participant', score:74, age:29, regionApproved:false }),
+  Object.freeze({ id:'elif', name:'Elif — fictional participant', score:47, age:16, regionApproved:false }),
+]);
+
+// Evaluate a whole cohort against one public policy and return ONLY the
+// public output: per participant, the decision and the pass/fail of each
+// named public check — no score, no age, no region value, under any key.
+// The policy itself (minimum score, which requirements are on) is public by
+// design and is echoed back so the output is self-describing. Malformed
+// policies and cohorts throw instead of producing a partial public record.
+export function evaluateEligibilityCohort(policy, cohort=ELIGIBILITY_COHORT) {
+  if(!policy||typeof policy!=='object') throw new Error('A public policy is required.');
+  if(typeof policy.adult!=='boolean'||typeof policy.region!=='boolean') throw new Error('Policy requirements must be on or off.');
+  if(!Array.isArray(cohort)||cohort.length===0||cohort.length>50) throw new Error('Use a cohort of 1 to 50 fictional participants.');
+  const seen=new Set();
+  const results=cohort.map(p=>{
+    if(!p||typeof p.id!=='string'||!p.id.trim()||typeof p.name!=='string'||!p.name.trim()) throw new Error('Every cohort participant needs an id and a name.');
+    if(seen.has(p.id)) throw new Error(`Duplicate cohort participant id: ${p.id}.`);
+    seen.add(p.id);
+    if(typeof p.regionApproved!=='boolean') throw new Error(`Cohort participant ${p.id} needs a region status.`);
+    const r=checkEligibility({score:p.score,minimum:policy.minimum,age:p.age,adult:policy.adult,region:policy.region,approved:p.regionApproved});
+    return {id:p.id,name:p.name,eligible:r.eligible,checks:r.checks};
+  });
+  return {
+    policy:{minimum:policy.minimum,adult:policy.adult,region:policy.region},
+    total:results.length,
+    eligibleCount:results.filter(r=>r.eligible).length,
+    results,
+  };
+}
