@@ -300,6 +300,59 @@ export function updateSequenceStep(steps, index, patch) {
   return list;
 }
 
+// Editing model for the supply sequence lab's custom builder — the same
+// pure-helper discipline as the transfer builder above, for mint/burn steps.
+// The simulator accepts any well-formed 1–12 step list; these helpers are how
+// the studio edits one. Every helper returns a new list of new step objects
+// and never mutates its input, and validates the action and actor against the
+// generic issuance model, so a step the simulator would reject as an unknown
+// supply change can never be constructed here. Amounts stay decimal strings:
+// the simulator reports an unrepresentable amount as a blocked step, which is
+// the builder's feedback, not an editing error.
+export const MAX_SUPPLY_SEQUENCE_STEPS = 12;
+
+function checkedSupplyStep(step) {
+  if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error('A supply step must describe an action, an actor, and an amount.');
+  if(!['mint','burn'].includes(step.action)) throw new Error('A supply step must be a mint or a burn.');
+  if(!['issuer','other'].includes(step.actor)) throw new Error('A supply step must be attempted by the issuer or by someone else.');
+  if(typeof step.amount!=='string') throw new Error('A supply amount must be a decimal string.');
+  return {action:step.action,actor:step.actor,amount:step.amount};
+}
+function checkedSupplySteps(steps) {
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_SUPPLY_SEQUENCE_STEPS) throw new Error(`A supply sequence needs between 1 and ${MAX_SUPPLY_SEQUENCE_STEPS} modeled changes.`);
+  return steps.map(checkedSupplyStep);
+}
+export function copySupplySteps(steps) { return checkedSupplySteps(steps); }
+export function blankSupplyStep() { return {action:'mint',actor:'issuer',amount:'100'}; }
+export function addSupplyStep(steps, step = blankSupplyStep()) {
+  const list = checkedSupplySteps(steps);
+  if(list.length>=MAX_SUPPLY_SEQUENCE_STEPS) throw new Error(`A supply sequence holds at most ${MAX_SUPPLY_SEQUENCE_STEPS} modeled changes.`);
+  return [...list, checkedSupplyStep(step)];
+}
+export function removeSupplyStep(steps, index) {
+  const list = checkedSupplySteps(steps);
+  checkedIndex(list, index);
+  if(list.length<=1) throw new Error('A supply sequence needs at least one modeled change.');
+  return list.filter((_,i)=>i!==index);
+}
+export function moveSupplyStep(steps, index, direction) {
+  const list = checkedSupplySteps(steps);
+  checkedIndex(list, index);
+  if(direction!==-1&&direction!==1) throw new Error('Move a step one place up or down.');
+  const target = index+direction;
+  if(target<0||target>=list.length) return list; // Already at the edge: an unchanged copy.
+  [list[index],list[target]] = [list[target],list[index]];
+  return list;
+}
+export function updateSupplyStep(steps, index, patch) {
+  const list = checkedSupplySteps(steps);
+  checkedIndex(list, index);
+  if(!patch||typeof patch!=='object'||Array.isArray(patch)) throw new Error('Describe the change to the step.');
+  for(const k of Object.keys(patch)) if(!['action','actor','amount'].includes(k)) throw new Error(`A supply step has no ${k} field.`);
+  list[index] = checkedSupplyStep({...list[index], ...patch});
+  return list;
+}
+
 // CIP-113 Layer-3 substandards, modeled from the Cardano Foundation reference
 // platform (checked 2026-10-04). These are local models of the documented
 // validator checks — nothing here reads an on-chain denylist, verifies a real
