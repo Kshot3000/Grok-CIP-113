@@ -246,6 +246,91 @@ export function simulateSupplySequence(design, changes) {
   return finish(steps);
 }
 
+// A combined timeline: transfer steps and supply steps interleaved against
+// ONE running modeled state — a ledger of balances plus the supply those
+// balances sum to. The two labs above each hold one side fixed (transfers
+// keep the designed supply; supply changes track no holder), so neither can
+// show the interactions a real issuance lifecycle has: minted tokens become
+// transferable in the same timeline, tokens the issuer has distributed are
+// no longer the issuer's to burn, and burning the issuer's holding can leave
+// a later distribution short. The invariant the model maintains is exact:
+// the modeled balances always sum to the modeled supply. Minted tokens enter
+// at the issuer (the generic issuance model of the supply labs); a burn
+// draws on the issuer's modeled holding — tokens held by other modeled
+// accounts are not burned here, which is why a burn can be blocked by the
+// issuer's balance even when the total supply would cover it. Transfer steps
+// keep the transfer labs' checks (including the per-transfer cap and the
+// pause); supply steps keep the supply labs' checks (authority, int64
+// ceiling, issued supply) — transfer rules still do not gate issuance, and
+// issuance checks do not gate transfers. A blocked step changes nothing and
+// later steps are still evaluated. Local simulation only: no tokens are
+// minted, burned, or moved, no wallet or on-chain state is read, and no
+// transaction is produced.
+export const MAX_TIMELINE_STEPS = 12;
+
+export function simulateTimeline(design, steps) {
+  const errors=validateDesign(design);
+  let initial=0n;
+  try { initial=toUnits(design.supply,design.decimals); } catch { /* An invalid design reports its errors below; the state stays at zero. */ }
+  let running=initial;
+  const balances={};
+  for(const k of Object.keys(LEDGER_ACCOUNTS)) balances[k]=k==='issuer'?initial:0n;
+  const finish=list=>({
+    invalid:errors.length>0, errors,
+    steps:list,
+    balances:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),
+    initialSupplyBaseUnits:initial.toString(),
+    finalSupplyBaseUnits:running.toString(),
+    netChangeBaseUnits:(running-initial).toString(),
+    transferredBaseUnits:list.filter(s=>s.kind==='transfer'&&s.allowed).reduce((sum,s)=>sum+BigInt(s.amountBaseUnits),0n).toString(),
+    appliedCount:list.filter(s=>s.allowed).length,
+  });
+  if(errors.length) return finish([]);
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_TIMELINE_STEPS) throw new Error(`A timeline needs between 1 and ${MAX_TIMELINE_STEPS} modeled steps.`);
+  const list=steps.map((step,i)=>{
+    if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error(`Timeline step ${i+1} must describe a transfer or a supply change.`);
+    const supplyBefore=running;
+    const unchanged={supplyBeforeBaseUnits:supplyBefore.toString(),supplyAfterBaseUnits:supplyBefore.toString()};
+    let amount=null, amountError='';
+    try { amount=toUnits(step.amount,design.decimals); if(amount<=0n) throw new Error('Amount must be greater than zero.'); }
+    catch(e) { amountError=e.message; }
+    if(step.kind==='transfer') {
+      if(amountError) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount??''),amountBaseUnits:null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:amountError}],...unchanged};
+      const from=LEDGER_ACCOUNTS[step.from], to=LEDGER_ACCOUNTS[step.to];
+      if(!from||!to) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed:false,checks:[{name:'Known accounts',pass:false,detail:'Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.'}],...unchanged};
+      const checks=[
+        {name:'Sender balance',pass:balances[step.from]>=amount,detail:balances[step.from]>=amount?`The modeled sender holds ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs.`:`The modeled sender holds only ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs — earlier steps in the timeline count, including supply changes.`},
+        {name:'Transfer access',pass:!design.allowlist||to.allowed,detail:design.allowlist?'Recipient must be on the modeled allowlist.':'Open access is enabled.'},
+        {name:'Transfer limit',pass:!design.limitEnabled||amount<=toUnits(design.limit,design.decimals),detail:design.limitEnabled?`Up to ${design.limit} ${design.ticker} per modeled transfer — the cap is per transfer, not cumulative.`:'No per-transfer cap is modeled.'},
+        {name:'Issuer controls',pass:!design.pausable||(!design.paused&&!from.frozen&&!to.frozen),detail:design.pausable?(design.paused?'Issuer has paused all transfers.':from.frozen?'The sender is frozen.':to.frozen?'The recipient is frozen.':'Transfers are active and neither party is frozen.'):'Pause and freeze controls are disabled.'},
+        {name:'Eligibility requirement',pass:!design.identity||to.credential,detail:design.identity?'Recipient must have modeled eligibility. This is not a verified credential or Midnight proof.':'No eligibility credential is required by this model.'},
+      ];
+      const allowed=checks.every(c=>c.pass);
+      if(allowed) { balances[step.from]-=amount; balances[step.to]+=amount; }
+      return {kind:'transfer',from:step.from,to:step.to,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed,checks,...unchanged};
+    }
+    if(step.kind==='supply') {
+      if(amountError) return {kind:'supply',action:step.action??null,actor:step.actor??null,amount:String(step.amount??''),amountBaseUnits:null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:amountError}],...unchanged};
+      if(!['mint','burn'].includes(step.action)||!['issuer','other'].includes(step.actor)) return {kind:'supply',action:step.action??null,actor:step.actor??null,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed:false,checks:[{name:'Known supply change',pass:false,detail:'Each supply step must be a mint or a burn, attempted by the issuer or by someone else.'}],...unchanged};
+      const mint=step.action==='mint';
+      const after=mint?supplyBefore+amount:supplyBefore-amount;
+      const checks=[
+        {name:'Issuance authority',pass:step.actor==='issuer',detail:step.actor==='issuer'?'The modeled issuer holds this design\u2019s issuance authority.':'A non-issuer has no issuance authority in this generic model \u2014 supply changes are an issuer action here. A real token\u2019s issuance logic defines its own authority; this model does not read it.'},
+      ];
+      if(mint) checks.push({name:'Int64 ceiling headroom',pass:after<=MAX_ASSET,detail:after<=MAX_ASSET?`Minting would raise the modeled supply to ${formatUnits(after,design.decimals)} ${design.ticker} (${after.toString()} base units), within the ${MAX_ASSET.toString()} base-unit ceiling this studio models. Newly minted tokens enter at the issuer in this model.`:`Minting ${formatUnits(amount,design.decimals)} ${design.ticker} would raise the modeled supply to ${after.toString()} base units, past the ${MAX_ASSET.toString()} base-unit ceiling this studio models.`});
+      else checks.push(
+        {name:'Sufficient current supply',pass:amount<=supplyBefore,detail:amount<=supplyBefore?`The modeled supply at this step is ${formatUnits(supplyBefore,design.decimals)} ${design.ticker} — earlier steps in the timeline count.`:`Only ${formatUnits(supplyBefore,design.decimals)} ${design.ticker} exists in the modeled supply at this step — earlier steps in the timeline count. A burn cannot destroy more than was issued.`},
+        {name:'Issuer balance',pass:balances.issuer>=amount,detail:balances.issuer>=amount?`The issuer holds ${formatUnits(balances.issuer,design.decimals)} ${design.ticker} in the modeled ledger when this step runs; a burn in this model draws on the issuer\u2019s own holding.`:`The issuer holds only ${formatUnits(balances.issuer,design.decimals)} ${design.ticker} in the modeled ledger when this step runs. Tokens already distributed to other modeled accounts are not the issuer\u2019s to burn in this model \u2014 the burn is blocked even though the total supply is ${formatUnits(supplyBefore,design.decimals)} ${design.ticker}.`},
+      );
+      const allowed=checks.every(c=>c.pass);
+      if(allowed) { running=after; if(mint) balances.issuer+=amount; else balances.issuer-=amount; }
+      return {kind:'supply',action:step.action,actor:step.actor,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed,checks,supplyBeforeBaseUnits:supplyBefore.toString(),supplyAfterBaseUnits:running.toString()};
+    }
+    return {kind:step.kind??null,amount:String(step.amount??''),amountBaseUnits:amountError?null:amount.toString(),allowed:false,checks:[{name:'Known timeline step',pass:false,detail:'Each timeline step must be a transfer between modeled accounts or a supply change (a mint or a burn).'}],...unchanged};
+  });
+  return finish(list);
+}
+
 // Editing model for the sequence lab's custom builder. The simulator above
 // accepts any well-formed 1–12 step list; these helpers are how the studio
 // edits one. Every helper is pure — it returns a new list of new step
