@@ -1254,6 +1254,86 @@ export function lumpSumPayoff(input = {}) {
   };
 }
 
+
+export const ARM_RATE_DELTAS = Object.freeze([-2, 0, 2, 4]);
+
+// Adjustable-rate reset for the same private-credit scenario — the
+// structure the rate stress test (which reprices a loan from its first
+// payment, as a hypothetical) cannot show: a loan that actually starts
+// at one rate and resets to another part-way through its term. The
+// initial rate charges the first resetMonth − 1 payments; starting
+// with payment resetMonth the new rate applies, and the payment is
+// RECAST — recomputed as the level payment that repays the balance
+// standing at the reset over the months remaining, read off the SAME
+// amortizationSchedule function applied to that balance and remaining
+// term, so this model can never drift from the schedule it builds on.
+// The months before the reset are that schedule's own rows. Two
+// boundary cases are exact, not approximate: a new rate equal to the
+// initial rate IS the plain loan (its schedule is returned itself),
+// and a reset in month 1 IS a plain loan at the new rate. A reset in
+// the final month reprices only that payment (balance plus one month
+// of interest at the new rate). The term never changes — only the rate
+// and, from the reset, the payment do — and the result reports the
+// payment change and the total interest difference against the plain
+// loan at the initial rate, signed either way: a reset down saves, a
+// reset up costs. This model holds each rate exactly as entered for
+// its whole phase: how a real adjustable rate is set at a reset (an
+// index plus a margin, caps on each move, a floor) is a term of a real
+// agreement, and none of it — nor fees, taxes, insurance, or defaults
+// — is modeled. Illustrative math only — not a loan offer, any
+// product's terms, or a forecast that rates will move.
+export function adjustableRateLoan(input = {}) {
+  const plain = amortizationSchedule(input); // Validates principal / rate / months.
+  const [p, r, n] = [Number(input.principal), Number(input.rate), Number(input.months)];
+  const resetMonth = input.resetMonth === undefined ? Math.max(1, Math.floor(n / 2)) : Number(input.resetMonth);
+  if (!Number.isInteger(resetMonth) || resetMonth < 1 || resetMonth > n) throw new Error(`Use a reset month between 1 and the ${n}-month term.`);
+  const newRate = input.newRate === undefined ? Math.min(100, r + 2) : Number(input.newRate);
+  if (!Number.isFinite(newRate) || newRate < 0 || newRate > 100) throw new Error('Use a new annual interest rate between 0 and 100%.');
+  const atReset = (rm, nr) => {
+    const balanceAt = rm === 1 ? p : plain.schedule[rm - 2].balance;
+    if (nr === r) return { resetPayment: plain.monthlyPayment, balanceAtReset: balanceAt, totalInterest: plain.totalInterest, totalPaid: plain.total, schedule: plain.schedule };
+    if (rm === 1) { const s = amortizationSchedule({ principal: p, rate: nr, months: n }); return { resetPayment: s.monthlyPayment, balanceAtReset: p, totalInterest: s.totalInterest, totalPaid: s.total, schedule: s.schedule }; }
+    const rest = amortizationSchedule({ principal: balanceAt, rate: nr, months: n - rm + 1 });
+    const firstRate = r / 100 / 12, secondRate = nr / 100 / 12;
+    const schedule = [];
+    let balance = p, totalInterest = 0, totalPaid = 0;
+    for (let month = 1; month <= n; month++) {
+      const resetting = month >= rm;
+      const interest = balance * (resetting ? secondRate : firstRate);
+      const level = resetting ? rest.monthlyPayment : plain.monthlyPayment;
+      let principalPart = level - interest;
+      let payment = level;
+      if (month === n || principalPart >= balance) { principalPart = balance; payment = balance + interest; }
+      balance -= principalPart;
+      totalInterest += interest; totalPaid += payment;
+      schedule.push({ month, payment, interest, principal: principalPart, balance: Math.max(0, balance) });
+      if (balance <= 0) break;
+    }
+    return { resetPayment: rest.monthlyPayment, balanceAtReset: balanceAt, totalInterest, totalPaid, schedule };
+  };
+  const chosen = atReset(resetMonth, newRate);
+  const rowRates = [...new Set(ARM_RATE_DELTAS.map(d => Math.min(100, Math.max(0, r + d))))].sort((a, b) => a - b);
+  return {
+    principal: p,
+    initialRate: r,
+    newRate,
+    months: n,
+    resetMonth,
+    initialPayment: plain.monthlyPayment,
+    resetPayment: chosen.resetPayment,
+    paymentChange: chosen.resetPayment - plain.monthlyPayment,
+    paymentChangePercent: plain.monthlyPayment > 0 ? (chosen.resetPayment - plain.monthlyPayment) / plain.monthlyPayment * 100 : null,
+    balanceAtReset: chosen.balanceAtReset,
+    totalInterest: chosen.totalInterest,
+    interestDifference: chosen.totalInterest - plain.totalInterest,
+    totalPaid: chosen.totalPaid,
+    plainMonthlyPayment: plain.monthlyPayment,
+    plainTotalInterest: plain.totalInterest,
+    schedule: chosen.schedule,
+    rows: rowRates.map(rate => { const row = atReset(resetMonth, rate); return { newRate: rate, rateDelta: rate - r, resetPayment: row.resetPayment, totalInterest: row.totalInterest, interestDifference: row.totalInterest - plain.totalInterest }; }),
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
