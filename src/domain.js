@@ -808,6 +808,56 @@ export function refinanceComparison(input={}) {
   };
 }
 
+// Collateral stress test for the same private-credit scenario: the simple-
+// interest panel above says whether the loan sits within its advance ceiling
+// at TODAY's collateral value; this asks what a fall in that value does. A
+// drop of d% scales the collateral value, so the loan-to-value rises and the
+// advance ceiling (stressed value × advance rate) falls — the two break
+// points are computed exactly, not sampled: the ceiling is breached at the
+// drop where the stressed ceiling equals the principal, i.e. where the
+// stressed value reaches the required collateral (principal ÷ advance
+// rate), and the collateral reaches par (value == principal, LTV 100%) at
+// the drop where the stressed value equals the principal. A scenario that
+// starts above its ceiling is reported as already breached with a maximum
+// drop of 0 — distinct from a scenario sitting exactly ON its ceiling,
+// which is within the limit at a 0% drop but breached by any fall. For any
+// chosen drop the result gives the stressed value, LTV, ceiling, and
+// headroom, the shortfall above the ceiling, and the top-up — the extra
+// collateral, valued at the stressed price, that would bring the required
+// collateral back — plus a table over the standard drops. The principal is
+// held fixed: this models the collateral side only, not repayments, margin
+// calls, or a liquidation process, and no price feed is read — the drop is
+// supplied by the reader. Illustrative math, not RealFi terms, a loan
+// offer, or a forecast.
+export const STRESS_DROPS = Object.freeze([0, 10, 20, 30, 40, 50]);
+
+export function collateralStressTest(input = {}) {
+  const base = creditScenario({ principal: input.principal, rate: 0, months: 1, collateral: input.collateral, advance: input.advance }); // Validates principal / collateral / advance.
+  const drop = input.dropPercent === undefined ? 25 : Number(input.dropPercent);
+  if (!Number.isFinite(drop) || drop < 0 || drop >= 100) throw new Error('Use a collateral drop between 0 and 99% — at 100% no collateral value remains to measure against.');
+  const [p, c, a] = [Number(input.principal), Number(input.collateral), Number(input.advance)];
+  const requiredCollateral = p / (a / 100);
+  const atDrop = d => {
+    const value = c * (1 - d / 100);
+    const ceiling = value * a / 100;
+    return { dropPercent: d, collateralValue: value, ltv: p / value * 100, ceiling, headroom: ceiling - p, withinLimit: p <= ceiling, shortfall: Math.max(0, p - ceiling), topUp: Math.max(0, requiredCollateral - value) };
+  };
+  const alreadyBreached = p > base.ceiling;
+  return {
+    principal: p,
+    collateral: c,
+    advance: a,
+    baseLtv: base.ltv,
+    baseCeiling: base.ceiling,
+    requiredCollateral,
+    alreadyBreached,
+    maxDropPercent: alreadyBreached ? 0 : (1 - requiredCollateral / c) * 100,
+    dropToParPercent: p < c ? (1 - p / c) * 100 : p === c ? 0 : null,
+    stressed: atDrop(drop),
+    rows: STRESS_DROPS.map(atDrop),
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
