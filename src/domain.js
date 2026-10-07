@@ -989,6 +989,62 @@ export function debtServiceCoverage(input = {}) {
   };
 }
 
+// Balloon-payment loan for the same private-credit scenario — the term
+// structure the panels above do not model. The monthly payment is the
+// level payment calculated as if the loan amortized over a longer period
+// (`amortizationMonths`), read off the SAME amortizationSchedule the lab
+// displays, but the loan itself comes due after `balloonMonths`: at that
+// month the borrower pays that month's scheduled payment PLUS the entire
+// remaining balance (the balloon). Every figure is read off the full
+// amortization schedule's own rows, so the model can never drift from
+// the schedule it truncates: the balloon is exactly the schedule's
+// balance after the due month's payment, the interest counted is the
+// schedule's own interest over the months actually run, and paying the
+// balloon in full means the total paid equals principal + that interest
+// exactly. A due month equal to the amortization period is the plain
+// amortizing loan — balloon zero, totals identical to the full schedule.
+// The share of the original principal still due at the balloon date is
+// reported directly, because that concentration — most of the principal
+// riding on one payment — is the structure's defining risk. This model
+// assumes the balloon is paid in full when due: refinancing it, selling
+// the asset, or defaulting are outcomes a real agreement and a real
+// market decide, and none of them is modeled or implied here. Scheduled
+// payments only — the extra-payment field is not part of this model.
+// Illustrative math, not RealFi terms or a loan offer.
+export function balloonLoan(input = {}) {
+  const amortMonths = input.amortizationMonths === undefined ? 12 : Number(input.amortizationMonths);
+  const full = amortizationSchedule({ principal: input.principal, rate: input.rate, months: amortMonths }); // Validates principal / rate / amortization period.
+  const [p, r] = [Number(input.principal), Number(input.rate)];
+  const due = input.balloonMonths === undefined ? Math.max(1, Math.floor(amortMonths / 2)) : Number(input.balloonMonths);
+  if (!Number.isInteger(due) || due < 1 || due > amortMonths) throw new Error(`Use a balloon due month between 1 and the ${amortMonths}-month amortization period.`);
+  const atDue = t => {
+    const rows = full.schedule.slice(0, t);
+    const balloonAmount = rows[rows.length - 1].balance;
+    const totalInterest = rows.reduce((s, row) => s + row.interest, 0);
+    return { dueMonths: t, balloonAmount, finalPayment: rows[rows.length - 1].payment + balloonAmount, totalInterest, principalSharePercent: balloonAmount / p * 100 };
+  };
+  const chosen = atDue(due);
+  const chosenRows = full.schedule.slice(0, due);
+  const quarterMonths = [...new Set([Math.ceil(amortMonths * 0.25), Math.ceil(amortMonths * 0.5), Math.ceil(amortMonths * 0.75), amortMonths])].sort((a, b) => a - b);
+  return {
+    principal: p,
+    rate: r,
+    amortizationMonths: amortMonths,
+    balloonMonths: due,
+    monthlyPayment: full.monthlyPayment,
+    schedule: chosenRows,
+    balloonAmount: chosen.balloonAmount,
+    finalPayment: chosen.finalPayment,
+    principalSharePercent: chosen.principalSharePercent,
+    totalInterest: chosen.totalInterest,
+    totalPaid: chosenRows.reduce((s, row) => s + row.payment, 0) + chosen.balloonAmount,
+    interestNotCharged: full.totalInterest - chosen.totalInterest,
+    fullTermInterest: full.totalInterest,
+    monthsEarly: amortMonths - due,
+    rows: quarterMonths.map(atDue),
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
