@@ -115,6 +115,7 @@
 /* RealFi amortization schedule (v1.6). */
 @layer pages {
  .amort-panel{margin-top:24px}
+.amort-extra{margin-bottom:22px;max-width:360px}
  .amort-metrics{grid-template-columns:repeat(3,1fr);margin:0 0 25px;padding:0 0 23px;border-top:0}
  .amort-panel .status-box{margin-bottom:24px}
  .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}

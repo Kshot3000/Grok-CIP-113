@@ -686,30 +686,48 @@ export function creditScenario({principal,rate,months,collateral,advance}) {
 // charged on the remaining balance, the rest reducing principal. This is the
 // structure most term loans actually use, so the lab shows both side by side —
 // amortizing interest is lower than simple interest on the full principal for
-// the same rate and term, because the balance declines. Illustrative math
-// only: no fees, taxes, insurance, defaults, prepayment, or rate changes, and
-// not a loan offer or any product's terms. The final payment is adjusted to
-// the exact remaining balance plus its interest, so the schedule always ends
-// at precisely zero instead of a floating-point residue.
+// the same rate and term, because the balance declines. An optional extra
+// monthly payment (input.extraMonthly, default 0) models the question every
+// borrower asks next — what paying more than the scheduled amount does: the
+// same extra is added every month, the loan pays off early, and the result
+// reports the payoff month, the months saved, and the interest saved against
+// the no-extra schedule for the same terms. The extra is principal from the
+// first month it is paid; this model assumes no prepayment penalty, because
+// whether a real agreement charges one is a term of that agreement, not of
+// the arithmetic. Illustrative math only: no fees, taxes, insurance,
+// defaults, or rate changes, and not a loan offer or any product's terms.
+// The final payment is adjusted to the exact remaining balance plus its
+// interest, so the schedule always ends at precisely zero instead of a
+// floating-point residue — with an extra payment, that final (smaller)
+// payment simply arrives in an earlier month.
 export function amortizationSchedule(input={}) {
   const [p,r,n]=[Number(input.principal),Number(input.rate),Number(input.months)];
   if(!Number.isFinite(p)||p<=0||p>1e12) throw new Error('Use a positive principal up to 1,000,000,000,000.');
   if(!Number.isFinite(r)||r<0||r>100) throw new Error('Use an annual interest rate between 0 and 100%.');
   if(!Number.isInteger(n)||n<1||n>360) throw new Error('Use a whole number of months between 1 and 360.');
+  const extra=input.extraMonthly===undefined?0:Number(input.extraMonthly);
+  if(!Number.isFinite(extra)||extra<0||extra>1e12) throw new Error('Use an extra monthly payment of 0 or more, up to 1,000,000,000,000.');
   const monthlyRate=r/100/12;
   const levelPayment=monthlyRate===0?p/n:p*monthlyRate/(1-(1+monthlyRate)**-n);
-  const schedule=[];
-  let balance=p,totalInterest=0,totalPaid=0;
-  for(let month=1;month<=n;month++) {
-    const interest=balance*monthlyRate;
-    let principalPart=levelPayment-interest;
-    let payment=levelPayment;
-    if(month===n||principalPart>=balance) { principalPart=balance; payment=balance+interest; }
-    balance-=principalPart;
-    totalInterest+=interest; totalPaid+=payment;
-    schedule.push({month,payment,interest,principal:principalPart,balance:Math.max(0,balance)});
-  }
-  return {monthlyPayment:levelPayment,totalInterest,total:totalPaid,schedule};
+  const run=extraMonthly=>{
+    const schedule=[];
+    let balance=p,totalInterest=0,totalPaid=0;
+    for(let month=1;month<=n;month++) {
+      const interest=balance*monthlyRate;
+      const scheduled=levelPayment+extraMonthly;
+      let principalPart=scheduled-interest;
+      let payment=scheduled;
+      if(month===n||principalPart>=balance) { principalPart=balance; payment=balance+interest; }
+      balance-=principalPart;
+      totalInterest+=interest; totalPaid+=payment;
+      schedule.push({month,payment,interest,principal:principalPart,balance:Math.max(0,balance)});
+      if(balance<=0) break;
+    }
+    return {schedule,totalInterest,total:totalPaid};
+  };
+  const baseline=run(0);
+  const actual=extra>0?run(extra):baseline;
+  return {monthlyPayment:levelPayment,extraMonthly:extra,scheduledPayment:levelPayment+extra,totalInterest:actual.totalInterest,total:actual.total,schedule:actual.schedule,payoffMonths:actual.schedule.length,monthsSaved:n-actual.schedule.length,interestSaved:baseline.totalInterest-actual.totalInterest};
 }
 
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
