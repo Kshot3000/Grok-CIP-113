@@ -198,6 +198,54 @@ export function simulateSupplyChange(design, input={}) {
   return {allowed:checks.every(c=>c.pass),invalid:false,checks,action:input.action,amountBaseUnits:amount.toString(),supplyBeforeBaseUnits:supply.toString(),supplyAfterBaseUnits:after>=0n?after.toString():null};
 }
 
+// A sequence of supply changes against a running modeled supply — the
+// single-change checks above, applied in order, where one step changes the
+// supply the next step is checked against. This is what an issuance
+// schedule actually looks like: a burn creates headroom under the int64
+// ceiling that a later mint can use, and an oversize burn blocked early
+// leaves the supply intact for a smaller burn later. A blocked step leaves
+// the supply unchanged and later steps are still evaluated, so the
+// knock-on effect of a denial is visible. Local simulation only, under
+// the same generic issuance model as simulateSupplyChange: no tokens are
+// minted or burned, no transaction is produced, and no on-chain supply
+// is read.
+export function simulateSupplySequence(design, changes) {
+  const errors=validateDesign(design);
+  let initial=0n;
+  try { initial=toUnits(design.supply,design.decimals); } catch { /* An invalid design reports its errors below; the supply stays at zero. */ }
+  let running=initial;
+  const finish=steps=>({
+    invalid:errors.length>0, errors,
+    steps,
+    initialSupplyBaseUnits:initial.toString(),
+    finalSupplyBaseUnits:running.toString(),
+    netChangeBaseUnits:(running-initial).toString(),
+    appliedCount:steps.filter(s=>s.allowed).length,
+  });
+  if(errors.length) return finish([]);
+  if(!Array.isArray(changes)||changes.length<1||changes.length>12) throw new Error('A supply sequence needs between 1 and 12 modeled changes.');
+  const steps=changes.map((c,i)=>{
+    if(!c||typeof c!=='object'||Array.isArray(c)) throw new Error(`Supply change ${i+1} must describe an action, an actor, and an amount.`);
+    const before=running;
+    let amount=null, amountError='';
+    try { amount=toUnits(c.amount,design.decimals); if(amount<=0n) throw new Error('Amount must be greater than zero.'); }
+    catch(e) { amountError=e.message; }
+    if(amountError) return {action:c.action??null,actor:c.actor??null,amount:String(c.amount??''),amountBaseUnits:null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:amountError}],supplyBeforeBaseUnits:before.toString(),supplyAfterBaseUnits:before.toString()};
+    if(!['mint','burn'].includes(c.action)||!['issuer','other'].includes(c.actor)) return {action:c.action??null,actor:c.actor??null,amount:String(c.amount),amountBaseUnits:amount.toString(),allowed:false,checks:[{name:'Known supply change',pass:false,detail:'Each step must be a mint or a burn, attempted by the issuer or by someone else.'}],supplyBeforeBaseUnits:before.toString(),supplyAfterBaseUnits:before.toString()};
+    const mint=c.action==='mint';
+    const after=mint?before+amount:before-amount;
+    const checks=[
+      {name:'Issuance authority',pass:c.actor==='issuer',detail:c.actor==='issuer'?'The modeled issuer holds this design\u2019s issuance authority.':'A non-issuer has no issuance authority in this generic model \u2014 supply changes are an issuer action here. A real token\u2019s issuance logic defines its own authority; this model does not read it.'},
+    ];
+    if(mint) checks.push({name:'Int64 ceiling headroom',pass:after<=MAX_ASSET,detail:after<=MAX_ASSET?`Minting would raise the modeled supply to ${formatUnits(after,design.decimals)} ${design.ticker} (${after.toString()} base units), within the ${MAX_ASSET.toString()} base-unit ceiling this studio models.`:`Minting ${formatUnits(amount,design.decimals)} ${design.ticker} would raise the modeled supply to ${after.toString()} base units, past the ${MAX_ASSET.toString()} base-unit ceiling this studio models.`});
+    else checks.push({name:'Sufficient current supply',pass:amount<=before,detail:amount<=before?`Burning would lower the modeled supply to ${formatUnits(after,design.decimals)} ${design.ticker} (${after.toString()} base units).`:`Only ${formatUnits(before,design.decimals)} ${design.ticker} exists in the modeled supply at this step \u2014 earlier steps in the sequence count. A burn cannot destroy more than was issued.`});
+    const allowed=checks.every(x=>x.pass);
+    if(allowed) running=after;
+    return {action:c.action,actor:c.actor,amount:String(c.amount),amountBaseUnits:amount.toString(),allowed,checks,supplyBeforeBaseUnits:before.toString(),supplyAfterBaseUnits:running.toString()};
+  });
+  return finish(steps);
+}
+
 // Editing model for the sequence lab's custom builder. The simulator above
 // accepts any well-formed 1–12 step list; these helpers are how the studio
 // edits one. Every helper is pure — it returns a new list of new step
