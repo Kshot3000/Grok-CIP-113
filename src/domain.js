@@ -438,6 +438,82 @@ export function updateSupplyStep(steps, index, patch) {
   return list;
 }
 
+// Editing model for the timeline lab's custom builder — the same pure-helper
+// discipline as the two builders above, for a list that mixes BOTH step
+// kinds. Every helper returns a new list of new step objects and never
+// mutates its input, and validates each step against the kind it carries,
+// so a step the timeline simulator would reject as an unknown account or an
+// unknown supply change can never be constructed here. The one thing a
+// mixed list adds is a kind switch: changing a step's kind converts it,
+// keeping its amount and filling the new kind's other fields with that
+// kind's defaults (or with fields supplied in the same patch) — a transfer
+// step carries no action/actor and a supply step carries no sender or
+// recipient, so stale fields from the old kind never survive a switch.
+// Amounts stay decimal strings: the simulator reports an unrepresentable
+// amount as a blocked step, which is the builder's feedback, not an
+// editing error.
+function checkedTimelineStep(step) {
+  if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error('A timeline step must describe a transfer or a supply change.');
+  if(step.kind==='transfer') {
+    if(!LEDGER_ACCOUNTS[step.from]||!LEDGER_ACCOUNTS[step.to]) throw new Error('Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.');
+    if(typeof step.amount!=='string') throw new Error('A timeline step amount must be a decimal string.');
+    return {kind:'transfer',from:step.from,to:step.to,amount:step.amount};
+  }
+  if(step.kind==='supply') {
+    if(!['mint','burn'].includes(step.action)) throw new Error('A supply step must be a mint or a burn.');
+    if(!['issuer','other'].includes(step.actor)) throw new Error('A supply step must be attempted by the issuer or by someone else.');
+    if(typeof step.amount!=='string') throw new Error('A timeline step amount must be a decimal string.');
+    return {kind:'supply',action:step.action,actor:step.actor,amount:step.amount};
+  }
+  throw new Error('A timeline step must be a transfer or a supply change.');
+}
+function checkedTimelineSteps(steps) {
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_TIMELINE_STEPS) throw new Error(`A timeline needs between 1 and ${MAX_TIMELINE_STEPS} modeled steps.`);
+  return steps.map(checkedTimelineStep);
+}
+export function copyTimelineSteps(steps) { return checkedTimelineSteps(steps); }
+export function blankTimelineStep(kind = 'transfer') {
+  if(kind==='transfer') return {kind:'transfer',from:'issuer',to:'approved',amount:'100'};
+  if(kind==='supply') return {kind:'supply',action:'mint',actor:'issuer',amount:'100'};
+  throw new Error('A timeline step must be a transfer or a supply change.');
+}
+export function addTimelineStep(steps, step = blankTimelineStep()) {
+  const list = checkedTimelineSteps(steps);
+  if(list.length>=MAX_TIMELINE_STEPS) throw new Error(`A timeline holds at most ${MAX_TIMELINE_STEPS} modeled steps.`);
+  return [...list, checkedTimelineStep(step)];
+}
+export function removeTimelineStep(steps, index) {
+  const list = checkedTimelineSteps(steps);
+  checkedIndex(list, index);
+  if(list.length<=1) throw new Error('A timeline needs at least one modeled step.');
+  return list.filter((_,i)=>i!==index);
+}
+export function moveTimelineStep(steps, index, direction) {
+  const list = checkedTimelineSteps(steps);
+  checkedIndex(list, index);
+  if(direction!==-1&&direction!==1) throw new Error('Move a step one place up or down.');
+  const target = index+direction;
+  if(target<0||target>=list.length) return list; // Already at the edge: an unchanged copy.
+  [list[index],list[target]] = [list[target],list[index]];
+  return list;
+}
+export function updateTimelineStep(steps, index, patch) {
+  const list = checkedTimelineSteps(steps);
+  checkedIndex(list, index);
+  if(!patch||typeof patch!=='object'||Array.isArray(patch)) throw new Error('Describe the change to the step.');
+  for(const k of Object.keys(patch)) if(!['kind','from','to','action','actor','amount'].includes(k)) throw new Error(`A timeline step has no ${k} field.`);
+  const kind = patch.kind ?? list[index].kind;
+  if(kind!=='transfer'&&kind!=='supply') throw new Error('A timeline step must be a transfer or a supply change.');
+  const kindFields = kind==='transfer' ? ['from','to'] : ['action','actor'];
+  for(const k of Object.keys(patch)) if(k!=='kind'&&k!=='amount'&&!kindFields.includes(k)) throw new Error(`A timeline step has no ${k} field.`);
+  // Converting kinds: start from the new kind's blank step (which supplies
+  // its defaults), keep the amount the step already had, then apply the
+  // patch — fields the old kind carried never leak into the new shape.
+  const base = kind===list[index].kind ? list[index] : {...blankTimelineStep(kind), amount:list[index].amount};
+  list[index] = checkedTimelineStep({...base, ...patch});
+  return list;
+}
+
 // CIP-113 Layer-3 substandards, modeled from the Cardano Foundation reference
 // platform (checked 2026-10-04). These are local models of the documented
 // validator checks — nothing here reads an on-chain denylist, verifies a real

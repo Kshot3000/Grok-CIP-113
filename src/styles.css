@@ -140,6 +140,10 @@
 .seq-edit-row select.seq-from,.seq-edit-row select.seq-to{flex:1 1 150px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 /* Supply sequence builder (v1.18): same editor rows, action/actor selects. */
 .seq-edit-row select.supply-seq-action,.seq-edit-row select.supply-seq-actor{flex:1 1 170px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+/* Timeline builder (v1.20): same editor rows, kind-dependent selects. */
+.seq-edit-row select.timeline-kind{flex:0 1 140px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+.seq-edit-row select.timeline-from,.seq-edit-row select.timeline-to{flex:1 1 140px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+.seq-edit-row select.timeline-action,.seq-edit-row select.timeline-actor{flex:1 1 150px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 .seq-arrow{color:var(--muted)}
 .seq-amount{position:relative;flex:0 1 140px}
 .seq-amount input{width:100%;min-height:38px;padding:8px 46px 8px 10px}
