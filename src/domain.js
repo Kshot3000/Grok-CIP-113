@@ -1104,6 +1104,80 @@ export function effectiveRate(input = {}) {
   };
 }
 
+export const IO_PERIOD_FRACTIONS = Object.freeze([0, 0.25, 0.5, 0.75]);
+
+// Interest-only period for the same private-credit scenario — the
+// structure bridge and construction loans actually use, and the one
+// payment shape the panels above cannot show. For the first
+// `interestOnlyMonths` months the borrower pays only the month's
+// interest on the full principal: the payment is lower, and the balance
+// does not move at all. When the interest-only period ends, the SAME
+// principal is amortized over the months that remain, so the payment
+// steps up to the level payment of a shorter loan — read off the SAME
+// amortizationSchedule function, applied to the remaining term, so this
+// model can never drift from the schedule it builds on. The combined
+// schedule always runs the full scenario term: interest-only rows
+// (principal part exactly zero, balance exactly the principal) followed
+// by the amortizing rows with their months offset. Because the balance
+// stays at the full principal for longer, the total interest is never
+// less than the plain amortizing loan's — the difference is reported as
+// extraInterest, and it is exactly zero when the rate or the
+// interest-only period is zero. An interest-only period of zero IS the
+// plain loan: its schedule is the baseline schedule itself. The period
+// must leave at least one amortizing month — a loan that never starts
+// repaying inside its term is a balloon structure, modeled separately
+// above. At a 0% rate the interest-only payment is $0 and the payment
+// step-up is reported as an amount with a null percentage — there is
+// no smaller payment to measure a percentage increase against. The rate
+// is fixed for the whole term; payments missed, fees, taxes, insurance,
+// and what happens if the borrower cannot meet the stepped-up payment
+// are not modeled. Illustrative math only — not a loan offer or any
+// product's terms.
+export function interestOnlyLoan(input = {}) {
+  const plain = amortizationSchedule(input); // Validates principal / rate / months.
+  const [p, r, n] = [Number(input.principal), Number(input.rate), Number(input.months)];
+  const io = input.interestOnlyMonths === undefined ? Math.floor(n / 2) : Number(input.interestOnlyMonths);
+  if (!Number.isInteger(io) || io < 0 || io >= n) throw new Error(`Use an interest-only period between 0 and ${n - 1} months for a ${n}-month loan — at least one month must be left to repay the principal.`);
+  const monthlyRate = r / 100 / 12;
+  const atPeriod = t => {
+    const ioPay = p * monthlyRate;
+    const amort = t === n ? null : amortizationSchedule({ principal: p, rate: r, months: n - t });
+    const ioRows = Array.from({ length: t }, (_, i) => ({ month: i + 1, payment: ioPay, interest: ioPay, principal: 0, balance: p }));
+    const schedule = t === 0 ? plain.schedule : [...ioRows, ...amort.schedule.map(row => ({ ...row, month: row.month + t }))];
+    const totalInterest = schedule.reduce((s, row) => s + row.interest, 0);
+    const amortizingPayment = t === 0 ? plain.monthlyPayment : amort.monthlyPayment;
+    return {
+      interestOnlyMonths: t,
+      ioPayment: t === 0 ? amortizingPayment : ioPay,
+      amortizingPayment,
+      totalInterest,
+      extraInterest: totalInterest - plain.totalInterest,
+      schedule,
+    };
+  };
+  const chosen = atPeriod(io);
+  const periodMonths = [...new Set(IO_PERIOD_FRACTIONS.map(f => Math.floor(n * f)))].filter(t => t < n).sort((a, b) => a - b);
+  return {
+    principal: p,
+    rate: r,
+    months: n,
+    interestOnlyMonths: io,
+    amortizingMonths: n - io,
+    ioPayment: chosen.ioPayment,
+    amortizingPayment: chosen.amortizingPayment,
+    paymentIncrease: chosen.amortizingPayment - chosen.ioPayment,
+    paymentIncreasePercent: chosen.ioPayment > 0 ? (chosen.amortizingPayment - chosen.ioPayment) / chosen.ioPayment * 100 : null,
+    ioInterest: chosen.schedule.slice(0, io).reduce((s, row) => s + row.interest, 0),
+    totalInterest: chosen.totalInterest,
+    totalPaid: chosen.schedule.reduce((s, row) => s + row.payment, 0),
+    extraInterest: chosen.extraInterest,
+    plainMonthlyPayment: plain.monthlyPayment,
+    plainTotalInterest: plain.totalInterest,
+    schedule: chosen.schedule,
+    rows: periodMonths.map(t => { const row = atPeriod(t); return { interestOnlyMonths: row.interestOnlyMonths, ioPayment: row.ioPayment, amortizingPayment: row.amortizingPayment, totalInterest: row.totalInterest, extraInterest: row.extraInterest }; }),
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
