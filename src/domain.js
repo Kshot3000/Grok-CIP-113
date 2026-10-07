@@ -730,6 +730,36 @@ export function amortizationSchedule(input={}) {
   return {monthlyPayment:levelPayment,extraMonthly:extra,scheduledPayment:levelPayment+extra,totalInterest:actual.totalInterest,total:actual.total,schedule:actual.schedule,payoffMonths:actual.schedule.length,monthsSaved:n-actual.schedule.length,interestSaved:baseline.totalInterest-actual.totalInterest};
 }
 
+// The inverse of the extra-payment model above: instead of asking what a
+// chosen extra does, ask what extra a chosen payoff date requires: with
+// the same extra paid every month, all of it to principal, what is the
+// smallest extra — to the cent — that pays
+// the loan off within a target number of months? The answer is found by
+// searching over whole cents and evaluating the SAME amortizationSchedule
+// function the forward model uses, so the solver can never drift from the
+// schedule it solves for: the returned extra, fed back into
+// amortizationSchedule, pays off within the target, and one cent less
+// does not (unless the extra is zero, when the target is the full term).
+// A target equal to the term needs no extra at all. Same assumptions as
+// the schedule itself: no prepayment penalty, no fees, taxes, insurance,
+// defaults, or rate changes — illustrative math, not a loan offer.
+export function extraForTargetPayoff(input={}) {
+  const baseline=amortizationSchedule(input); // Validates principal / rate / months.
+  const n=Number(input.months);
+  const target=input.targetMonths;
+  if(!Number.isInteger(target)||target<1||target>n) throw new Error(`Use a target payoff between 1 and the ${n}-month term.`);
+  if(target===n) return {targetMonths:target,extraMonthly:0,monthlyPayment:baseline.monthlyPayment,scheduledPayment:baseline.monthlyPayment,payoffMonths:baseline.payoffMonths,monthsSaved:0,totalInterest:baseline.totalInterest,interestSaved:0,total:baseline.total,schedule:baseline.schedule};
+  const payoffAt=cents=>amortizationSchedule({...input,extraMonthly:cents/100}).payoffMonths;
+  // Find an upper bound in cents that meets the target, doubling from $1.
+  let hi=100;
+  while(payoffAt(hi)>target) { hi*=2; if(hi>1e14) throw new Error('No extra payment up to the modeled limit reaches that target.'); }
+  // Binary search the smallest whole-cent extra that meets the target.
+  let lo=0;
+  while(lo<hi) { const mid=Math.floor((lo+hi)/2); if(payoffAt(mid)<=target) hi=mid; else lo=mid+1; }
+  const solved=amortizationSchedule({...input,extraMonthly:lo/100});
+  return {targetMonths:target,extraMonthly:lo/100,monthlyPayment:solved.monthlyPayment,scheduledPayment:solved.scheduledPayment,payoffMonths:solved.payoffMonths,monthsSaved:solved.monthsSaved,totalInterest:solved.totalInterest,interestSaved:solved.interestSaved,total:solved.total,schedule:solved.schedule};
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
