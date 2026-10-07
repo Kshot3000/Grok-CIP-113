@@ -923,6 +923,72 @@ export function rateStressTest(input = {}) {
   };
 }
 
+// Debt-service coverage for the same private-credit scenario — the
+// income side the panels above have not modeled. Coverage is the ratio of
+// a reader-supplied monthly income to the scheduled monthly payment read
+// off the SAME amortizationSchedule the lab displays (scheduled payments
+// only — the extra-payment field is not part of this model), so the ratio
+// can never drift from the schedule it divides. The required ratio is
+// also supplied by the reader: this model names no lender's or product's
+// threshold, it only does the arithmetic for the threshold it is given.
+// From those two inputs it derives the income the required ratio needs
+// (required × payment), the cushion or shortfall against the actual
+// income, and the exact percentage the income could fall before coverage
+// reaches the requirement — 0, and reported as already below, when it
+// starts below. It also solves the largest principal the income could
+// carry at the required ratio on the same rate and term: the search runs
+// over whole cents evaluating amortizationSchedule itself, so the
+// returned principal's payment fits the allowable payment
+// (income ÷ required) and one cent more of principal does not — unless
+// the answer is capped at the modeled principal limit, reported as a
+// cap. Income is assumed the same every month and is taken on trust:
+// nothing about income, expenses, taxes, or other debts is verified or
+// read, and real coverage definitions vary (many use annual operating
+// income over annual debt service, after expenses this model ignores).
+// Illustrative math, not RealFi terms, a loan offer, or an underwriting
+// decision.
+export const DSCR_REQUIREMENTS = Object.freeze([1, 1.1, 1.25, 1.5, 2]);
+
+export function debtServiceCoverage(input = {}) {
+  const base = amortizationSchedule(input); // Validates principal / rate / months.
+  const [p, r, n] = [Number(input.principal), Number(input.rate), Number(input.months)];
+  const income = input.monthlyIncome === undefined ? 6000 : Number(input.monthlyIncome);
+  if (!Number.isFinite(income) || income <= 0 || income > 1e12) throw new Error('Use a monthly income above 0, up to 1,000,000,000,000.');
+  const required = input.requiredDscr === undefined ? 1.25 : Number(input.requiredDscr);
+  if (!Number.isFinite(required) || required < 0.01 || required > 10) throw new Error('Use a required coverage ratio between 0.01 and 10.');
+  const payment = base.monthlyPayment;
+  const incomeNeeded = required * payment;
+  const meetsRequirement = income >= incomeNeeded;
+  const cushion = income - incomeNeeded;
+  const maxPayment = income / required;
+  // Binary search whole cents of principal for the largest loan whose
+  // scheduled payment — from the schedule function itself — fits.
+  const fits = cents => amortizationSchedule({ principal: cents / 100, rate: r, months: n }).monthlyPayment <= maxPayment;
+  let maxPrincipal, cappedAtMax = false;
+  if (fits(1e14)) { maxPrincipal = 1e12; cappedAtMax = true; }
+  else { let lo = 0, hi = 1e14; while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (fits(mid)) lo = mid; else hi = mid - 1; } maxPrincipal = lo / 100; }
+  const atRequirement = req => { const needed = req * payment; return { requiredDscr: req, incomeNeeded: needed, cushion: income - needed, meetsRequirement: income >= needed }; };
+  return {
+    principal: p,
+    months: n,
+    rate: r,
+    monthlyPayment: payment,
+    monthlyIncome: income,
+    requiredDscr: required,
+    dscr: income / payment,
+    meetsRequirement,
+    incomeNeeded,
+    incomeCushion: cushion,
+    incomeShortfall: Math.max(0, -cushion),
+    incomeDropTolerancePercent: meetsRequirement ? cushion / income * 100 : 0,
+    maxPaymentForRequirement: maxPayment,
+    maxPrincipalForRequirement: maxPrincipal,
+    principalHeadroom: maxPrincipal - p,
+    cappedAtMax,
+    rows: DSCR_REQUIREMENTS.map(atRequirement),
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
