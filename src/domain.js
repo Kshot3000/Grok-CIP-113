@@ -1045,6 +1045,65 @@ export function balloonLoan(input = {}) {
   };
 }
 
+export const APR_FEE_PERCENTS = Object.freeze([0, 1, 2, 3, 5]);
+
+// Effective rate (APR) for the same private-credit scenario — the number
+// the panels above do not quote. They price the loan at its nominal rate
+// on the full principal, but a borrower who pays fees up front receives
+// less than the principal while every payment is still calculated on all
+// of it, so the loan costs more than the nominal rate says. This model
+// counts `upfrontFees` paid in cash at the start — NOT financed into the
+// loan — and solves for the annual rate at which the net proceeds
+// (principal minus fees) would produce exactly the scheduled payment the
+// lab displays. The search runs over whole hundredths of a point and
+// evaluates the SAME amortizationSchedule function, so the solved rate
+// can never drift from the schedule it reprices: at the reported rate the
+// net proceeds carry a payment of at least the actual one, and one
+// hundredth lower they carry less. With no fees the effective rate is
+// the nominal rate exactly. Fees at or above the principal are rejected
+// — the borrower would receive nothing. Fees so large relative to the
+// loan that even the 100% modeled rate limit on the net proceeds cannot
+// produce the payment return a null rate (exceedsLimit), never a guess.
+// The total finance charge — everything paid back above the proceeds
+// actually received — is exactly the schedule's interest plus the fees.
+// This is an illustrative effective rate on monthly compounding that
+// matches the schedule; statutory APR calculations (for example US
+// Regulation Z) follow their own rules about which fees count and how
+// the rate is rounded, and can differ. Not a loan offer or a disclosure.
+export function effectiveRate(input = {}) {
+  const base = amortizationSchedule(input); // Validates principal / rate / months.
+  const [p, r, n] = [Number(input.principal), Number(input.rate), Number(input.months)];
+  const fees = input.upfrontFees === undefined ? 500 : Number(input.upfrontFees);
+  if (!Number.isFinite(fees) || fees < 0 || fees > 1e12) throw new Error('Use upfront fees of 0 or more, up to 1,000,000,000,000.');
+  if (fees >= p) throw new Error('Upfront fees must be less than the principal — at or above it the borrower would receive nothing.');
+  const payment = base.monthlyPayment;
+  const solve = feeAmount => {
+    if (feeAmount === 0) return r;
+    const net = p - feeAmount;
+    const payAt = hundredths => amortizationSchedule({ principal: net, rate: hundredths / 100, months: n }).monthlyPayment;
+    if (payAt(10000) < payment) return null;
+    let lo = 0, hi = 10000;
+    while (lo < hi) { const mid = Math.floor((lo + hi) / 2); if (payAt(mid) >= payment) hi = mid; else lo = mid + 1; }
+    return lo / 100;
+  };
+  const aprPercent = solve(fees);
+  return {
+    principal: p,
+    rate: r,
+    months: n,
+    upfrontFees: fees,
+    netProceeds: p - fees,
+    monthlyPayment: payment,
+    totalInterest: base.totalInterest,
+    totalPaid: base.total,
+    financeCharge: base.total - (p - fees),
+    aprPercent,
+    premiumPoints: aprPercent === null ? null : aprPercent - r,
+    exceedsLimit: aprPercent === null,
+    rows: APR_FEE_PERCENTS.map(feePercent => { const feeAmount = p * feePercent / 100; return { feePercent, feeAmount, aprPercent: solve(feeAmount) }; }),
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
