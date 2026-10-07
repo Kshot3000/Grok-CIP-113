@@ -858,6 +858,71 @@ export function collateralStressTest(input = {}) {
   };
 }
 
+// Interest-rate stress test for the same private-credit scenario — the
+// payment-side counterpart to the collateral stress test above. The panels
+// above hold the rate fixed; this one raises it. Every figure is read off
+// the SAME amortizationSchedule the lab displays (same principal and term,
+// scheduled payments only — the extra-payment field is not part of this
+// model), so the stress can never drift from the schedule it stresses.
+// The reader supplies a rise in percentage POINTS (8% shocked by 3 points
+// is 11%, not 8.24%) and, optionally, a monthly payment budget. For a
+// budget, the model solves the highest rate — to a hundredth of a point —
+// whose scheduled payment still fits: the search runs over whole
+// hundredths evaluating amortizationSchedule itself, the returned rate's
+// payment fits the budget, and one hundredth higher does not (unless the
+// answer is capped at the 100% modeled limit, which is reported as a
+// cap). A budget below even the 0% payment (principal ÷ months — the
+// floor under any amortizing loan) fits no non-negative rate and returns
+// null, distinct from a budget that fits the current rate with headroom
+// to spare. The principal and term are held fixed and the shocked rate
+// applies from the first payment: this models a loan taken (or repriced)
+// at the higher rate, not a mid-loan reset, a lender's margin call, or
+// any forecast that rates will move. Illustrative math, not RealFi terms,
+// a loan offer, or a rate forecast.
+export const RATE_SHOCKS = Object.freeze([0, 1, 2, 3, 5, 10]);
+
+export function rateStressTest(input = {}) {
+  const base0 = amortizationSchedule(input); // Validates principal / rate / months.
+  const [p, r, n] = [Number(input.principal), Number(input.rate), Number(input.months)];
+  const shock = input.shockPoints === undefined ? 3 : Number(input.shockPoints);
+  if (!Number.isFinite(shock) || shock < 0 || shock > 100) throw new Error('Use a rate rise between 0 and 100 percentage points.');
+  if (r + shock > 100) throw new Error(`A ${shock}-point rise takes this scenario's rate past the 100% modeled limit — lower the rise or the scenario rate.`);
+  const atRate = rate => {
+    const a = amortizationSchedule({ principal: p, rate, months: n });
+    return { rate, monthlyPayment: a.monthlyPayment, totalInterest: a.totalInterest, total: a.total, paymentIncrease: a.monthlyPayment - base0.monthlyPayment, interestIncrease: a.totalInterest - base0.totalInterest };
+  };
+  const base = atRate(r);
+  const rows = RATE_SHOCKS.filter(s => r + s <= 100).map(s => ({ shockPoints: s, ...atRate(r + s) }));
+  let paymentBudget = null, zeroRatePayment = null, maxRateForBudget = null, cappedAtMax = false;
+  if (input.paymentBudget !== undefined && input.paymentBudget !== null && input.paymentBudget !== '') {
+    paymentBudget = Number(input.paymentBudget);
+    if (!Number.isFinite(paymentBudget) || paymentBudget <= 0 || paymentBudget > 1e12) throw new Error('Use a monthly payment budget above 0, up to 1,000,000,000,000.');
+    zeroRatePayment = amortizationSchedule({ principal: p, rate: 0, months: n }).monthlyPayment;
+    if (paymentBudget >= zeroRatePayment) {
+      // Binary search whole hundredths of a point for the largest rate that fits.
+      let lo = 0, hi = 10000;
+      const fits = h => amortizationSchedule({ principal: p, rate: h / 100, months: n }).monthlyPayment <= paymentBudget;
+      if (fits(hi)) { maxRateForBudget = 100; cappedAtMax = true; }
+      else { while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (fits(mid)) lo = mid; else hi = mid - 1; } maxRateForBudget = lo / 100; }
+    }
+  }
+  return {
+    principal: p,
+    months: n,
+    baseRate: r,
+    base,
+    shockPoints: shock,
+    shocked: atRate(r + shock),
+    rows,
+    paymentBudget,
+    zeroRatePayment,
+    maxRateForBudget,
+    cappedAtMax,
+    rateHeadroomPoints: maxRateForBudget === null ? null : maxRateForBudget - r,
+    overBudget: paymentBudget !== null && base.monthlyPayment > paymentBudget,
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
