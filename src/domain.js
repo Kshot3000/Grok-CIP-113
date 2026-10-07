@@ -164,6 +164,40 @@ export function simulateTransferSequence(design, transfers) {
   return finish(steps);
 }
 
+// Supply-change (issuance) model: how the designed supply itself would move
+// if the issuer minted more of the token or burned some of it. The designed
+// supply is an INITIAL supply (that is what the manifest records), so a
+// builder needs to reason about it changing — a mint is bounded only by the
+// signed 64-bit asset ceiling this studio models, and a burn only by what
+// was issued. This is PRISM's generic issuance model, not a Foundation
+// substandard module: a real token's issuance delegate defines its own
+// authority and bounds, and PRISM reads neither. Transfer rules are NOT
+// what gates issuance here — the allowlist, the per-transfer cap, and the
+// issuer pause are transfer checks, modeled in the transfer labs above.
+// Local simulation only: no tokens are minted or burned, no transaction
+// is produced, and no on-chain supply is read.
+export function simulateSupplyChange(design, input={}) {
+  const invalid=validateDesign(design);
+  let amount=0n;
+  if(!input||typeof input!=='object'||Array.isArray(input)) invalid.push('Choose a supply change.');
+  else {
+    if(!['mint','burn'].includes(input.action)) invalid.push('Choose mint or burn.');
+    if(!['issuer','other'].includes(input.actor)) invalid.push('Choose who attempts the change.');
+    try { amount=toUnits(input.amount,design.decimals); if(amount<=0n) throw new Error('Amount must be greater than zero.'); }
+    catch(e) { invalid.push(e.message); }
+  }
+  if(invalid.length) return {allowed:false,invalid:true,checks:[{name:'Valid design and amount',pass:false,detail:invalid.join(' ')}],action:input?.action??null,amountBaseUnits:null,supplyBeforeBaseUnits:null,supplyAfterBaseUnits:null};
+  const supply=toUnits(design.supply,design.decimals);
+  const mint=input.action==='mint';
+  const after=mint?supply+amount:supply-amount;
+  const checks=[
+    {name:'Issuance authority',pass:input.actor==='issuer',detail:input.actor==='issuer'?'The modeled issuer holds this design\u2019s issuance authority.':'A non-issuer has no issuance authority in this generic model \u2014 supply changes are an issuer action here. A real token\u2019s issuance logic defines its own authority; this model does not read it.'},
+  ];
+  if(mint) checks.push({name:'Int64 ceiling headroom',pass:after<=MAX_ASSET,detail:after<=MAX_ASSET?`Minting would raise the modeled supply to ${formatUnits(after,design.decimals)} ${design.ticker} (${after.toString()} base units), within the ${MAX_ASSET.toString()} base-unit ceiling this studio models.`:`Minting ${formatUnits(amount,design.decimals)} ${design.ticker} would raise the modeled supply to ${after.toString()} base units, past the ${MAX_ASSET.toString()} base-unit ceiling this studio models.`});
+  else checks.push({name:'Sufficient current supply',pass:amount<=supply,detail:amount<=supply?`Burning would lower the modeled supply to ${formatUnits(after,design.decimals)} ${design.ticker} (${after.toString()} base units).`:`Only ${formatUnits(supply,design.decimals)} ${design.ticker} exists in the modeled supply \u2014 a burn cannot destroy more than was issued.`});
+  return {allowed:checks.every(c=>c.pass),invalid:false,checks,action:input.action,amountBaseUnits:amount.toString(),supplyBeforeBaseUnits:supply.toString(),supplyAfterBaseUnits:after>=0n?after.toString():null};
+}
+
 // Editing model for the sequence lab's custom builder. The simulator above
 // accepts any well-formed 1–12 step list; these helpers are how the studio
 // edits one. Every helper is pure — it returns a new list of new step
