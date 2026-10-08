@@ -28,21 +28,41 @@ export function hexToBytes(hex) {
 }
 export function decodeAddress(address) {
   if(typeof address!=='string'||address.length>200)throw new Error('Enter a Shelley payment address.');
+  // The hex form — the raw address bytes as hexadecimal, which is how
+  // CIP-30 wallet APIs and Koios return addresses. A Bech32 string can
+  // never be all-hex (its addr / addr_test prefix contains 'r'), so a
+  // purely hexadecimal string is unambiguously the hex form. Hex carries
+  // NO checksum: the byte checks below (header, lengths, strict pointer
+  // parsing) are the only validation it gets, and the decoded result is
+  // labelled with its form so callers can state that difference.
+  if(/^[0-9a-f]+$/i.test(address)){
+    if(address.length%2)throw new Error('Address hex must have an even number of characters — each byte is two hex digits.');
+    return decodeAddressBytes(hexToBytes(address.toLowerCase()),'hex');
+  }
   if(address!==address.toLowerCase()&&address!==address.toUpperCase())throw new Error('Mixed-case Bech32 address.');
   const s=address.toLowerCase(),split=s.lastIndexOf('1'),hrp=s.slice(0,split);
   if(!['addr','addr_test'].includes(hrp)||s.length-split<7)throw new Error('Enter a Cardano addr or addr_test payment address.');
   const data=[...s.slice(split+1)].map(c=>CHARSET.indexOf(c));
   if(data.some(v=>v<0)||polymod([...expand(hrp),...data])!==1)throw new Error('Address checksum is invalid.');
-  const bytes=Uint8Array.from(convert(data.slice(0,-6),5,8,false)),type=bytes[0]>>>4,network=bytes[0]&15;
-  if(![0,1].includes(network)||(network===1)!==(hrp==='addr'))throw new Error('Address network prefix does not match its header.');
+  const bytes=Uint8Array.from(convert(data.slice(0,-6),5,8,false));
+  if((bytes[0]&15)===1!==(hrp==='addr'))throw new Error('Address network prefix does not match its header.');
+  return decodeAddressBytes(bytes,'bech32');
+}
+// Shared structural validation for both encodings of the same bytes: the
+// network nibble, the CIP-19 type, and each type's exact shape. Bech32
+// inputs have already had their checksum and prefix verified by the
+// caller; hex inputs get only these checks, by the encoding's nature.
+function decodeAddressBytes(bytes, form) {
+  const type=bytes[0]>>>4,network=bytes[0]&15;
+  if(![0,1].includes(network))throw new Error('Address network prefix does not match its header.');
   if([4,5].includes(type)){
     // Pointer addresses are variable-length: header + 28-byte payment
     // credential + the pointer's three variable-length coordinates.
     if(bytes.length<32)throw new Error('A pointer address is too short: a header, a 28-byte payment credential, and three pointer coordinates are required.');
-    return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:type===5,pointer:parsePointer(bytes.slice(29))};
+    return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:type===5,pointer:parsePointer(bytes.slice(29)),form};
   }
   if(![0,1,2,3,6,7].includes(type)||bytes.length!==(type<4?57:29))throw new Error('Use a Shelley base, enterprise, or pointer address; Byron and reward addresses are not supported.');
-  return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:[1,3,7].includes(type),pointer:null};
+  return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:[1,3,7].includes(type),pointer:null,form};
 }
 // CIP-19 chain pointer: three coordinates — absolute slot, transaction
 // index within the slot, certificate index within the transaction — each a
@@ -131,6 +151,10 @@ export function inspectAddress(address) {
     // resolving which credential it registered is a chain lookup, so no
     // reward address is derived for a pointer address (reward stays null).
     pointer:decoded.pointer,
+    // Which encoding the address was entered in ('bech32' or 'hex'): the
+    // decoded structure is identical either way, but Bech32's checksum was
+    // verified while hex has none — the UI states which guarantee applies.
+    inputForm:decoded.form,
     rewardAddress:reward?reward.address:null,
     smartWalletShape,
     ownerCredential:smartWalletShape?stake.hash:null,
