@@ -708,6 +708,95 @@ export function inspectByronAddress(raw) {
     byteLength: bytes.length,
   };
 }
+// Base58 encoding — the inverse of decodeBase58 above: leading zero
+// bytes become leading '1' characters, the rest is converted as one
+// big number from base 256 to base 58.
+function encodeBase58(bytes) {
+  let zeros = 0; while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  const digits = [0];
+  for (let i = zeros; i < bytes.length; i++) {
+    let carry = bytes[i];
+    for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+    while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+  }
+  if (bytes.length === zeros) return '1'.repeat(zeros);
+  return '1'.repeat(zeros) + digits.reverse().map((d) => BASE58_ALPHABET[d]).join('');
+}
+// A minimal canonical CBOR writer covering only the types a Byron
+// address can contain (unsigned integers, byte strings, arrays, maps,
+// tag 24). Every argument is written in its shortest form — the exact
+// form the strict reader above accepts — so a built address always
+// decodes, and decodes to exactly the values it was built from.
+function cborHead(major, value) {
+  if (value < 24) return Uint8Array.from([(major << 5) | value]);
+  if (value < 256) return Uint8Array.from([(major << 5) | 24, value]);
+  if (value < 65536) return Uint8Array.from([(major << 5) | 25, (value >>> 8) & 255, value & 255]);
+  if (value < 4294967296) return Uint8Array.from([(major << 5) | 26, (value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255]);
+  const out = new Uint8Array(9); out[0] = (major << 5) | 27;
+  let v = BigInt(value); for (let i = 8; i >= 1; i--) { out[i] = Number(v & 255n); v >>= 8n; }
+  return out;
+}
+const cborUint = (value) => cborHead(0, value);
+const cborBytes = (bytes) => Uint8Array.from([...cborHead(2, bytes.length), ...bytes]);
+const cborConcat = (...parts) => Uint8Array.from(parts.flatMap((p) => [...p]));
+function byronBytes(label, hashHex) {
+  if (typeof hashHex !== 'string' || !/^(?:[a-f0-9]{2})+$/i.test(hashHex)) {
+    const got = typeof hashHex === 'string' && /^(?:[a-f0-9]{2})*$/i.test(hashHex) && hashHex ? `${hashHex.length / 2} bytes` : 'not even-length hexadecimal';
+    throw new Error(`${label} must be exactly 28 bytes (56 hexadecimal characters) — got ${got}.`);
+  }
+  if (hashHex.length !== 56) throw new Error(`${label} must be exactly 28 bytes (56 hexadecimal characters) — got ${hashHex.length / 2} bytes.`);
+  return hexToBytes(hashHex.toLowerCase());
+}
+// Byron (bootstrap) address construction — the inverse of
+// inspectByronAddress: assemble a Byron address entirely locally from
+// its 28-byte root, its type, and its optional attributes (a network
+// discriminant for test networks, and/or the encrypted derivation-path
+// ciphertext a legacy random wallet stored). The payload — CBOR array
+// of root, attributes map, and type — is written in canonical form,
+// its CRC32 is appended exactly as the inspector verifies it, and the
+// outer array (tag-24 payload, CRC32) is Base58-encoded. Attribute
+// values are double-CBOR-encoded byte strings, as the inspector reads
+// them: key 1 wraps the CBOR byte string of the 28-byte ciphertext,
+// key 2 wraps the CBOR uint32 discriminant; keys are written in
+// ascending order, the canonical map order. Construction is strict so
+// every built address inspects back to exactly its inputs: a root or
+// ciphertext that is not exactly 28 bytes is refused with its byte
+// count, and a discriminant outside the CBOR uint32 range is refused
+// rather than truncated. Building assembles the Base58 text from a
+// root the caller supplies — it does NOT derive that root from any
+// key or script (the root is a double hash, SHA3-256 then
+// Blake2b-224, of the spending data), creates no wallet or key,
+// recovers no spending data, and decrypts nothing: a derivation-path
+// value supplied here is carried as the ciphertext it already is.
+export function buildByronAddress(rootHex, type, networkDiscriminant = null, derivationPathHex = null) {
+  const rootBytes = byronBytes('Byron address root', rootHex);
+  if (![0, 1, 2].includes(type)) throw new Error('Byron address type must be 0 (public key), 1 (script), or 2 (redemption key).');
+  if (networkDiscriminant !== null && (!Number.isInteger(networkDiscriminant) || networkDiscriminant < 0 || networkDiscriminant > 4294967295)) throw new Error('Network discriminant must be a CBOR uint32 (an integer from 0 to 4294967295), or no discriminant for mainnet.');
+  const pathBytes = derivationPathHex === null ? null : byronBytes('Encrypted derivation path', derivationPathHex);
+  const entries = [];
+  if (pathBytes) entries.push(cborConcat(cborUint(1), cborBytes(cborBytes(pathBytes))));
+  if (networkDiscriminant !== null) entries.push(cborConcat(cborUint(2), cborBytes(cborUint(networkDiscriminant))));
+  const attributes = entries.length ? cborConcat(cborHead(5, entries.length), ...entries) : cborHead(5, 0);
+  const payload = cborConcat(cborHead(4, 3), cborBytes(rootBytes), attributes, cborUint(type));
+  const checksum = crc32(payload);
+  const outer = cborConcat(cborHead(4, 2), cborHead(6, 24), cborBytes(payload), cborUint(checksum));
+  return {
+    address: encodeBase58(outer),
+    era: 'Byron',
+    root: bytesToHex(rootBytes),
+    type,
+    typeName: BYRON_ADDRESS_TYPES[type],
+    networkDiscriminant,
+    networkName: networkDiscriminant === null ? 'Mainnet' : 'Test network',
+    hasDerivationPath: pathBytes !== null,
+    derivationPathCiphertext: pathBytes ? bytesToHex(pathBytes) : null,
+    unknownAttributes: [],
+    checksum,
+    checksumHex: checksum.toString(16).padStart(8, '0'),
+    payloadByteLength: payload.length,
+    byteLength: outer.length,
+  };
+}
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
   if(![0,1].includes(network))throw new Error('Unsupported network.');
