@@ -1,5 +1,5 @@
 import { CONFIG, NETWORKS, PREVIEW_REFERENCE } from './config.js';
-import { normalizeWalletAddress, decodeAddress } from './cardano.js';
+import { normalizeWalletAddress, decodeAddress, inspectAddress, inspectRewardAddress } from './cardano.js';
 
 export async function fetchJson(url,options={}) {
   const response=await fetch(url,{...options,signal:AbortSignal.timeout(12000),credentials:'omit',referrerPolicy:'no-referrer'});
@@ -80,10 +80,73 @@ async function readCardanoState(api,network) {
   if(decodeAddress(address).network!==id)throw new Error('Wallet address and reported network do not match.');
   return {id,address};
 }
+// Pure summary of the addresses a connected wallet chose to share via the
+// optional CIP-30 list methods. Everything is decoded locally; an entry that
+// cannot be decoded is counted as unreadable and skipped — one malformed
+// entry never fails the summary, and a list the wallet did not provide is
+// reported as unavailable (null counts), never guessed. The CIP-113
+// smart-wallet shape count follows the address inspector's rule: shape is
+// reported as shape only, never as deployment membership.
+export function summarizeWalletAddresses({changeAddress,usedAddresses=null,unusedAddresses=null,rewardAddresses=null}={},networkId) {
+  const change=inspectAddress(normalizeWalletAddress(changeAddress));
+  const scan=(list)=>{
+    if(!Array.isArray(list))return null;
+    const seen=new Map();let unreadable=0;
+    for(const raw of list){
+      try{const info=inspectAddress(normalizeWalletAddress(raw));if(!seen.has(info.address))seen.set(info.address,info);}
+      catch{unreadable++;}
+    }
+    return {total:list.length,infos:[...seen.values()],unreadable};
+  };
+  const used=scan(usedAddresses),unused=scan(unusedAddresses);
+  const paymentInfos=[change,...(used?.infos??[]),...(unused?.infos??[])];
+  const wrongNetwork=paymentInfos.filter((info,i)=>i>0&&info.network!==networkId).length;
+  let rewards=null;
+  if(Array.isArray(rewardAddresses)){
+    const parsed=[];let unreadable=0,wrongNet=0;
+    for(const raw of rewardAddresses){
+      try{const info=inspectRewardAddress(raw);parsed.push(info);if(info.network!==networkId)wrongNet++;}
+      catch{unreadable++;}
+    }
+    rewards={total:rewardAddresses.length,parsed:parsed.length,unreadable,wrongNetwork:wrongNet,
+      stakeMatchesChange:change.stake&&parsed.length?parsed.every(info=>info.hash===change.stake.hash):null};
+  }
+  return {
+    networkId,
+    lists:{used:used!==null,unused:unused!==null,rewards:rewards!==null},
+    change:{address:change.address,kind:change.kind,stakeHash:change.stake?.hash??null},
+    usedCount:used?used.infos.length:null,
+    unusedCount:unused?unused.infos.length:null,
+    baseCount:used?used.infos.filter(info=>info.kind==='Base').length:null,
+    enterpriseCount:used?used.infos.filter(info=>info.kind==='Enterprise').length:null,
+    smartWalletShapeCount:used?used.infos.filter(info=>info.smartWalletShape).length:null,
+    changeListedAsUsed:used?used.infos.some(info=>info.address===change.address):null,
+    distinctStakeCredentials:new Set(paymentInfos.filter(info=>info.stake).map(info=>info.stake.hash)).size,
+    wrongNetwork,
+    unreadable:(used?.unreadable??0)+(unused?.unreadable??0),
+    rewards,
+  };
+}
+// Reads the optional CIP-30 address lists after a connection. Each list is
+// feature-detected and read independently: a wallet that lacks a method —
+// or errors on it — leaves that list unavailable instead of failing the
+// connection. Returns null when the wallet offers none of the list methods.
+async function readAddressBook(api,changeAddress,networkId) {
+  const lists={changeAddress,usedAddresses:null,unusedAddresses:null,rewardAddresses:null};
+  let offered=false;
+  for(const [key,method] of [['usedAddresses','getUsedAddresses'],['unusedAddresses','getUnusedAddresses'],['rewardAddresses','getRewardAddresses']]){
+    if(typeof api[method]!=='function')continue;
+    offered=true;
+    try{const value=await api[method]();if(Array.isArray(value))lists[key]=value;}catch{/* unavailable list, not a failed connection */}
+  }
+  if(!offered)return null;
+  try{return summarizeWalletAddresses(lists,networkId);}catch{return null;}
+}
 export async function connectCardano(provider,network) {
   const api=assertCardanoApi(await provider.enable());
   const {id,address}=await readCardanoState(api,network);
-  return {name:provider.name,api,networkId:id,address,connectedAt:Date.now()};
+  const addressBook=await readAddressBook(api,address,id);
+  return {name:provider.name,api,networkId:id,address,addressBook,connectedAt:Date.now()};
 }
 export async function refreshCardano(wallet,network) {
   const {id,address}=await readCardanoState(assertCardanoApi(wallet.api),network);

@@ -83,6 +83,37 @@ export function inspectAddress(address) {
     ownerCredential:smartWalletShape?stake.hash:null,
   };
 }
+// CIP-19 reward (stake) addresses: 29 bytes — a header byte (type 14 = key
+// credential, 15 = script credential; low nibble = network) followed by the
+// 28-byte stake credential. CIP-30 returns them as hex; the bech32 stake /
+// stake_test form is accepted too. Decoded locally like payment addresses —
+// this says what the credential IS, never what it controls or holds.
+export function inspectRewardAddress(raw) {
+  if(typeof raw!=='string'||raw.length>200) throw new Error('Enter a Shelley reward address.');
+  let bytes;
+  if(/^(?:[a-f0-9]{2})+$/i.test(raw)) {
+    bytes=hexToBytes(raw.toLowerCase());
+  } else {
+    if(raw!==raw.toLowerCase()&&raw!==raw.toUpperCase()) throw new Error('Mixed-case Bech32 address.');
+    const s=raw.toLowerCase(),split=s.lastIndexOf('1'),hrp=s.slice(0,split);
+    if(!['stake','stake_test'].includes(hrp)||s.length-split<7) throw new Error('Enter a Cardano stake or stake_test reward address.');
+    const data=[...s.slice(split+1)].map(c=>CHARSET.indexOf(c));
+    if(data.some(v=>v<0)||polymod([...expand(hrp),...data])!==1) throw new Error('Address checksum is invalid.');
+    bytes=Uint8Array.from(convert(data.slice(0,-6),5,8,false));
+    if((bytes[0]&15)===1!==(hrp==='stake')) throw new Error('Address network prefix does not match its header.');
+  }
+  const type=bytes[0]>>>4,network=bytes[0]&15;
+  if(bytes.length!==29||![14,15].includes(type)||![0,1].includes(network)) throw new Error('Use a Shelley reward address (header type 14 or 15, 29 bytes).');
+  return {
+    address:encodeBech32(network===1?'stake':'stake_test',bytes),
+    network,
+    networkName:network===1?'Mainnet':'Testnet',
+    type,
+    credential:type===14?'key':'script',
+    hash:bytesToHex(bytes.slice(1,29)),
+    byteLength:bytes.length,
+  };
+}
 export function normalizeWalletAddress(raw) {
   const address=raw?.startsWith('addr')?raw:encodeAddress(hexToBytes(raw));
   decodeAddress(address); return address;
