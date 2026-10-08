@@ -197,6 +197,41 @@ export function decodeAssetName(nameHex) {
   }catch{/* Not valid UTF-8: text stays null and the name is shown as hex only. */}
   return {empty:false,byteLength:hex.length/2,label: label?{...label,prefixHex:prefix}:null,contentHex,text,textDecodable:text!==null};
 }
+// CIP-68 pairing: a user token (label 222 / 333 / 444) and its reference
+// token (label 100) are minted under the SAME policy and share the SAME
+// name bytes after the label prefix — the reference token is the one locked
+// at a script address holding the metadata datum. Pairing is therefore a
+// pure name computation: swap the prefix, keep the content bytes exactly.
+// From a reference token's name alone the user token's label cannot be
+// known (any of 222 / 333 / 444 could have been minted), so all three
+// candidates are returned rather than one guessed. Pairing says what the
+// paired asset WOULD be named — it does not prove that token was minted,
+// exists on chain, or holds any datum; existence is a lookup question.
+const CIP68_PREFIX_BY_LABEL = Object.freeze(Object.fromEntries(
+  Object.entries(CIP68_LABELS).map(([prefix, meta]) => [meta.label, prefix]),
+));
+export function cip68Pair(nameHex) {
+  const decoded = decodeAssetName(nameHex);
+  const hex = nameHex.toLowerCase();
+  if (decoded.empty || !decoded.label) {
+    return { nameHex: hex, kind: 'unlabeled', decoded, pairs: [] };
+  }
+  const isReference = decoded.label.label === 100;
+  const pairLabels = isReference ? [222, 333, 444] : [100];
+  const pairs = pairLabels.map(label => {
+    const pairedHex = CIP68_PREFIX_BY_LABEL[label] + decoded.contentHex;
+    const paired = decodeAssetName(pairedHex);
+    return {
+      label,
+      role: paired.label.role,
+      prefixHex: CIP68_PREFIX_BY_LABEL[label],
+      nameHex: pairedHex,
+      text: paired.text,
+      textDecodable: paired.textDecodable,
+    };
+  });
+  return { nameHex: hex, kind: isReference ? 'reference' : 'user', decoded, pairs };
+}
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
   if(![0,1].includes(network))throw new Error('Unsupported network.');
