@@ -35,8 +35,41 @@ export function decodeAddress(address) {
   if(data.some(v=>v<0)||polymod([...expand(hrp),...data])!==1)throw new Error('Address checksum is invalid.');
   const bytes=Uint8Array.from(convert(data.slice(0,-6),5,8,false)),type=bytes[0]>>>4,network=bytes[0]&15;
   if(![0,1].includes(network)||(network===1)!==(hrp==='addr'))throw new Error('Address network prefix does not match its header.');
-  if(![0,1,2,3,6,7].includes(type)||bytes.length!==(type<4?57:29))throw new Error('Use a Shelley base or enterprise address; Byron, pointer, and reward addresses are not supported.');
-  return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:[1,3,7].includes(type)};
+  if([4,5].includes(type)){
+    // Pointer addresses are variable-length: header + 28-byte payment
+    // credential + the pointer's three variable-length coordinates.
+    if(bytes.length<32)throw new Error('A pointer address is too short: a header, a 28-byte payment credential, and three pointer coordinates are required.');
+    return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:type===5,pointer:parsePointer(bytes.slice(29))};
+  }
+  if(![0,1,2,3,6,7].includes(type)||bytes.length!==(type<4?57:29))throw new Error('Use a Shelley base, enterprise, or pointer address; Byron and reward addresses are not supported.');
+  return {bytes,type,network,payment:bytes.slice(1,29),paymentIsScript:[1,3,7].includes(type),pointer:null};
+}
+// CIP-19 chain pointer: three coordinates — absolute slot, transaction
+// index within the slot, certificate index within the transaction — each a
+// variable-length natural: 7-bit groups, most significant first, with the
+// high bit set on every byte except a number's last. Parsing is strict so
+// an address decodes to exactly one pointer or none: a truncated number
+// (continuation bit still set at the end), trailing bytes after the third
+// coordinate, a non-canonical leading zero group, and a coordinate beyond
+// the safe-integer range are all refused rather than guessed at.
+function readVariableLengthUint(bytes, offset) {
+  let value=0n,groups=0,start=offset;
+  while(true){
+    if(offset>=bytes.length)throw new Error('Pointer is truncated: a coordinate runs past the end of the address.');
+    const byte=bytes[offset++];
+    if(groups===0&&byte===0x80)throw new Error('Pointer coordinate is not in canonical form: a leading zero group would give the same pointer a second byte form.');
+    value=(value<<7n)|BigInt(byte&0x7f);groups++;
+    if(groups>9)throw new Error('Pointer coordinate is too large to read exactly.');
+    if(!(byte&0x80))break;
+  }
+  if(value>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('Pointer coordinate is too large to read exactly.');
+  return {value:Number(value),next:offset,bytes:offset-start};
+}
+function parsePointer(bytes) {
+  const names=['slot','txIndex','certIndex'],pointer={};let offset=0;
+  for(const name of names){const r=readVariableLengthUint(bytes,offset);pointer[name]=r.value;offset=r.next;}
+  if(offset!==bytes.length)throw new Error('Pointer has trailing bytes after its three coordinates, so the address does not decode to exactly one pointer.');
+  return pointer;
 }
 export function bytesToHex(bytes) {
   if(!(bytes instanceof Uint8Array)) throw new Error('Expected bytes to render as hex.');
@@ -51,6 +84,8 @@ const ADDRESS_TYPES = Object.freeze({
   1:{kind:'Base',payment:'script',stake:'key'},
   2:{kind:'Base',payment:'key',stake:'script'},
   3:{kind:'Base',payment:'script',stake:'script'},
+  4:{kind:'Pointer',payment:'key',stake:null},
+  5:{kind:'Pointer',payment:'script',stake:null},
   6:{kind:'Enterprise',payment:'key',stake:null},
   7:{kind:'Enterprise',payment:'script',stake:null},
 });
@@ -90,6 +125,12 @@ export function inspectAddress(address) {
     byteLength:decoded.bytes.length,
     payment,
     stake,
+    // Pointer addresses carry no stake credential: their delegation part
+    // is the decoded chain pointer (or null for every other kind). The
+    // pointer names where a stake registration certificate sits on chain;
+    // resolving which credential it registered is a chain lookup, so no
+    // reward address is derived for a pointer address (reward stays null).
+    pointer:decoded.pointer,
     rewardAddress:reward?reward.address:null,
     smartWalletShape,
     ownerCredential:smartWalletShape?stake.hash:null,
@@ -139,6 +180,7 @@ export function deriveRewardAddress(address) {
   const decoded=decodeAddress(address);
   const meta=ADDRESS_TYPES[decoded.type];
   if(!meta) throw new Error('Unsupported Shelley address type.');
+  if(meta.kind==='Pointer') throw new Error(`Pointer addresses carry no stake credential in the address itself — their stake rights follow the stake registration certificate at slot ${decoded.pointer.slot}, transaction ${decoded.pointer.txIndex}, certificate ${decoded.pointer.certIndex}, which only a chain lookup can resolve, so no reward address can be derived locally.`);
   if(!meta.stake) throw new Error('Enterprise addresses carry no stake credential, so no reward address can be derived from one — staking rewards accrue to the stake credential a base address carries.');
   const stakeBytes=decoded.bytes.slice(29,57);
   const reward=rewardAddressFor(decoded.network,meta.stake,stakeBytes);

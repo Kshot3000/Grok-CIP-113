@@ -96,9 +96,11 @@ test('inspector canonicalises uppercase Bech32 and rejects tampered or unsupport
   assert.throws(() => inspectAddress(''), /payment address/);
   assert.throws(() => inspectAddress('not-an-address'), /payment address|checksum/);
   assert.throws(() => inspectAddress(a.slice(0, 20) + 'Q' + a.slice(21)), /Mixed-case/);
-  // Reward (type 14) and pointer (type 4) addresses stay unsupported, as in decodeAddress.
+  // Reward (type 14) addresses stay unsupported as payment addresses, as in
+  // decodeAddress. (Pointer types 4/5 are supported since v1.43 — see
+  // tests/pointer-address.test.mjs.)
   const reward = encodeAddress(Uint8Array.from([(14 << 4) | 0, ...PAY]));
-  assert.throws(() => inspectAddress(reward), /base or enterprise/);
+  assert.throws(() => inspectAddress(reward), /base, enterprise, or pointer/);
 });
 
 test('the network page wires the inspector form and reuses it for derived addresses', async () => {
