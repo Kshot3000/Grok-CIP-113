@@ -666,6 +666,92 @@ export function simulateDenylistSequence(design, steps) {
   return finish(evaluated);
 }
 
+// Editing model for the denylist lifecycle lab's custom builder — the same
+// pure-helper discipline as the timeline builder above, for a list that
+// mixes THREE step kinds. Every helper returns a new list of new step
+// objects and never mutates its input, and validates each step against the
+// kind it carries, so a step the lifecycle simulator would report as a
+// blocked unknown can never be constructed here. The one thing a mixed
+// list adds is a kind switch: changing a step's kind converts it, keeping
+// its amount where both kinds carry one (transfer ↔ seizure) and filling
+// the new kind's other fields with that kind's defaults (or with fields
+// supplied in the same patch) — a denylist step carries no amount, so
+// converting TO one drops the amount, and converting FROM one starts the
+// new kind at the default amount unless the patch supplies one; stale
+// fields from the old kind never survive a switch. A denylist step's
+// listed flag is a boolean, not a string: the editor's two choices map to
+// true/false before they reach this helper. Amounts stay decimal strings:
+// the simulator reports an unrepresentable amount as a blocked step, which
+// is the builder's feedback, not an editing error.
+function checkedDenylistStep(step) {
+  if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error('A lifecycle step must describe a transfer, a denylist update, or a seizure.');
+  if(step.kind==='transfer') {
+    if(!LEDGER_ACCOUNTS[step.from]||!LEDGER_ACCOUNTS[step.to]) throw new Error('Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.');
+    if(typeof step.amount!=='string') throw new Error('A lifecycle step amount must be a decimal string.');
+    return {kind:'transfer',from:step.from,to:step.to,amount:step.amount};
+  }
+  if(step.kind==='denylist') {
+    if(!LEDGER_ACCOUNTS[step.account]) throw new Error('A denylist update must name a modeled ledger account: the issuer, an approved member, a pending member, or a frozen member.');
+    if(typeof step.listed!=='boolean') throw new Error('A denylist update must say whether the account is listed or removed.');
+    return {kind:'denylist',account:step.account,listed:step.listed};
+  }
+  if(step.kind==='seize') {
+    if(!['authorised','other'].includes(step.actor)) throw new Error('A seizure must be attempted by an authorised party or by someone else.');
+    if(!LEDGER_ACCOUNTS[step.holder]) throw new Error('A seizure must name a modeled ledger account as its holder.');
+    if(typeof step.amount!=='string') throw new Error('A lifecycle step amount must be a decimal string.');
+    return {kind:'seize',actor:step.actor,holder:step.holder,amount:step.amount};
+  }
+  throw new Error('A lifecycle step must be a transfer, a denylist update, or a seizure.');
+}
+function checkedDenylistSteps(steps) {
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_DENYLIST_STEPS) throw new Error(`A denylist lifecycle needs between 1 and ${MAX_DENYLIST_STEPS} modeled steps.`);
+  return steps.map(checkedDenylistStep);
+}
+export function copyDenylistSteps(steps) { return checkedDenylistSteps(steps); }
+export function blankDenylistStep(kind = 'transfer') {
+  if(kind==='transfer') return {kind:'transfer',from:'issuer',to:'approved',amount:'100'};
+  if(kind==='denylist') return {kind:'denylist',account:'approved',listed:true};
+  if(kind==='seize') return {kind:'seize',actor:'authorised',holder:'approved',amount:'100'};
+  throw new Error('A lifecycle step must be a transfer, a denylist update, or a seizure.');
+}
+export function addDenylistStep(steps, step = blankDenylistStep()) {
+  const list = checkedDenylistSteps(steps);
+  if(list.length>=MAX_DENYLIST_STEPS) throw new Error(`A denylist lifecycle holds at most ${MAX_DENYLIST_STEPS} modeled steps.`);
+  return [...list, checkedDenylistStep(step)];
+}
+export function removeDenylistStep(steps, index) {
+  const list = checkedDenylistSteps(steps);
+  checkedIndex(list, index);
+  if(list.length<=1) throw new Error('A denylist lifecycle needs at least one modeled step.');
+  return list.filter((_,i)=>i!==index);
+}
+export function moveDenylistStep(steps, index, direction) {
+  const list = checkedDenylistSteps(steps);
+  checkedIndex(list, index);
+  if(direction!==-1&&direction!==1) throw new Error('Move a step one place up or down.');
+  const target = index+direction;
+  if(target<0||target>=list.length) return list; // Already at the edge: an unchanged copy.
+  [list[index],list[target]] = [list[target],list[index]];
+  return list;
+}
+export function updateDenylistStep(steps, index, patch) {
+  const list = checkedDenylistSteps(steps);
+  checkedIndex(list, index);
+  if(!patch||typeof patch!=='object'||Array.isArray(patch)) throw new Error('Describe the change to the step.');
+  for(const k of Object.keys(patch)) if(!['kind','from','to','account','listed','actor','holder','amount'].includes(k)) throw new Error(`A lifecycle step has no ${k} field.`);
+  const kind = patch.kind ?? list[index].kind;
+  if(kind!=='transfer'&&kind!=='denylist'&&kind!=='seize') throw new Error('A lifecycle step must be a transfer, a denylist update, or a seizure.');
+  const kindFields = kind==='transfer' ? ['from','to','amount'] : kind==='denylist' ? ['account','listed'] : ['actor','holder','amount'];
+  for(const k of Object.keys(patch)) if(k!=='kind'&&!kindFields.includes(k)) throw new Error(`A lifecycle step has no ${k} field.`);
+  // Converting kinds: start from the new kind's blank step (which supplies
+  // its defaults), keep the amount the step already had when both kinds
+  // carry one, then apply the patch — fields the old kind carried never
+  // leak into the new shape.
+  const base = kind===list[index].kind ? list[index] : {...blankDenylistStep(kind), ...(typeof list[index].amount==='string'&&kind!=='denylist' ? {amount:list[index].amount} : {})};
+  list[index] = checkedDenylistStep({...base, ...patch});
+  return list;
+}
+
 // A KYC-extended LIFECYCLE: transfers in one order against one running
 // modeled state — a ledger of balances, the issuer's recipient allowlist
 // (each entry current or expired), and the module's global pause flag.

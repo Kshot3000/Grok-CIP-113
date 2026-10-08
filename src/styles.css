@@ -145,6 +145,10 @@
 .seq-edit-row select.timeline-kind{flex:0 1 140px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 .seq-edit-row select.timeline-from,.seq-edit-row select.timeline-to{flex:1 1 140px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 .seq-edit-row select.timeline-action,.seq-edit-row select.timeline-actor{flex:1 1 150px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+/* Denylist lifecycle builder (v1.52): same editor rows, kind-dependent selects. */
+.seq-edit-row select.denylist-kind{flex:0 1 150px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+.seq-edit-row select.denylist-from,.seq-edit-row select.denylist-to,.seq-edit-row select.denylist-account,.seq-edit-row select.denylist-holder{flex:1 1 140px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+.seq-edit-row select.denylist-listed,.seq-edit-row select.denylist-actor{flex:1 1 170px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 .seq-arrow{color:var(--muted)}
 .seq-amount{position:relative;flex:0 1 140px}
 .seq-amount input{width:100%;min-height:38px;padding:8px 46px 8px 10px}
