@@ -154,6 +154,61 @@ export function deriveRewardAddress(address) {
     byteLength:29,
   };
 }
+// Shelley address construction — the inverse of inspectAddress: assemble a
+// CIP-19 payment address from its credentials, entirely locally. The header
+// byte is fully determined by the credential kinds: base types 0–3 pair a
+// payment credential (key / script) with a stake credential (key / script),
+// enterprise types 6–7 carry a payment credential alone. Construction is
+// strict so every built address inspects back to exactly its inputs
+// (round-trip): a credential hash that is not exactly 28 bytes cannot be a
+// Cardano credential under any reading, and a stake hash supplied alongside
+// "no stake credential" is refused rather than silently dropped — dropping
+// it would build a different address (an enterprise one, with no staking
+// rights) from the one the builder described. Building an address creates
+// no wallet, key, or account, registers nothing, and proves nothing about
+// the credentials: a script hash names no script until a deployed script
+// hashes to it, and a key hash controls nothing until its key exists.
+const ADDRESS_TYPE_BY_CREDENTIALS = Object.freeze({
+  'key/key': 0, 'script/key': 1, 'key/script': 2, 'script/script': 3,
+  'key/none': 6, 'script/none': 7,
+});
+function credentialBytes(label, hashHex) {
+  if (typeof hashHex !== 'string' || !/^(?:[a-f0-9]{2})+$/i.test(hashHex)) {
+    const got = typeof hashHex === 'string' && /^(?:[a-f0-9]{2})*$/i.test(hashHex) && hashHex ? `${hashHex.length / 2} bytes` : 'not even-length hexadecimal';
+    throw new Error(`${label} hash must be exactly 28 bytes (56 hexadecimal characters) — got ${got}.`);
+  }
+  if (hashHex.length !== 56) throw new Error(`${label} hash must be exactly 28 bytes (56 hexadecimal characters) — got ${hashHex.length / 2} bytes.`);
+  return hexToBytes(hashHex.toLowerCase());
+}
+export function buildAddress(paymentCredential, paymentHashHex, stakeCredential, stakeHashHex, network) {
+  if (!['key', 'script'].includes(paymentCredential)) throw new Error('Payment credential must be a key hash or a script hash.');
+  if (stakeCredential !== null && !['key', 'script'].includes(stakeCredential)) throw new Error('Stake credential must be a key hash, a script hash, or none (enterprise).');
+  if (![0, 1].includes(network)) throw new Error('Network must be 0 (testnet) or 1 (mainnet).');
+  const paymentBytes = credentialBytes('Payment credential', paymentHashHex);
+  let stakeBytes = null;
+  if (stakeCredential === null) {
+    if (stakeHashHex) throw new Error('No stake credential was chosen (enterprise), but a stake hash was supplied — an enterprise address carries no stake credential, so that hash would be silently dropped. Clear the stake hash, or choose a stake credential kind to build a base address.');
+  } else {
+    if (!stakeHashHex) throw new Error('A stake credential kind was chosen, but no stake hash was supplied — a base address carries both credentials. Supply the stake hash, or choose no stake credential to build an enterprise address.');
+    stakeBytes = credentialBytes('Stake credential', stakeHashHex);
+  }
+  const type = ADDRESS_TYPE_BY_CREDENTIALS[`${paymentCredential}/${stakeCredential === null ? 'none' : stakeCredential}`];
+  const bytes = Uint8Array.from([(type << 4) | network, ...paymentBytes, ...(stakeBytes ?? [])]);
+  const reward = stakeBytes ? rewardAddressFor(network, stakeCredential, stakeBytes) : null;
+  return {
+    address: encodeAddress(bytes),
+    hex: bytesToHex(bytes),
+    network,
+    networkName: network === 1 ? 'Mainnet' : 'Testnet',
+    type,
+    kind: stakeBytes ? 'Base' : 'Enterprise',
+    byteLength: bytes.length,
+    payment: { credential: paymentCredential, hash: bytesToHex(paymentBytes) },
+    stake: stakeBytes ? { credential: stakeCredential, hash: bytesToHex(stakeBytes) } : null,
+    rewardAddress: reward ? reward.address : null,
+    smartWalletShape: !!stakeBytes && paymentCredential === 'script',
+  };
+}
 export function normalizeWalletAddress(raw) {
   const address=raw?.startsWith('addr')?raw:encodeAddress(hexToBytes(raw));
   decodeAddress(address); return address;
