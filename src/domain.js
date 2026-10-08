@@ -1074,6 +1074,101 @@ export function simulateBasicKycSequence(design, steps) {
   return finish(evaluated);
 }
 
+// Editing model for the basic-KYC lifecycle lab's custom builder — the
+// same pure-helper discipline as the KYC-extended builder above, for a
+// list that mixes THREE step kinds (transfer, trust update, pause
+// update). Every helper returns a new list of new step objects and
+// never mutates its input, and validates each step against the kind it
+// carries, so a step the lifecycle simulator would report as a blocked
+// unknown can never be constructed here — including a transfer whose
+// certificate state is 'untrusted': this lab deliberately carries no
+// such state (whether the signer is trusted is read from the evolving
+// list), and the helper refuses it with that reason. A kind switch
+// converts the step, defined per field: the modeled entity is the ONE
+// field two kinds carry — a transfer names it as its certificate's
+// signer and a trust update names it as its subject — so the entity is
+// KEPT across a transfer ↔ trust switch (the same modeled entity in
+// both roles), while everything else is dropped or defaulted: only a
+// transfer carries an amount and a certificate state, only a trust
+// update carries the trusted flag, and only a pause update carries the
+// paused flag, so converting to or from a pause starts from that kind's
+// defaults throughout, and stale fields never survive a switch. The
+// trusted and paused flags are booleans, not strings: the editor's
+// choices map to true/false before they reach this helper. Amounts stay
+// decimal strings: the simulator reports an unrepresentable amount as a
+// blocked step, which is the builder's feedback, not an editing error.
+function checkedBasicKycStep(step) {
+  if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error('A basic-KYC lifecycle step must describe a transfer, a trust update, or a pause update.');
+  if(step.kind==='transfer') {
+    if(!LEDGER_ACCOUNTS[step.from]||!LEDGER_ACCOUNTS[step.to]) throw new Error('Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.');
+    if(typeof step.amount!=='string') throw new Error('A lifecycle step amount must be a decimal string.');
+    if(!BASIC_KYC_CERT_STATES[step.cert]) throw new Error('A transfer step must name the modeled certificate it carries: valid, missing, bad-signature, wrong-sender, or expired. There is no untrusted state here — whether the signer is trusted is read from the modeled trusted-entity list as it stands at that step.');
+    if(!KYC_ENTITIES[step.entity]) throw new Error('A transfer step must name the modeled KYC entity that signed its certificate: KYC entity A or KYC entity B.');
+    return {kind:'transfer',from:step.from,to:step.to,amount:step.amount,cert:step.cert,entity:step.entity};
+  }
+  if(step.kind==='trust') {
+    if(!KYC_ENTITIES[step.entity]) throw new Error('A trust update must name a modeled KYC entity: KYC entity A or KYC entity B.');
+    if(typeof step.trusted!=='boolean') throw new Error('A trust update must say whether the entity is being trusted or removed from the trusted list.');
+    return {kind:'trust',entity:step.entity,trusted:step.trusted};
+  }
+  if(step.kind==='pause') {
+    if(typeof step.paused!=='boolean') throw new Error('A pause update must say whether the module global state is being paused or unpaused.');
+    return {kind:'pause',paused:step.paused};
+  }
+  throw new Error('A basic-KYC lifecycle step must describe a transfer, a trust update, or a pause update.');
+}
+function checkedBasicKycSteps(steps) {
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_BASIC_KYC_STEPS) throw new Error(`A basic-KYC lifecycle needs between 1 and ${MAX_BASIC_KYC_STEPS} modeled steps.`);
+  return steps.map(checkedBasicKycStep);
+}
+export function copyBasicKycSteps(steps) { return checkedBasicKycSteps(steps); }
+export function blankBasicKycStep(kind = 'transfer') {
+  if(kind==='transfer') return {kind:'transfer',from:'issuer',to:'approved',amount:'100',cert:'valid',entity:'entity-a'};
+  if(kind==='trust') return {kind:'trust',entity:'entity-a',trusted:true};
+  if(kind==='pause') return {kind:'pause',paused:true};
+  throw new Error('A basic-KYC lifecycle step must describe a transfer, a trust update, or a pause update.');
+}
+export function addBasicKycStep(steps, step = blankBasicKycStep()) {
+  const list = checkedBasicKycSteps(steps);
+  if(list.length>=MAX_BASIC_KYC_STEPS) throw new Error(`A basic-KYC lifecycle holds at most ${MAX_BASIC_KYC_STEPS} modeled steps.`);
+  return [...list, checkedBasicKycStep(step)];
+}
+export function removeBasicKycStep(steps, index) {
+  const list = checkedBasicKycSteps(steps);
+  checkedIndex(list, index);
+  if(list.length<=1) throw new Error('A basic-KYC lifecycle needs at least one modeled step.');
+  return list.filter((_,i)=>i!==index);
+}
+export function moveBasicKycStep(steps, index, direction) {
+  const list = checkedBasicKycSteps(steps);
+  checkedIndex(list, index);
+  if(direction!==-1&&direction!==1) throw new Error('Move a step one place up or down.');
+  const target = index+direction;
+  if(target<0||target>=list.length) return list; // Already at the edge: an unchanged copy.
+  [list[index],list[target]] = [list[target],list[index]];
+  return list;
+}
+export function updateBasicKycStep(steps, index, patch) {
+  const list = checkedBasicKycSteps(steps);
+  checkedIndex(list, index);
+  if(!patch||typeof patch!=='object'||Array.isArray(patch)) throw new Error('Describe the change to the step.');
+  for(const k of Object.keys(patch)) if(!['kind','from','to','amount','cert','entity','trusted','paused'].includes(k)) throw new Error(`A lifecycle step has no ${k} field.`);
+  const kind = patch.kind ?? list[index].kind;
+  if(kind!=='transfer'&&kind!=='trust'&&kind!=='pause') throw new Error('A basic-KYC lifecycle step must describe a transfer, a trust update, or a pause update.');
+  const kindFields = kind==='transfer' ? ['from','to','amount','cert','entity'] : kind==='trust' ? ['entity','trusted'] : ['paused'];
+  for(const k of Object.keys(patch)) if(k!=='kind'&&!kindFields.includes(k)) throw new Error(`A lifecycle step has no ${k} field.`);
+  // Converting kinds: start from the new kind's blank step (which
+  // supplies its defaults), keep the modeled entity when both kinds
+  // carry one (transfer ↔ trust — the signer becomes the subject and
+  // back), then apply the patch — a patch naming an entity overrides
+  // the kept one, and fields the old kind carried never leak into the
+  // new shape.
+  const bothCarryEntity = kind!==list[index].kind && kind!=='pause' && list[index].kind!=='pause';
+  const base = kind===list[index].kind ? list[index] : {...blankBasicKycStep(kind), ...(bothCarryEntity ? {entity:list[index].entity} : {})};
+  list[index] = checkedBasicKycStep({...base, ...patch});
+  return list;
+}
+
 export function makeManifest(design, network) {
   const errors=validateDesign(design);
   if(errors.length) throw new Error(errors.join(' '));

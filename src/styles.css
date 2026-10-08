@@ -153,6 +153,10 @@
 .seq-edit-row select.kyc-kind{flex:0 1 150px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 .seq-edit-row select.kyc-from,.seq-edit-row select.kyc-to,.seq-edit-row select.kyc-account{flex:1 1 140px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 .seq-edit-row select.kyc-cert,.seq-edit-row select.kyc-listed,.seq-edit-row select.kyc-expired,.seq-edit-row select.kyc-paused{flex:1 1 170px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+/* Basic-KYC lifecycle builder (v1.54): same editor rows, kind-dependent selects. */
+.seq-edit-row select.basic-kind{flex:0 1 150px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+.seq-edit-row select.basic-from,.seq-edit-row select.basic-to,.seq-edit-row select.basic-entity{flex:1 1 140px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
+.seq-edit-row select.basic-cert,.seq-edit-row select.basic-trusted,.seq-edit-row select.basic-paused{flex:1 1 170px;width:auto;min-height:38px;padding:8px 10px;border:1px solid #2c3b46;background:#0e151c;border-radius:6px;color:#e0e8ed;font-size:.875rem}
 .seq-arrow{color:var(--muted)}
 .seq-amount{position:relative;flex:0 1 140px}
 .seq-amount input{width:100%;min-height:38px;padding:8px 46px 8px 10px}
