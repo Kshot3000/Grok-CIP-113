@@ -1334,6 +1334,85 @@ export function adjustableRateLoan(input = {}) {
   };
 }
 
+export const PAYMENT_FREQUENCIES = Object.freeze([
+  { id: 'monthly', label: 'Monthly', periodsPerYear: 12 },
+  { id: 'biweekly', label: 'Biweekly', periodsPerYear: 26 },
+  { id: 'weekly', label: 'Weekly', periodsPerYear: 52 },
+]);
+
+// Payment frequency for the same private-credit scenario — the
+// accelerated biweekly/weekly plans lenders market, modeled honestly.
+// An accelerated biweekly payment is HALF the monthly payment made
+// every two weeks: 26 of them a year add up to thirteen monthly
+// payments, one more than a monthly borrower pays in a year (the
+// weekly plan is a quarter of the monthly payment, 52 times a year —
+// the same thirteen). That extra payment a year, applied to principal
+// as the balance falls, is where nearly all of the saving comes from
+// — not the frequency itself. Merely splitting the same annual amount
+// into smaller pieces (twelve monthly payments' worth spread over 26
+// or 52 dates) would save only a little interest from paying earlier,
+// and this panel does not present that smaller effect as the plan's
+// benefit: each row reports what it actually pays per year, so the
+// extra outlay is on the table next to the saving. Each frequency is
+// walked period by period at its own period rate (the annual rate
+// divided by the periods per year) with the final payment adjusted to
+// the exact remaining balance plus its interest, so every schedule
+// ends at precisely zero and total paid always equals principal plus
+// the interest actually charged. The monthly row is walked by the
+// same code and reproduces the plain amortizationSchedule totals
+// exactly — it IS the baseline, not a copy of it. Payoff timing is
+// reported in periods and in equivalent calendar months (periods ÷
+// periods per year × 12), so a 24-period biweekly payoff reads as
+// about 11.1 months. A 0% loan saves no interest at any frequency —
+// it only finishes sooner. Same assumptions as the schedule itself:
+// no prepayment penalty, no fees, taxes, insurance, defaults, or
+// rate changes, and a real agreement may not offer these plans at
+// all, or may charge for them. Illustrative math only — not a loan
+// offer or any product's terms.
+export function paymentFrequency(input = {}) {
+  const plain = amortizationSchedule(input); // Validates principal / rate / months.
+  const [p, r, n] = [Number(input.principal), Number(input.rate), Number(input.months)];
+  const run = periodsPerYear => {
+    const periodRate = r / 100 / periodsPerYear;
+    const payment = periodsPerYear === 12 ? plain.monthlyPayment : plain.monthlyPayment * 13 / periodsPerYear;
+    const maxPeriods = Math.ceil(n / 12) * periodsPerYear + periodsPerYear;
+    const schedule = [];
+    let balance = p, totalInterest = 0, totalPaid = 0;
+    for (let period = 1; period <= maxPeriods; period++) {
+      const interest = balance * periodRate;
+      let principalPart = payment - interest;
+      let paid = payment;
+      if (period === maxPeriods || principalPart >= balance) { principalPart = balance; paid = balance + interest; }
+      balance -= principalPart;
+      totalInterest += interest; totalPaid += paid;
+      schedule.push({ period, payment: paid, interest, principal: principalPart, balance: Math.max(0, balance) });
+      if (balance <= 0) break;
+    }
+    const periods = schedule.length;
+    const calendarMonths = periods / periodsPerYear * 12;
+    return { periodsPerYear, payment, periods, calendarMonths, monthsSaved: n - calendarMonths, totalInterest, interestSaved: plain.totalInterest - totalInterest, totalPaid, annualOutlay: payment * periodsPerYear, schedule };
+  };
+  const rows = PAYMENT_FREQUENCIES.map(f => { const row = run(f.periodsPerYear); return { id: f.id, label: f.label, periodsPerYear: f.periodsPerYear, payment: row.payment, periods: row.periods, calendarMonths: row.calendarMonths, monthsSaved: row.monthsSaved, totalInterest: row.totalInterest, interestSaved: row.interestSaved, annualOutlay: row.annualOutlay }; });
+  const biweekly = run(26);
+  return {
+    principal: p,
+    rate: r,
+    months: n,
+    monthlyPayment: plain.monthlyPayment,
+    plainTotalInterest: plain.totalInterest,
+    plainTotalPaid: plain.total,
+    biweeklyPayment: biweekly.payment,
+    biweeklyPeriods: biweekly.periods,
+    biweeklyCalendarMonths: biweekly.calendarMonths,
+    monthsSaved: biweekly.monthsSaved,
+    totalInterest: biweekly.totalInterest,
+    interestSaved: biweekly.interestSaved,
+    totalPaid: biweekly.totalPaid,
+    schedule: biweekly.schedule,
+    rows,
+  };
+}
+
 export function checkEligibility({score,minimum,age,adult,region,approved}) {
   if(![score,minimum,age].every(Number.isFinite)||score<0||score>100||minimum<0||minimum>100||age<0||age>120) throw new Error('Use scores between 0 and 100 and an age between 0 and 120.');
   const checks=[{name:'Score threshold',pass:score>=minimum},{name:'Age threshold',pass:!adult||age>=18},{name:'Region requirement',pass:!region||approved}];
