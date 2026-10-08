@@ -783,6 +783,119 @@ export function simulateKycSequence(design, steps) {
   return finish(evaluated);
 }
 
+// A BASIC-KYC LIFECYCLE: transfers in one order against one running
+// modeled state — a ledger of balances, the issuer's trusted-entity
+// list, and the module's global pause flag. The single-shot model and
+// the KYC-extended lifecycle hold the trust decision fixed (a
+// certificate simply is or is not from a trusted entity), so neither
+// can show the lifecycle a basic-KYC token actually lives: a KYC
+// entity the issuer trusted is REMOVED from the trusted list — after
+// which the same sender's otherwise-valid certificate fails on the
+// trusted-entity check alone, because trust is read from the list as
+// it stands when the transfer runs, not from when the certificate was
+// issued — a second entity is ADDED and its certificates start
+// passing, and revoking the first entity does not touch the second's.
+// Removal is not retroactive: transfers that already applied stay
+// applied. Each transfer carries a modeled certificate state (valid,
+// missing, invalid signature, naming another sender, or expired —
+// there is deliberately no 'untrusted' state here: whether the
+// signer is trusted is exactly the evolving state this lab models)
+// and names the modeled entity that signed it; the transfer is then
+// evaluated by the very same simulateSubstandardTransfer('kyc')
+// checks as the single-shot lab, fed with the signer's trust and the
+// pause flag AS THEY STAND at that step, so the two labs can never
+// disagree about a check's name or verdict. Basic KYC checks the
+// SENDER only: no recipient check exists in this module, so a
+// transfer to any modeled recipient — listed nowhere, pending, or
+// frozen in the generic layer — passes on its sender certificate
+// alone, and a self-transfer still needs a valid certificate (there
+// is no recipient check to skip). Only the basic-KYC module's own
+// checks are modeled here: the design's generic toggles (its own
+// allowlist, per-transfer cap, generic pause/freeze, eligibility)
+// are a separate layer, modeled in the labs above, and are NOT
+// applied — the module pause in this lab starts unset whatever the
+// design's generic pause flag says. The modeled balances always sum
+// to the designed supply. Local simulation only: no real certificate
+// is read or verified, no signature is checked, no trusted-entity
+// list is consulted on chain, and no transaction is produced.
+export const MAX_BASIC_KYC_STEPS = 12;
+export const KYC_ENTITIES = Object.freeze({
+  'entity-a':{ name:'KYC entity A' },
+  'entity-b':{ name:'KYC entity B' },
+});
+const BASIC_KYC_CERT_STATES = Object.freeze({
+  valid:{certPresent:true,certSignatureValid:true,certNamesSender:true,certExpired:false},
+  missing:{certPresent:false,certSignatureValid:false,certNamesSender:false,certExpired:false},
+  'bad-signature':{certPresent:true,certSignatureValid:false,certNamesSender:true,certExpired:false},
+  'wrong-sender':{certPresent:true,certSignatureValid:true,certNamesSender:false,certExpired:false},
+  expired:{certPresent:true,certSignatureValid:true,certNamesSender:true,certExpired:true},
+});
+export function simulateBasicKycSequence(design, steps) {
+  const errors=validateDesign(design);
+  let supply=0n;
+  try { supply=toUnits(design.supply,design.decimals); } catch { /* An invalid design reports its errors below; the ledger stays at zero. */ }
+  const balances={};
+  for(const k of Object.keys(LEDGER_ACCOUNTS)) balances[k]=k==='issuer'?supply:0n;
+  const trusted=new Set(['entity-a']);
+  let paused=false;
+  const finish=evaluated=>({
+    invalid:errors.length>0, errors,
+    steps:evaluated,
+    balances:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),
+    trusted:[...trusted],
+    paused,
+    transferredBaseUnits:evaluated.filter(s=>s.kind==='transfer'&&s.allowed).reduce((sum,s)=>sum+BigInt(s.amountBaseUnits),0n).toString(),
+    appliedCount:evaluated.filter(s=>s.allowed).length,
+  });
+  if(errors.length) return finish([]);
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_BASIC_KYC_STEPS) throw new Error(`A basic-KYC lifecycle needs between 1 and ${MAX_BASIC_KYC_STEPS} modeled steps.`);
+  const parseAmount=(raw)=>{
+    try { const amount=toUnits(raw,design.decimals); if(amount<=0n) throw new Error('Amount must be greater than zero.'); return {amount,error:''}; }
+    catch(e) { return {amount:null,error:e.message}; }
+  };
+  const evaluated=steps.map((step,i)=>{
+    if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error(`Lifecycle step ${i+1} must describe a transfer, a trust update, or a pause update.`);
+    const snapshot=()=>({balancesAfter:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),trustedAfter:[...trusted],pausedAfter:paused});
+    if(step.kind==='trust') {
+      const entity=KYC_ENTITIES[step.entity];
+      if(!entity||typeof step.trusted!=='boolean') return {kind:'trust',entity:step.entity??null,trusted:typeof step.trusted==='boolean'?step.trusted:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Known entity and update',pass:false,detail:'A trust update must name a modeled KYC entity (KYC entity A or KYC entity B) and say whether it is being trusted or removed from the trusted list.'}],...snapshot()};
+      const already=trusted.has(step.entity)===step.trusted;
+      if(step.trusted) trusted.add(step.entity); else trusted.delete(step.entity);
+      return {kind:'trust',entity:step.entity,trusted:step.trusted,amount:null,amountBaseUnits:null,allowed:true,checks:[{name:'Trust update',pass:true,detail:already
+        ?`${entity.name} was already ${step.trusted?'on':'off'} the modeled trusted-entity list — the update leaves the list as it stands, and later steps are checked against it.`
+        :step.trusted?`${entity.name} is added to the modeled trusted-entity list. Certificates it signed are checked against the list as it now stands, so its later certificates can pass the trusted-entity check.`:`${entity.name} is removed from the modeled trusted-entity list. Removal is not retroactive — transfers that already applied stay applied — but its later certificates fail the trusted-entity check, however valid they otherwise are.`}],...snapshot()};
+    }
+    if(step.kind==='pause') {
+      if(typeof step.paused!=='boolean') return {kind:'pause',paused:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Pause update',pass:false,detail:'A pause update must say whether the module global state is being paused or unpaused (true or false).'}],...snapshot()};
+      const already=paused===step.paused;
+      paused=step.paused;
+      return {kind:'pause',paused:step.paused,amount:null,amountBaseUnits:null,allowed:true,checks:[{name:'Pause update',pass:true,detail:already
+        ?`Transfers were already ${step.paused?'paused':'unpaused'} in the modeled global state — the update leaves it as it stands, and later steps are checked against it.`
+        :step.paused?'The issuer pause flag in the modeled global state is set. Every later transfer fails while it is set, whatever its certificate or signer says, until the flag is cleared.':'The issuer pause flag in the modeled global state is cleared. Later transfers are checked on their certificate and signer again.'}],...snapshot()};
+    }
+    if(step.kind==='transfer') {
+      const {amount,error}=parseAmount(step.amount);
+      if(error) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount??''),amountBaseUnits:null,cert:step.cert??null,entity:step.entity??null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:error}],...snapshot()};
+      const from=LEDGER_ACCOUNTS[step.from], to=LEDGER_ACCOUNTS[step.to];
+      if(!from||!to) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount),amountBaseUnits:amount.toString(),cert:step.cert??null,entity:step.entity??null,allowed:false,checks:[{name:'Known accounts',pass:false,detail:'Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.'}],...snapshot()};
+      const cert=BASIC_KYC_CERT_STATES[step.cert];
+      if(!cert) return {kind:'transfer',from:step.from,to:step.to,amount:String(step.amount),amountBaseUnits:amount.toString(),cert:step.cert??null,entity:step.entity??null,allowed:false,checks:[{name:'Known certificate state',pass:false,detail:'A transfer step must name the modeled certificate it carries: valid, missing, bad-signature, wrong-sender, or expired. There is no untrusted state here — whether the signer is trusted is read from the modeled trusted-entity list as it stands at this step. Certificates are modeled states here — no real certificate is read or verified.'}],...snapshot()};
+      const entity=KYC_ENTITIES[step.entity];
+      if(!entity) return {kind:'transfer',from:step.from,to:step.to,amount:String(step.amount),amountBaseUnits:amount.toString(),cert:step.cert,entity:step.entity??null,allowed:false,checks:[{name:'Known certificate signer',pass:false,detail:'A transfer step must name the modeled KYC entity that signed its certificate: KYC entity A or KYC entity B. The trusted-entity check reads that signer against the modeled trusted list.'}],...snapshot()};
+      const module=simulateSubstandardTransfer('kyc',{...cert,certTrustedIssuer:trusted.has(step.entity),paused});
+      const checks=[
+        {name:'Sender balance',pass:balances[step.from]>=amount,detail:balances[step.from]>=amount?`The modeled sender holds ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs.`:`The modeled sender holds only ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs — earlier steps in the lifecycle count.`},
+        ...module.checks,
+      ];
+      const allowed=checks.every(c=>c.pass);
+      if(allowed) { balances[step.from]-=amount; balances[step.to]+=amount; }
+      return {kind:'transfer',from:step.from,to:step.to,amount:String(step.amount),amountBaseUnits:amount.toString(),cert:step.cert,entity:step.entity,allowed,checks,...snapshot()};
+    }
+    return {kind:typeof step.kind==='string'?step.kind:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Known step kind',pass:false,detail:'Each lifecycle step must be a transfer, a trust update, or a pause update.'}],...snapshot()};
+  });
+  return finish(evaluated);
+}
+
 export function makeManifest(design, network) {
   const errors=validateDesign(design);
   if(errors.length) throw new Error(errors.join(' '));
