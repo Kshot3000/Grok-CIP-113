@@ -666,6 +666,123 @@ export function simulateDenylistSequence(design, steps) {
   return finish(evaluated);
 }
 
+// A KYC-extended LIFECYCLE: transfers in one order against one running
+// modeled state — a ledger of balances, the issuer's recipient allowlist
+// (each entry current or expired), and the module's global pause flag.
+// The single-shot model above holds all of that fixed (a transfer is
+// checked against an allowlist entry and a pause flag that are simply
+// given), so it cannot show the lifecycle a KYC-extended token actually
+// lives: a recipient is listed and receives tokens, their entry's TTL
+// then elapses — after which the SAME transfer with the SAME valid
+// certificate fails on the recipient entry alone — and a renewal makes
+// it pass again; a sender's certificate can expire between two
+// transfers; and a pause set mid-sequence blocks every transfer until
+// it is cleared, whatever their certificates say. Each transfer step
+// carries a modeled certificate state (valid, missing, untrusted,
+// invalid signature, naming another sender, or expired) — certificates
+// are per-transfer in the reference module, so the state travels with
+// the step rather than with the account — and the transfer is evaluated
+// by the very same simulateSubstandardTransfer checks as the single-shot
+// lab, fed with the allowlist entry and pause flag AS THEY STAND at
+// that step, so the two labs can never disagree about a check's name or
+// verdict. Allowlist and pause updates are modeled as applied state
+// changes (in the reference module the allowlist is maintained by its
+// publisher and expired entries are pruned; entry expiry is the passage
+// of its validity window, modeled here as the step that records it).
+// Only the KYC-extended module's own checks are modeled here: the
+// design's generic toggles (its own allowlist, per-transfer cap,
+// generic pause/freeze, eligibility) are a separate layer, modeled in
+// the labs above, and are NOT applied — the module pause in this lab
+// starts unset whatever the design's generic pause flag says. The
+// modeled balances always sum to the designed supply. Local simulation
+// only: no real certificate is read or verified, no signature is
+// checked, no on-chain allowlist is consulted, and no transaction is
+// produced.
+export const MAX_KYC_STEPS = 12;
+const KYC_CERT_STATES = Object.freeze({
+  valid:{certPresent:true,certTrustedIssuer:true,certSignatureValid:true,certNamesSender:true,certExpired:false},
+  missing:{certPresent:false,certTrustedIssuer:false,certSignatureValid:false,certNamesSender:false,certExpired:false},
+  untrusted:{certPresent:true,certTrustedIssuer:false,certSignatureValid:true,certNamesSender:true,certExpired:false},
+  'bad-signature':{certPresent:true,certTrustedIssuer:true,certSignatureValid:false,certNamesSender:true,certExpired:false},
+  'wrong-sender':{certPresent:true,certTrustedIssuer:true,certSignatureValid:true,certNamesSender:false,certExpired:false},
+  expired:{certPresent:true,certTrustedIssuer:true,certSignatureValid:true,certNamesSender:true,certExpired:true},
+});
+export function simulateKycSequence(design, steps) {
+  const errors=validateDesign(design);
+  let supply=0n;
+  try { supply=toUnits(design.supply,design.decimals); } catch { /* An invalid design reports its errors below; the ledger stays at zero. */ }
+  const balances={};
+  for(const k of Object.keys(LEDGER_ACCOUNTS)) balances[k]=k==='issuer'?supply:0n;
+  const allowlist={};
+  let paused=false;
+  const finish=evaluated=>({
+    invalid:errors.length>0, errors,
+    steps:evaluated,
+    balances:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),
+    allowlist:Object.fromEntries(Object.entries(allowlist).map(([k,v])=>[k,{...v}])),
+    paused,
+    transferredBaseUnits:evaluated.filter(s=>s.kind==='transfer'&&s.allowed).reduce((sum,s)=>sum+BigInt(s.amountBaseUnits),0n).toString(),
+    appliedCount:evaluated.filter(s=>s.allowed).length,
+  });
+  if(errors.length) return finish([]);
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_KYC_STEPS) throw new Error(`A KYC lifecycle needs between 1 and ${MAX_KYC_STEPS} modeled steps.`);
+  const parseAmount=(raw)=>{
+    try { const amount=toUnits(raw,design.decimals); if(amount<=0n) throw new Error('Amount must be greater than zero.'); return {amount,error:''}; }
+    catch(e) { return {amount:null,error:e.message}; }
+  };
+  const evaluated=steps.map((step,i)=>{
+    if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error(`Lifecycle step ${i+1} must describe a transfer, an allowlist update, or a pause update.`);
+    const snapshot=()=>({balancesAfter:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),allowlistAfter:Object.fromEntries(Object.entries(allowlist).map(([k,v])=>[k,{...v}])),pausedAfter:paused});
+    if(step.kind==='allowlist') {
+      const account=LEDGER_ACCOUNTS[step.account];
+      if(!account||typeof step.listed!=='boolean'||(step.expired!==undefined&&typeof step.expired!=='boolean')) return {kind:'allowlist',account:step.account??null,listed:typeof step.listed==='boolean'?step.listed:null,expired:typeof step.expired==='boolean'?step.expired:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Known account and update',pass:false,detail:'An allowlist update must name a modeled ledger account (the issuer, an approved member, a pending member, or a frozen member), say whether it is being listed or removed, and — when listed — whether its entry is current or expired.'}],...snapshot()};
+      const before=allowlist[step.account];
+      if(step.listed) {
+        const expired=step.expired===true;
+        const already=!!before&&before.expired===expired;
+        allowlist[step.account]={expired};
+        return {kind:'allowlist',account:step.account,listed:true,expired,amount:null,amountBaseUnits:null,allowed:true,checks:[{name:'Allowlist update',pass:true,detail:already
+          ?`${account.name} was already on the modeled allowlist with a ${expired?'expired':'current'} entry — the update leaves the entry as it stands, and later steps are checked against it.`
+          :before
+            ?(expired?`${account.name}'s allowlist entry's validity window (TTL) has elapsed. The entry is still on the modeled list, but the reference validator treats an expired entry as failing the recipient check until the publisher renews or prunes it.`:`${account.name}'s allowlist entry is renewed — its validity window runs again, and later transfers to this recipient are checked against a current entry.`)
+            :`${account.name} is added to the modeled allowlist with a ${expired?'already-expired':'current'} entry. In the reference module the on-chain list is anchored by a Merkle Patricia Forestry root maintained by its publisher; PRISM models the update as a state change, and every later step is checked against the list as it now stands.`}],...snapshot()};
+      }
+      const already=!before;
+      delete allowlist[step.account];
+      return {kind:'allowlist',account:step.account,listed:false,expired:null,amount:null,amountBaseUnits:null,allowed:true,checks:[{name:'Allowlist update',pass:true,detail:already
+        ?`${account.name} was not on the modeled allowlist — the removal leaves the list as it stands, and later steps are checked against it.`
+        :`${account.name} is removed from the modeled allowlist. Expired members are pruned by the issuer's publisher in the reference module; a removed recipient fails the recipient check on later transfers.`}],...snapshot()};
+    }
+    if(step.kind==='pause') {
+      if(typeof step.paused!=='boolean') return {kind:'pause',paused:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Pause update',pass:false,detail:'A pause update must say whether the module global state is being paused or unpaused (true or false).'}],...snapshot()};
+      const already=paused===step.paused;
+      paused=step.paused;
+      return {kind:'pause',paused:step.paused,amount:null,amountBaseUnits:null,allowed:true,checks:[{name:'Pause update',pass:true,detail:already
+        ?`Transfers were already ${step.paused?'paused':'unpaused'} in the modeled global state — the update leaves it as it stands, and later steps are checked against it.`
+        :step.paused?'The issuer pause flag in the modeled global state is set. Every later transfer fails while it is set, whatever its certificate or recipient entry says, until the flag is cleared.':'The issuer pause flag in the modeled global state is cleared. Later transfers are checked on their certificate and recipient entry again.'}],...snapshot()};
+    }
+    if(step.kind==='transfer') {
+      const {amount,error}=parseAmount(step.amount);
+      if(error) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount??''),amountBaseUnits:null,cert:step.cert??null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:error}],...snapshot()};
+      const from=LEDGER_ACCOUNTS[step.from], to=LEDGER_ACCOUNTS[step.to];
+      if(!from||!to) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount),amountBaseUnits:amount.toString(),cert:step.cert??null,allowed:false,checks:[{name:'Known accounts',pass:false,detail:'Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.'}],...snapshot()};
+      const cert=KYC_CERT_STATES[step.cert];
+      if(!cert) return {kind:'transfer',from:step.from,to:step.to,amount:String(step.amount),amountBaseUnits:amount.toString(),cert:step.cert??null,allowed:false,checks:[{name:'Known certificate state',pass:false,detail:'A transfer step must name the modeled certificate it carries: valid, missing, untrusted, bad-signature, wrong-sender, or expired. Certificates are modeled states here — no real certificate is read or verified.'}],...snapshot()};
+      const entry=allowlist[step.to];
+      const module=simulateSubstandardTransfer('kyc-extended',{...cert,paused,recipientAllowlisted:!!entry,recipientEntryExpired:entry?entry.expired:false,selfTransfer:step.from===step.to});
+      const checks=[
+        {name:'Sender balance',pass:balances[step.from]>=amount,detail:balances[step.from]>=amount?`The modeled sender holds ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs.`:`The modeled sender holds only ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs — earlier steps in the lifecycle count.`},
+        ...module.checks,
+      ];
+      const allowed=checks.every(c=>c.pass);
+      if(allowed) { balances[step.from]-=amount; balances[step.to]+=amount; }
+      return {kind:'transfer',from:step.from,to:step.to,amount:String(step.amount),amountBaseUnits:amount.toString(),cert:step.cert,allowed,checks,...snapshot()};
+    }
+    return {kind:typeof step.kind==='string'?step.kind:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Known step kind',pass:false,detail:'Each lifecycle step must be a transfer, an allowlist update, or a pause update.'}],...snapshot()};
+  });
+  return finish(evaluated);
+}
+
 export function makeManifest(design, network) {
   const errors=validateDesign(design);
   if(errors.length) throw new Error(errors.join(' '));
