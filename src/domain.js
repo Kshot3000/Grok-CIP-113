@@ -574,6 +574,98 @@ export function simulateSeizure(s={}) {
   return {allowed:checks.every(c=>c.pass),checks};
 }
 
+// A freeze-and-seize LIFECYCLE: transfers, denylist updates, and seizures
+// in one order, against one running modeled state — a ledger of balances
+// plus the denylist those balances are checked against. The single-shot
+// models above hold the list fixed (a transfer is checked against a list
+// that is simply given; a seizure against a holder who simply is or is
+// not listed), so neither can show the lifecycle a regulated token
+// actually lives: a holder in good standing receives tokens, is THEN
+// denylisted — after which transfers fail in BOTH directions and seizure
+// becomes permitted — and is later removed, which restores transfers and
+// ends the seizure authority again. Denylist updates are modeled as
+// applied state changes (in the reference module the on-chain list is
+// maintained by its publisher; the update itself is not a transfer and
+// is not gated by the transfer checks). A seizure that is permitted
+// moves the amount from the holder to the issuer — tokens seized return
+// to the issuer's modeled holding. A blocked step changes nothing and
+// later steps are still evaluated, so the knock-on effect of a listing
+// is visible. Only the freeze-and-seize module's own checks are modeled
+// here (sender/recipient denylist, seizure authority and listing, plus
+// the ledger's balances): the design's generic toggles (allowlist,
+// per-transfer cap, pause, generic participant freeze) are a separate
+// layer, modeled in the transfer labs, and are NOT applied. The modeled
+// balances always sum to the designed supply. Local simulation only: no
+// on-chain denylist is read, nothing is frozen or seized, and no
+// transaction is produced.
+export const MAX_DENYLIST_STEPS = 12;
+export function simulateDenylistSequence(design, steps) {
+  const errors=validateDesign(design);
+  let supply=0n;
+  try { supply=toUnits(design.supply,design.decimals); } catch { /* An invalid design reports its errors below; the ledger stays at zero. */ }
+  const balances={};
+  for(const k of Object.keys(LEDGER_ACCOUNTS)) balances[k]=k==='issuer'?supply:0n;
+  const denylisted=new Set();
+  const finish=evaluated=>({
+    invalid:errors.length>0, errors,
+    steps:evaluated,
+    balances:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),
+    denylisted:[...denylisted],
+    transferredBaseUnits:evaluated.filter(s=>s.kind==='transfer'&&s.allowed).reduce((sum,s)=>sum+BigInt(s.amountBaseUnits),0n).toString(),
+    seizedBaseUnits:evaluated.filter(s=>s.kind==='seize'&&s.allowed).reduce((sum,s)=>sum+BigInt(s.amountBaseUnits),0n).toString(),
+    appliedCount:evaluated.filter(s=>s.allowed).length,
+  });
+  if(errors.length) return finish([]);
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_DENYLIST_STEPS) throw new Error(`A denylist lifecycle needs between 1 and ${MAX_DENYLIST_STEPS} modeled steps.`);
+  const parseAmount=(raw,i)=>{
+    try { const amount=toUnits(raw,design.decimals); if(amount<=0n) throw new Error('Amount must be greater than zero.'); return {amount,error:''}; }
+    catch(e) { return {amount:null,error:e.message}; }
+  };
+  const evaluated=steps.map((step,i)=>{
+    if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error(`Lifecycle step ${i+1} must describe a transfer, a denylist update, or a seizure.`);
+    const snapshot=()=>({balancesAfter:Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,v.toString()])),denylistedAfter:[...denylisted]});
+    if(step.kind==='denylist') {
+      const account=LEDGER_ACCOUNTS[step.account];
+      if(!account||typeof step.listed!=='boolean') return {kind:'denylist',account:step.account??null,listed:typeof step.listed==='boolean'?step.listed:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Known account and update',pass:false,detail:'A denylist update must name a modeled ledger account (the issuer, an approved member, a pending member, or a frozen member) and say whether it is being listed or removed.'}],...snapshot()};
+      const already=denylisted.has(step.account)===step.listed;
+      if(step.listed) denylisted.add(step.account); else denylisted.delete(step.account);
+      return {kind:'denylist',account:step.account,listed:step.listed,amount:null,amountBaseUnits:null,allowed:true,checks:[{name:'Denylist update',pass:true,detail:already
+        ?`${account.name} was already ${step.listed?'on':'off'} the modeled denylist — the update leaves the list as it stands, and later steps are checked against it.`
+        :`${account.name} is ${step.listed?'added to':'removed from'} the modeled denylist. In the reference module the on-chain list is maintained by its publisher; PRISM models the update as a state change, and every later step is checked against the list as it now stands.`}],...snapshot()};
+    }
+    if(step.kind==='transfer') {
+      const {amount,error}=parseAmount(step.amount,i);
+      if(error) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount??''),amountBaseUnits:null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:error}],...snapshot()};
+      const from=LEDGER_ACCOUNTS[step.from], to=LEDGER_ACCOUNTS[step.to];
+      if(!from||!to) return {kind:'transfer',from:step.from??null,to:step.to??null,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed:false,checks:[{name:'Known accounts',pass:false,detail:'Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.'}],...snapshot()};
+      const checks=[
+        {name:'Sender balance',pass:balances[step.from]>=amount,detail:balances[step.from]>=amount?`The modeled sender holds ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs.`:`The modeled sender holds only ${formatUnits(balances[step.from],design.decimals)} ${design.ticker} when this step runs — earlier steps in the lifecycle count.`},
+        {name:'Sender not denylisted',pass:!denylisted.has(step.from),detail:denylisted.has(step.from)?'The sender credential appears in the modeled denylist as it stands at this step. The reference validator rejects the transfer.':'Sender credential is absent from the modeled denylist at this step.'},
+        {name:'Recipient not denylisted',pass:!denylisted.has(step.to),detail:denylisted.has(step.to)?'The recipient credential appears in the modeled denylist as it stands at this step. Freeze-and-seize checks both parties, not just the sender.':'Recipient credential is absent from the modeled denylist at this step.'},
+      ];
+      const allowed=checks.every(c=>c.pass);
+      if(allowed) { balances[step.from]-=amount; balances[step.to]+=amount; }
+      return {kind:'transfer',from:step.from,to:step.to,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed,checks,...snapshot()};
+    }
+    if(step.kind==='seize') {
+      const {amount,error}=parseAmount(step.amount,i);
+      if(error) return {kind:'seize',actor:step.actor??null,holder:step.holder??null,amount:String(step.amount??''),amountBaseUnits:null,allowed:false,checks:[{name:'Valid amount',pass:false,detail:error}],...snapshot()};
+      const holder=LEDGER_ACCOUNTS[step.holder];
+      if(!holder||!['authorised','other'].includes(step.actor)) return {kind:'seize',actor:step.actor??null,holder:step.holder??null,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed:false,checks:[{name:'Known holder and actor',pass:false,detail:'A seizure must name a modeled ledger account as its holder, attempted by an authorised party or by someone else.'}],...snapshot()};
+      const checks=[
+        {name:'Authorised issuer action',pass:step.actor==='authorised',detail:step.actor==='authorised'?'The actor is a modeled authorised party for this token.':'Only authorised parties may invoke freeze or seizure in the reference module; it is a third-party action, not a holder action.'},
+        {name:'Holder is denylisted',pass:denylisted.has(step.holder),detail:denylisted.has(step.holder)?'The holder credential is on the modeled denylist as it stands at this step, so its tokens may be frozen or seized.':'Freeze and seizure apply only to denylisted credentials; a holder in good standing cannot be seized — including a holder who was listed earlier but has since been removed.'},
+        {name:'Holder balance',pass:balances[step.holder]>=amount,detail:balances[step.holder]>=amount?`The modeled holder holds ${formatUnits(balances[step.holder],design.decimals)} ${design.ticker} when this step runs.`:`The modeled holder holds only ${formatUnits(balances[step.holder],design.decimals)} ${design.ticker} when this step runs — a seizure cannot take more than the holder holds.`},
+      ];
+      const allowed=checks.every(c=>c.pass);
+      if(allowed) { balances[step.holder]-=amount; balances.issuer+=amount; }
+      return {kind:'seize',actor:step.actor,holder:step.holder,amount:String(step.amount),amountBaseUnits:amount.toString(),allowed,checks,...snapshot()};
+    }
+    return {kind:typeof step.kind==='string'?step.kind:null,amount:null,amountBaseUnits:null,allowed:false,checks:[{name:'Known step kind',pass:false,detail:'Each lifecycle step must be a transfer, a denylist update, or a seizure.'}],...snapshot()};
+  });
+  return finish(evaluated);
+}
+
 export function makeManifest(design, network) {
   const errors=validateDesign(design);
   if(errors.length) throw new Error(errors.join(' '));
