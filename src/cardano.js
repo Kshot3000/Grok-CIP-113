@@ -273,6 +273,40 @@ export function encodeAssetName(label, text) {
     maxTextBytes: label === null ? 32 : 28,
   };
 }
+// Asset unit splitting: explorers, Koios asset lists, and wallet APIs
+// commonly identify a native asset by its UNIT — the policy ID (28 bytes)
+// and the asset name (0–32 bytes) concatenated as one hex string. Splitting
+// is a pure byte-boundary operation: the first 28 bytes are always the
+// policy, everything after is the name, and there is no other valid split.
+// The split is strict so a malformed unit is refused rather than silently
+// mis-split: a unit shorter than a policy ID cannot name an asset under any
+// policy, and a name part over Cardano's 32-byte limit cannot be a real
+// asset name — accepting either would invent an asset that cannot exist.
+// The fingerprint returned is the CIP-14 fingerprint of the split parts,
+// so a split unit can be checked against the asset1… identifier explorers
+// show. Splitting identifies an asset; it does not prove the asset exists
+// on chain, and implies nothing about authenticity, backing, or registry
+// membership — existence is a lookup question, answered by the lookup above.
+export function parseAssetUnit(unitHex) {
+  if(typeof unitHex!=='string'||!/^(?:[a-f0-9]{2})+$/i.test(unitHex)) throw new Error('Asset unit must be non-empty even-length hexadecimal (a policy ID followed by an asset name).');
+  const hex=unitHex.toLowerCase();
+  const byteLength=hex.length/2;
+  if(byteLength<28) throw new Error(`Asset unit is ${byteLength} bytes — shorter than a 28-byte policy ID, so it cannot be a policy ID plus an asset name.`);
+  const nameByteLength=byteLength-28;
+  if(nameByteLength>32) throw new Error(`Asset unit's name part would be ${nameByteLength} bytes — Cardano asset names are limited to 32 bytes, so this cannot be a real asset unit (a fingerprint, asset1…, is a hash and cannot be split back — enter the unit hex instead).`);
+  const policyId=hex.slice(0,56);
+  const assetNameHex=hex.slice(56);
+  return {
+    unitHex: hex,
+    byteLength,
+    policyId,
+    policyByteLength: 28,
+    assetNameHex,
+    nameByteLength,
+    fingerprint: assetFingerprint(policyId, assetNameHex),
+    decoded: decodeAssetName(assetNameHex),
+  };
+}
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
   if(![0,1].includes(network))throw new Error('Unsupported network.');
