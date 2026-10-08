@@ -166,6 +166,37 @@ export function assetFingerprint(policyHex, assetNameHex) {
   if(assetNameHex) bytes.set(hexToBytes(assetNameHex.toLowerCase()),28);
   return encodeBech32('asset', blake2b(bytes,20));
 }
+// CIP-67 asset-name labels as registered for CIP-68: the first four bytes
+// of the asset name declare the token's role, and the remaining bytes are
+// the shared token name both the reference and the user token carry.
+export const CIP68_LABELS = Object.freeze({
+  '000643b0': Object.freeze({label:100, role:'Reference token', detail:'Holds the CIP-68 metadata datum at a script address.'}),
+  '000de140': Object.freeze({label:222, role:'User NFT', detail:'The user-facing non-fungible token.'}),
+  '0014df10': Object.freeze({label:333, role:'User fungible token', detail:'The user-facing fungible token.'}),
+  '001bc280': Object.freeze({label:444, role:'User rich fungible token', detail:'The user-facing rich fungible token.'}),
+});
+// Decode an asset name (hex, as explorers and Koios report it) locally:
+// a registered CIP-67/CIP-68 label prefix when one is present, and the
+// UTF-8 text of the remaining bytes when they are valid printable UTF-8.
+// Bytes that are not printable UTF-8 are reported as such — the text is
+// never guessed, lossy-decoded, or invented. Decoding a name says what
+// its bytes claim; it does not prove CIP-68 metadata exists in a datum,
+// and says nothing about authenticity, backing, or registry membership.
+export function decodeAssetName(nameHex) {
+  if(typeof nameHex!=='string'||!/^(?:[a-f0-9]{2}){0,32}$/i.test(nameHex)) throw new Error('Asset name must contain 0–32 bytes of even-length hexadecimal.');
+  const hex=nameHex.toLowerCase();
+  if(!hex) return {empty:true,byteLength:0,label:null,contentHex:'',text:'',textDecodable:true};
+  const prefix=hex.slice(0,8);
+  const label=CIP68_LABELS[prefix]??null;
+  const contentHex=label?hex.slice(8):hex;
+  let text=null;
+  if(!contentHex) text='';
+  else try{
+    const decoded=new TextDecoder('utf-8',{fatal:true}).decode(hexToBytes(contentHex));
+    if(![...decoded].some(ch=>{const c=ch.codePointAt(0);return c<0x20||c===0x7f;})) text=decoded;
+  }catch{/* Not valid UTF-8: text stays null and the name is shown as hex only. */}
+  return {empty:false,byteLength:hex.length/2,label: label?{...label,prefixHex:prefix}:null,contentHex,text,textDecodable:text!==null};
+}
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
   if(![0,1].includes(network))throw new Error('Unsupported network.');
