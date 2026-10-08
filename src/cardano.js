@@ -63,6 +63,16 @@ const ADDRESS_TYPES = Object.freeze({
 // as `smartWalletShape` only — the same shape could belong to any script
 // payment address, and membership in a CIP-113 deployment is proven by the
 // registry and the deployed base script hash, not by shape alone.
+// CIP-19 reward address construction from a stake credential: a header
+// byte (type 14 = key credential, 15 = script credential; low nibble =
+// network) followed by the 28-byte stake credential, Bech32-encoded under
+// stake / stake_test. Pure construction — the same bytes any wallet or
+// explorer derives — performing no lookup, registration, or delegation.
+function rewardAddressFor(network, stakeCredential, stakeBytes) {
+  const type=stakeCredential==='script'?15:14;
+  const bytes=Uint8Array.from([(type<<4)|network,...stakeBytes]);
+  return {address:encodeBech32(network===1?'stake':'stake_test',bytes),hex:bytesToHex(bytes),type};
+}
 export function inspectAddress(address) {
   const decoded=decodeAddress(address);
   const meta=ADDRESS_TYPES[decoded.type];
@@ -70,6 +80,7 @@ export function inspectAddress(address) {
   const payment={credential:meta.payment,hash:bytesToHex(decoded.bytes.slice(1,29))};
   const stake=meta.stake?{credential:meta.stake,hash:bytesToHex(decoded.bytes.slice(29,57))}:null;
   const smartWalletShape=meta.kind==='Base'&&meta.payment==='script';
+  const reward=stake?rewardAddressFor(decoded.network,meta.stake,decoded.bytes.slice(29,57)):null;
   return {
     address:encodeAddress(decoded.bytes),
     network:decoded.network,
@@ -79,6 +90,7 @@ export function inspectAddress(address) {
     byteLength:decoded.bytes.length,
     payment,
     stake,
+    rewardAddress:reward?reward.address:null,
     smartWalletShape,
     ownerCredential:smartWalletShape?stake.hash:null,
   };
@@ -112,6 +124,34 @@ export function inspectRewardAddress(raw) {
     credential:type===14?'key':'script',
     hash:bytesToHex(bytes.slice(1,29)),
     byteLength:bytes.length,
+  };
+}
+// Derive a base address's reward (stake) address locally: a base address's
+// stake credential alone determines it — header type 14 when the stake
+// credential is a key hash, 15 when it is a script hash, on the payment
+// address's own network. The payment credential plays no part. An
+// enterprise address carries no stake credential, so it has no reward
+// address and derivation is refused rather than faked. Derivation is
+// construction, not registration: it delegates nothing, registers no stake
+// certificate, and looks nothing up — whether this stake credential is
+// registered or delegated is a chain question the derivation cannot answer.
+export function deriveRewardAddress(address) {
+  const decoded=decodeAddress(address);
+  const meta=ADDRESS_TYPES[decoded.type];
+  if(!meta) throw new Error('Unsupported Shelley address type.');
+  if(!meta.stake) throw new Error('Enterprise addresses carry no stake credential, so no reward address can be derived from one — staking rewards accrue to the stake credential a base address carries.');
+  const stakeBytes=decoded.bytes.slice(29,57);
+  const reward=rewardAddressFor(decoded.network,meta.stake,stakeBytes);
+  return {
+    address:reward.address,
+    hex:reward.hex,
+    network:decoded.network,
+    networkName:decoded.network===1?'Mainnet':'Testnet',
+    type:reward.type,
+    credential:meta.stake,
+    hash:bytesToHex(stakeBytes),
+    sourceType:decoded.type,
+    byteLength:29,
   };
 }
 export function normalizeWalletAddress(raw) {
