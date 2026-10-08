@@ -869,6 +869,98 @@ export function simulateKycSequence(design, steps) {
   return finish(evaluated);
 }
 
+// Editing model for the KYC-extended lifecycle lab's custom builder —
+// the same pure-helper discipline as the denylist builder above, for a
+// list that mixes THREE step kinds. Every helper returns a new list of
+// new step objects and never mutates its input, and validates each step
+// against the kind it carries, so a step the lifecycle simulator would
+// report as a blocked unknown can never be constructed here. A kind
+// switch converts the step: only a transfer carries an amount (and a
+// certificate state), so converting TO a transfer starts it at the
+// default amount with a valid certificate, and converting FROM one
+// drops both — stale fields from the old kind never survive a switch.
+// An allowlist step's entry state is conditional in the same way: a
+// listed entry carries whether it is current or expired (an entry
+// listed without saying is current), while a removal carries no entry
+// state at all, so the expired flag is dropped when a step stops
+// listing its account and defaulted to current when it starts. The
+// listed, expired, and paused flags are booleans, not strings: the
+// editor's choices map to true/false before they reach this helper.
+// Amounts stay decimal strings: the simulator reports an
+// unrepresentable amount as a blocked step, which is the builder's
+// feedback, not an editing error.
+function checkedKycStep(step) {
+  if(!step||typeof step!=='object'||Array.isArray(step)) throw new Error('A lifecycle step must describe a transfer, an allowlist update, or a pause update.');
+  if(step.kind==='transfer') {
+    if(!LEDGER_ACCOUNTS[step.from]||!LEDGER_ACCOUNTS[step.to]) throw new Error('Sender and recipient must be modeled ledger accounts: the issuer, an approved member, a pending member, or a frozen member.');
+    if(typeof step.amount!=='string') throw new Error('A lifecycle step amount must be a decimal string.');
+    if(!KYC_CERT_STATES[step.cert]) throw new Error('A transfer step must name the modeled certificate it carries: valid, missing, untrusted, bad-signature, wrong-sender, or expired.');
+    return {kind:'transfer',from:step.from,to:step.to,amount:step.amount,cert:step.cert};
+  }
+  if(step.kind==='allowlist') {
+    if(!LEDGER_ACCOUNTS[step.account]) throw new Error('An allowlist update must name a modeled ledger account: the issuer, an approved member, a pending member, or a frozen member.');
+    if(typeof step.listed!=='boolean') throw new Error('An allowlist update must say whether the account is listed or removed.');
+    if(!step.listed) return {kind:'allowlist',account:step.account,listed:false};
+    if(step.expired!==undefined&&typeof step.expired!=='boolean') throw new Error('A listed entry must say whether it is current or expired.');
+    return {kind:'allowlist',account:step.account,listed:true,expired:step.expired===true};
+  }
+  if(step.kind==='pause') {
+    if(typeof step.paused!=='boolean') throw new Error('A pause update must say whether the module global state is being paused or unpaused.');
+    return {kind:'pause',paused:step.paused};
+  }
+  throw new Error('A lifecycle step must be a transfer, an allowlist update, or a pause update.');
+}
+function checkedKycSteps(steps) {
+  if(!Array.isArray(steps)||steps.length<1||steps.length>MAX_KYC_STEPS) throw new Error(`A KYC lifecycle needs between 1 and ${MAX_KYC_STEPS} modeled steps.`);
+  return steps.map(checkedKycStep);
+}
+export function copyKycSteps(steps) { return checkedKycSteps(steps); }
+export function blankKycStep(kind = 'transfer') {
+  if(kind==='transfer') return {kind:'transfer',from:'issuer',to:'approved',amount:'100',cert:'valid'};
+  if(kind==='allowlist') return {kind:'allowlist',account:'approved',listed:true,expired:false};
+  if(kind==='pause') return {kind:'pause',paused:true};
+  throw new Error('A lifecycle step must be a transfer, an allowlist update, or a pause update.');
+}
+export function addKycStep(steps, step = blankKycStep()) {
+  const list = checkedKycSteps(steps);
+  if(list.length>=MAX_KYC_STEPS) throw new Error(`A KYC lifecycle holds at most ${MAX_KYC_STEPS} modeled steps.`);
+  return [...list, checkedKycStep(step)];
+}
+export function removeKycStep(steps, index) {
+  const list = checkedKycSteps(steps);
+  checkedIndex(list, index);
+  if(list.length<=1) throw new Error('A KYC lifecycle needs at least one modeled step.');
+  return list.filter((_,i)=>i!==index);
+}
+export function moveKycStep(steps, index, direction) {
+  const list = checkedKycSteps(steps);
+  checkedIndex(list, index);
+  if(direction!==-1&&direction!==1) throw new Error('Move a step one place up or down.');
+  const target = index+direction;
+  if(target<0||target>=list.length) return list; // Already at the edge: an unchanged copy.
+  [list[index],list[target]] = [list[target],list[index]];
+  return list;
+}
+export function updateKycStep(steps, index, patch) {
+  const list = checkedKycSteps(steps);
+  checkedIndex(list, index);
+  if(!patch||typeof patch!=='object'||Array.isArray(patch)) throw new Error('Describe the change to the step.');
+  for(const k of Object.keys(patch)) if(!['kind','from','to','amount','cert','account','listed','expired','paused'].includes(k)) throw new Error(`A lifecycle step has no ${k} field.`);
+  const kind = patch.kind ?? list[index].kind;
+  if(kind!=='transfer'&&kind!=='allowlist'&&kind!=='pause') throw new Error('A lifecycle step must be a transfer, an allowlist update, or a pause update.');
+  const kindFields = kind==='transfer' ? ['from','to','amount','cert'] : kind==='allowlist' ? ['account','listed','expired'] : ['paused'];
+  for(const k of Object.keys(patch)) if(k!=='kind'&&!kindFields.includes(k)) throw new Error(`A lifecycle step has no ${k} field.`);
+  // Converting kinds: start from the new kind's blank step (which
+  // supplies its defaults) and apply the patch — no kind but a transfer
+  // carries an amount or a certificate, so nothing is kept across a
+  // switch, and fields the old kind carried never leak into the new
+  // shape. Within a kind, the checked step drops whatever the new
+  // shape does not carry (a removal's expired flag, above all).
+  const base = kind===list[index].kind ? list[index] : blankKycStep(kind);
+  list[index] = checkedKycStep({...base, ...patch});
+  return list;
+}
+
 // A BASIC-KYC LIFECYCLE: transfers in one order against one running
 // modeled state — a ledger of balances, the issuer's trusted-entity
 // list, and the module's global pause flag. The single-shot model and
