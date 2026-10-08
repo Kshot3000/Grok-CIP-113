@@ -319,6 +319,76 @@ export function buildAddress(paymentCredential, paymentHashHex, stakeCredential,
     smartWalletShape: !!stakeBytes && paymentCredential === 'script',
   };
 }
+// CIP-19 chain pointer construction — the inverse of the pointer parsing
+// in decodeAddressBytes: each coordinate (absolute slot, transaction
+// index, certificate index) is written as a variable-length natural —
+// 7-bit groups, most significant first, the high bit set on every byte
+// except a number's last. The encoding is canonical BY CONSTRUCTION: the
+// groups come from the number's own binary form, so the leading group is
+// never zero (zero itself is the single byte 0x00 the parser accepts) and
+// no coordinate has a second byte form. Construction is strict so every
+// built address inspects back to exactly its inputs: a coordinate must be
+// a non-negative safe integer — a fractional, negative, non-numeric, or
+// beyond-safe-range value is refused rather than rounded or truncated,
+// because the parser itself refuses coordinates it cannot read exactly,
+// and a builder that emitted one would produce an address its own
+// inspector rejects. A coordinate beyond the safe-integer range is also
+// refused for the slot even though slots are far smaller in practice:
+// exactness, not plausibility, is the builder's contract.
+function pointerCoordinate(label, value) {
+  if (value === null || value === undefined) throw new Error(`${label} is required — a pointer address carries all three coordinates (slot, transaction index, certificate index).`);
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer no larger than ${Number.MAX_SAFE_INTEGER} — got ${typeof value === 'number' ? String(value) : `a ${typeof value}`}.`);
+  return value;
+}
+function encodePointerCoordinate(value) {
+  let v = BigInt(value);
+  if (v === 0n) return [0];
+  const groups = [];
+  while (v > 0n) { groups.unshift(Number(v & 0x7fn)); v >>= 7n; }
+  return groups.map((g, i) => (i < groups.length - 1 ? g | 0x80 : g));
+}
+// Pointer address construction — the last CIP-19 payment form the
+// address builder did not cover: assemble a pointer address entirely
+// locally from a payment credential and the chain pointer it carries.
+// The credential kind alone picks the header (type 4 = key, 5 = script);
+// there is no stake credential and no stake hash to supply — a stake
+// credential choice belongs to buildAddress, and a pointer address's
+// delegation part IS the pointer. Building a pointer address registers
+// no stake certificate, proves nothing about the certificate the pointer
+// names (whether it exists, which credential it registered, and whether
+// it was deregistered are chain state), and creates no wallet or key.
+// Pointer addresses are a legacy form — CIP-19 notes new ones cannot be
+// added on mainnet from the Conway era — so this builder's honest use is
+// reproducing an existing address byte for byte to verify it, and
+// testnet or tooling work; it assembles bytes, it does not add an
+// address on any chain. Anchored externally: building from the official
+// CIP-19 vectors' payment credentials and their published pointer
+// reproduces all four official pointer addresses exactly.
+export function buildPointerAddress(paymentCredential, paymentHashHex, pointer, network) {
+  if (!['key', 'script'].includes(paymentCredential)) throw new Error('Payment credential must be a key hash or a script hash.');
+  if (![0, 1].includes(network)) throw new Error('Network must be 0 (testnet) or 1 (mainnet).');
+  if (!pointer || typeof pointer !== 'object' || Array.isArray(pointer)) throw new Error('A chain pointer is required — an object with slot, txIndex, and certIndex coordinates.');
+  const slot = pointerCoordinate('Slot', pointer.slot);
+  const txIndex = pointerCoordinate('Transaction index', pointer.txIndex);
+  const certIndex = pointerCoordinate('Certificate index', pointer.certIndex);
+  const paymentBytes = credentialBytes('Payment credential', paymentHashHex);
+  const type = paymentCredential === 'script' ? 5 : 4;
+  const bytes = Uint8Array.from([(type << 4) | network, ...paymentBytes, ...encodePointerCoordinate(slot), ...encodePointerCoordinate(txIndex), ...encodePointerCoordinate(certIndex)]);
+  return {
+    address: encodeAddress(bytes),
+    hex: bytesToHex(bytes),
+    network,
+    networkName: network === 1 ? 'Mainnet' : 'Testnet',
+    type,
+    kind: 'Pointer',
+    byteLength: bytes.length,
+    payment: { credential: paymentCredential, hash: bytesToHex(paymentBytes) },
+    pointer: { slot, txIndex, certIndex },
+    stake: null,
+    rewardAddress: null,
+    smartWalletShape: false,
+  };
+}
 export function normalizeWalletAddress(raw) {
   const address=raw?.startsWith('addr')?raw:encodeAddress(hexToBytes(raw));
   decodeAddress(address); return address;

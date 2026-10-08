@@ -146,6 +146,7 @@ test('the network page wires the pointer result with its honesty copy', async ()
   assert.match(app, /Stake pointer/);
   assert.match(app, /None can be derived locally/);
   assert.match(app, /which credential it registered/);
-  assert.match(app, /reads existing ones and builds none/);
+  assert.match(app, /builder below only assembles the bytes to reproduce one/);
+  assert.match(app, /registers no stake certificate and adds nothing on any chain/);
   assert.match(app, /the chain pointer a pointer address carries/);
 });
