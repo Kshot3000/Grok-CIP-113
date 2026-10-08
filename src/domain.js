@@ -574,6 +574,65 @@ export function simulateSeizure(s={}) {
   return {allowed:checks.every(c=>c.pass),checks};
 }
 
+// Custom scenarios for the SINGLE-SHOT substandard labs. The presets
+// each isolate one failure, so a builder cannot ask the question these
+// labs exist for in combination: what happens when several things are
+// wrong at once — an expired certificate AND a pause AND an unlisted
+// recipient — and which checks fail together? The seizure presets have
+// the same gap in miniature: three of the four authority/listing
+// combinations, with the unauthorised actor facing a clean holder (both
+// checks failing at once) missing. A custom scenario is one modeled
+// state, not a sequence: each helper validates the scenario against
+// EXACTLY the fields its module's simulator reads — every field present,
+// boolean, and no others — and returns a new object, so a scenario the
+// simulator would reject as malformed can never be constructed here,
+// and a field belonging to another module (a recipient entry on basic
+// KYC, which never checks recipients) is refused rather than silently
+// ignored. Flags are booleans, not strings: an editor maps its choices
+// to true/false before calling, and a string flag is refused.
+const SUBSTANDARD_SCENARIO_FIELDS = Object.freeze({
+  'freeze-seize': Object.freeze(['senderDenylisted', 'recipientDenylisted']),
+  kyc: Object.freeze(['certPresent', 'certTrustedIssuer', 'certSignatureValid', 'certNamesSender', 'certExpired', 'paused']),
+  'kyc-extended': Object.freeze(['certPresent', 'certTrustedIssuer', 'certSignatureValid', 'certNamesSender', 'certExpired', 'paused', 'recipientAllowlisted', 'recipientEntryExpired', 'selfTransfer']),
+});
+const SEIZURE_SCENARIO_FIELDS = Object.freeze(['actorAuthorised', 'holderDenylisted']);
+
+export function substandardScenarioFields(substandard) {
+  const fields = SUBSTANDARD_SCENARIO_FIELDS[substandard];
+  if (!fields) throw new Error('Choose a modeled reference substandard (freeze-and-seize, KYC, or KYC extended). Generic PRISM rules are evaluated by the transfer simulator.');
+  return fields;
+}
+
+function copyScenario(fields, scenario, label) {
+  if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) throw new Error(`Choose a ${label} scenario.`);
+  for (const k of Object.keys(scenario)) if (!fields.includes(k)) throw new Error(`Scenario field ${k} is not part of the ${label} model.`);
+  boolFields(scenario, fields);
+  return Object.fromEntries(fields.map(f => [f, scenario[f]]));
+}
+
+export function copySubstandardScenario(substandard, scenario) {
+  return copyScenario(substandardScenarioFields(substandard), scenario, substandard);
+}
+
+export function updateSubstandardScenario(substandard, scenario, field, value) {
+  const fields = substandardScenarioFields(substandard);
+  const copy = copySubstandardScenario(substandard, scenario);
+  if (!fields.includes(field)) throw new Error(`Scenario field ${field} is not part of the ${substandard} model.`);
+  if (typeof value !== 'boolean') throw new Error(`Scenario field ${field} must be true or false.`);
+  return { ...copy, [field]: value };
+}
+
+export function copySeizureScenario(scenario) {
+  return copyScenario(SEIZURE_SCENARIO_FIELDS, scenario, 'seizure');
+}
+
+export function updateSeizureScenario(scenario, field, value) {
+  const copy = copySeizureScenario(scenario);
+  if (!SEIZURE_SCENARIO_FIELDS.includes(field)) throw new Error(`Scenario field ${field} is not part of the seizure model.`);
+  if (typeof value !== 'boolean') throw new Error(`Scenario field ${field} must be true or false.`);
+  return { ...copy, [field]: value };
+}
+
 // A freeze-and-seize LIFECYCLE: transfers, denylist updates, and seizures
 // in one order, against one running modeled state — a ledger of balances
 // plus the denylist those balances are checked against. The single-shot
