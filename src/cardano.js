@@ -547,6 +547,167 @@ export function buildAssetUnit(policyHex, assetNameHex) {
     decoded: decodeAssetName(nameHex),
   };
 }
+// ---------------------------------------------------------------------------
+// Byron-era (bootstrap) addresses: the pre-Shelley address form, kept for
+// backward compatibility (CIP-19). A Byron address is Base58 text carrying
+// a CBOR object: an array of a tag-24 byte string — the payload — and a
+// CRC32 of the payload bytes. The payload is itself CBOR: an array of the
+// 28-byte address root, an attributes map, and an address type. The root
+// is a double hash (SHA3-256, then Blake2b-224) of the spending data and
+// attributes, so the key or script behind an address cannot be recovered
+// from it — decoding reports the root, never the spending data itself.
+// Attribute values are double-CBOR-encoded byte strings: key 1 is the
+// encrypted derivation path legacy "random" wallets stored in the address
+// (28 bytes of ChaCha20/Poly1305 ciphertext — reported as present, never
+// decrypted: decryption needs the wallet's spending password, which PRISM
+// never asks for), and key 2 is a CBOR uint32 network discriminant,
+// present only on test networks (Byron mainnet addresses carry none).
+// Byron predates staking entirely: no stake credential, no delegation,
+// and no reward address exists for this form.
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function decodeBase58(text) {
+  for (const ch of text) if (!BASE58_ALPHABET.includes(ch)) throw new Error(`Byron addresses are Base58 — the character "${ch}" is not in the Base58 alphabet.`);
+  let zeros = 0; while (zeros < text.length && text[zeros] === '1') zeros++;
+  const rest = text.slice(zeros);
+  if (!rest) return new Uint8Array(zeros);
+  const bytes = [0];
+  for (const ch of rest) {
+    let carry = BASE58_ALPHABET.indexOf(ch);
+    for (let i = 0; i < bytes.length; i++) { carry += bytes[i] * 58; bytes[i] = carry & 0xff; carry >>= 8; }
+    while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  return Uint8Array.from([...new Array(zeros).fill(0), ...bytes.reverse()]);
+}
+// CRC32 (IEEE 802.3, reflected, polynomial 0xEDB88320) — the checksum a
+// Byron address carries over its payload bytes. Exported so tests can pin
+// it against reference implementations independently of the inspector.
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table[n] = c >>> 0; }
+  return table;
+})();
+export function crc32(bytes) {
+  if (!(bytes instanceof Uint8Array)) throw new Error('CRC32 input must be bytes.');
+  let crc = 0xffffffff;
+  for (const b of bytes) crc = CRC32_TABLE[(crc ^ b) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+// A minimal, strict CBOR reader covering only the types a Byron address
+// can contain (unsigned integers, byte strings, arrays, maps, tag 24).
+// Parsing is canonical-form strict — shortest-form arguments, definite
+// lengths only — so an address decodes to exactly one structure or none:
+// a second byte form of the same address is refused rather than silently
+// accepted, and callers additionally require exact end-of-input.
+function readCborArgument(bytes, offset, ai) {
+  if (ai < 24) return { value: BigInt(ai), next: offset };
+  const width = { 24: 1, 25: 2, 26: 4, 27: 8 }[ai];
+  if (!width) throw new Error('Byron address CBOR uses an indefinite length or a reserved form, which canonical CBOR never does.');
+  if (offset + width > bytes.length) throw new Error('Byron address CBOR is truncated.');
+  let value = 0n; for (let i = 0; i < width; i++) value = (value << 8n) | BigInt(bytes[offset + i]);
+  if (value < { 1: 24n, 2: 256n, 4: 65536n, 8: 4294967296n }[width]) throw new Error('Byron address CBOR is not in canonical (shortest) form.');
+  return { value, next: offset + width };
+}
+function readCborItem(bytes, offset, depth = 0) {
+  if (depth > 4) throw new Error('Byron address CBOR is nested too deeply.');
+  if (offset >= bytes.length) throw new Error('Byron address CBOR is truncated.');
+  const first = bytes[offset], major = first >>> 5, ai = first & 31;
+  if (major === 0) {
+    const r = readCborArgument(bytes, offset + 1, ai);
+    if (r.value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Byron address CBOR integer is too large to read exactly.');
+    return { kind: 'uint', value: Number(r.value), next: r.next };
+  }
+  if (major === 2) {
+    const r = readCborArgument(bytes, offset + 1, ai);
+    if (r.value > BigInt(bytes.length)) throw new Error('Byron address CBOR is truncated.');
+    const length = Number(r.value);
+    if (r.next + length > bytes.length) throw new Error('Byron address CBOR is truncated.');
+    return { kind: 'bytes', value: bytes.slice(r.next, r.next + length), next: r.next + length };
+  }
+  if (major === 4 || major === 5) {
+    const r = readCborArgument(bytes, offset + 1, ai);
+    if (r.value > BigInt(bytes.length)) throw new Error('Byron address CBOR is truncated.');
+    const count = Number(r.value);
+    let o = r.next;
+    if (major === 4) {
+      const items = [];
+      for (let i = 0; i < count; i++) { const item = readCborItem(bytes, o, depth + 1); items.push(item); o = item.next; }
+      return { kind: 'array', items, next: o };
+    }
+    const entries = [];
+    for (let i = 0; i < count; i++) {
+      const key = readCborItem(bytes, o, depth + 1);
+      const value = readCborItem(bytes, key.next, depth + 1);
+      entries.push([key, value]); o = value.next;
+    }
+    return { kind: 'map', entries, next: o };
+  }
+  if (major === 6) {
+    const r = readCborArgument(bytes, offset + 1, ai);
+    const item = readCborItem(bytes, r.next, depth + 1);
+    return { kind: 'tag', tag: Number(r.value), item, next: item.next };
+  }
+  throw new Error('Byron address CBOR contains a type a Byron address never uses.');
+}
+const BYRON_ADDRESS_TYPES = Object.freeze({ 0: 'Public key', 1: 'Script', 2: 'Redemption key' });
+// Decode a Byron (bootstrap) address locally: Base58, strict canonical
+// CBOR, and the payload's CRC32 verified before anything in the payload
+// is read — a corrupted address fails its checksum, it is never partially
+// decoded. Anchored externally on the cardano-wallet design document's
+// two byte-by-byte worked examples (a Yoroi mainnet address and a
+// Daedalus testnet address), the Byron example in CIP-19's own table, and
+// the SLIP-0023 vectors: every one decodes to its published root, type,
+// attributes, and stored CRC32.
+export function inspectByronAddress(raw) {
+  if (typeof raw !== 'string' || raw.length < 30 || raw.length > 200) throw new Error('Enter a Byron (bootstrap) address — Base58 text of roughly 60–115 characters.');
+  const bytes = decodeBase58(raw);
+  const outer = readCborItem(bytes, 0);
+  if (outer.kind !== 'array' || outer.items.length !== 2 || outer.next !== bytes.length) throw new Error('A Byron address is a CBOR array of exactly two items: the tagged payload and its CRC32.');
+  const [tagged, crcItem] = outer.items;
+  if (tagged.kind !== 'tag' || tagged.tag !== 24 || tagged.item.kind !== 'bytes') throw new Error('A Byron address payload is a CBOR tag-24 byte string.');
+  if (crcItem.kind !== 'uint') throw new Error('A Byron address ends with its CRC32 as a CBOR unsigned integer.');
+  const payload = tagged.item.value;
+  const checksum = crc32(payload);
+  if (checksum !== crcItem.value) throw new Error('Byron address checksum failed: the stored CRC32 does not match the payload bytes, so the address was copied incorrectly or is not a Byron address.');
+  const inner = readCborItem(payload, 0);
+  if (inner.kind !== 'array' || inner.items.length !== 3 || inner.next !== payload.length) throw new Error('A Byron address payload is a CBOR array of exactly three items: root, attributes, and type.');
+  const [rootItem, attributesItem, typeItem] = inner.items;
+  if (rootItem.kind !== 'bytes' || rootItem.value.length !== 28) throw new Error(`Byron address root must be exactly 28 bytes — got ${rootItem.kind === 'bytes' ? `${rootItem.value.length} bytes` : 'a non-byte-string'}.`);
+  if (attributesItem.kind !== 'map') throw new Error('Byron address attributes must be a CBOR map.');
+  if (typeItem.kind !== 'uint' || !(typeItem.value in BYRON_ADDRESS_TYPES)) throw new Error(`Unknown Byron address type ${typeItem.kind === 'uint' ? typeItem.value : '(not a number)'} — Byron types are 0 (public key), 1 (script), and 2 (redemption key).`);
+  let derivationPathCiphertext = null, networkDiscriminant = null;
+  const unknownAttributes = [], seen = new Set();
+  for (const [keyItem, valueItem] of attributesItem.entries) {
+    if (keyItem.kind !== 'uint' || valueItem.kind !== 'bytes') throw new Error('Byron address attributes map unsigned-integer keys to byte strings.');
+    if (seen.has(keyItem.value)) throw new Error(`Byron address attribute ${keyItem.value} appears twice — a canonical attribute map has one value per key.`);
+    seen.add(keyItem.value);
+    if (keyItem.value === 1) {
+      const innerAttr = readCborItem(valueItem.value, 0);
+      if (innerAttr.kind !== 'bytes' || innerAttr.next !== valueItem.value.length) throw new Error('The derivation-path attribute is not a CBOR byte string.');
+      if (innerAttr.value.length !== 28) throw new Error(`The encrypted derivation path must be 28 bytes — got ${innerAttr.value.length}.`);
+      derivationPathCiphertext = bytesToHex(innerAttr.value);
+    } else if (keyItem.value === 2) {
+      const innerAttr = readCborItem(valueItem.value, 0);
+      if (innerAttr.kind !== 'uint' || innerAttr.next !== valueItem.value.length) throw new Error('The network attribute is not a CBOR unsigned integer.');
+      networkDiscriminant = innerAttr.value;
+    } else unknownAttributes.push(keyItem.value);
+  }
+  return {
+    address: raw,
+    era: 'Byron',
+    root: bytesToHex(rootItem.value),
+    type: typeItem.value,
+    typeName: BYRON_ADDRESS_TYPES[typeItem.value],
+    networkDiscriminant,
+    networkName: networkDiscriminant === null ? 'Mainnet' : 'Test network',
+    hasDerivationPath: derivationPathCiphertext !== null,
+    derivationPathCiphertext,
+    unknownAttributes,
+    checksum,
+    checksumHex: checksum.toString(16).padStart(8, '0'),
+    payloadByteLength: payload.length,
+    byteLength: bytes.length,
+  };
+}
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
   if(![0,1].includes(network))throw new Error('Unsupported network.');
