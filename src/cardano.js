@@ -154,6 +154,38 @@ export function deriveRewardAddress(address) {
     byteLength:29,
   };
 }
+// Reward (stake) address construction — the inverse of inspectRewardAddress,
+// and the standalone form of deriveRewardAddress: assemble a CIP-19 reward
+// address directly from a stake credential (kind + 28-byte hash) and a
+// network, entirely locally, without needing a payment address to derive it
+// from. The credential kind alone picks the header type (14 = key, 15 =
+// script); there is no payment credential in a reward address at all.
+// Construction is strict so every built address inspects back to exactly
+// its inputs: a hash that is not exactly 28 bytes is refused with its byte
+// count, because a shorter or longer hash is not a Cardano credential under
+// any reading. Building a reward address creates no stake account or key,
+// registers no stake certificate, delegates to no pool, and proves nothing
+// about the credential: whether it is registered or delegated is chain
+// state, and a script hash names no script until a deployed script hashes
+// to it. The address built from a base address's stake credential is
+// exactly the address deriveRewardAddress derives from that base address —
+// the two constructions are the same bytes, pinned by test.
+export function buildRewardAddress(stakeCredential, stakeHashHex, network) {
+  if (!['key', 'script'].includes(stakeCredential)) throw new Error('Stake credential must be a key hash or a script hash.');
+  if (![0, 1].includes(network)) throw new Error('Network must be 0 (testnet) or 1 (mainnet).');
+  const stakeBytes = credentialBytes('Stake credential', stakeHashHex);
+  const reward = rewardAddressFor(network, stakeCredential, stakeBytes);
+  return {
+    address: reward.address,
+    hex: reward.hex,
+    network,
+    networkName: network === 1 ? 'Mainnet' : 'Testnet',
+    type: reward.type,
+    credential: stakeCredential,
+    hash: bytesToHex(stakeBytes),
+    byteLength: 29,
+  };
+}
 // Shelley address construction — the inverse of inspectAddress: assemble a
 // CIP-19 payment address from its credentials, entirely locally. The header
 // byte is fully determined by the credential kinds: base types 0–3 pair a
