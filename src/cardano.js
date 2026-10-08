@@ -232,6 +232,47 @@ export function cip68Pair(nameHex) {
   });
   return { nameHex: hex, kind: isReference ? 'reference' : 'user', decoded, pairs };
 }
+// CIP-68 name construction — the inverse of decodeAssetName: build the
+// exact asset-name hex for a chosen label and a human-readable name, so a
+// builder designing a token pair works from the same bytes explorers will
+// report instead of hand-assembling a prefix. The name is built entirely
+// locally; nothing is minted. Construction is deliberately strict so that
+// every name it returns decodes back to exactly the inputs (round-trip):
+// the text must be printable (the decoder's own rule — no control
+// characters), it must survive UTF-8 encoding exactly (a lone surrogate,
+// which TextEncoder would silently replace, is refused), and the total
+// name — 4 label bytes plus the text's UTF-8 bytes, or the text alone when
+// unlabeled — must fit Cardano's 32-byte asset-name limit, counted in
+// BYTES, not characters: a multibyte character costs its full UTF-8 length.
+export function encodeAssetName(label, text) {
+  if (label !== null && !Object.values(CIP68_LABELS).some(meta => meta.label === label)) {
+    throw new Error('CIP-68 label must be 100, 222, 333, or 444 — or null for an unlabeled name.');
+  }
+  if (typeof text !== 'string') throw new Error('Asset name text must be a string.');
+  if ([...text].some(ch => { const c = ch.codePointAt(0); return c < 0x20 || c === 0x7f; })) {
+    throw new Error('Asset name text must be printable — control characters are not encoded.');
+  }
+  const textBytes = new TextEncoder().encode(text);
+  let roundTrip;
+  try { roundTrip = new TextDecoder('utf-8', { fatal: true }).decode(textBytes); } catch { roundTrip = null; }
+  if (roundTrip !== text) throw new Error('Asset name text cannot be represented exactly as UTF-8.');
+  const prefixHex = label === null ? '' : CIP68_PREFIX_BY_LABEL[label];
+  const contentHex = bytesToHex(textBytes);
+  const nameHex = prefixHex + contentHex;
+  const byteLength = nameHex.length / 2;
+  if (byteLength > 32) {
+    throw new Error(`Asset name would be ${byteLength} bytes — Cardano asset names are limited to 32 bytes (${label === null ? 'the text alone' : `the label prefix takes 4, leaving ${32 - 4} for the text`}; this text is ${textBytes.length} UTF-8 bytes).`);
+  }
+  return {
+    nameHex,
+    byteLength,
+    label: label === null ? null : { ...CIP68_LABELS[prefixHex], prefixHex },
+    contentHex,
+    text,
+    textByteLength: textBytes.length,
+    maxTextBytes: label === null ? 32 : 28,
+  };
+}
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
   if(![0,1].includes(network))throw new Error('Unsupported network.');
