@@ -797,6 +797,56 @@ export function buildByronAddress(rootHex, type, networkDiscriminant = null, der
     byteLength: outer.length,
   };
 }
+// Smart-wallet verification — the checking half of deriveSmartWallet:
+// given an address claimed to be a CIP-113 smart wallet, a claimed owner
+// address, and a claimed programmable base script hash, re-derive what
+// those claims produce and compare position by position, entirely
+// locally. The verdict is component-wise, not a single boolean dressed
+// up as one: the shape (a base address with a script payment credential),
+// the base script in the payment position, the owner in the stake
+// position — hash AND credential kind, because derivation picks the
+// header type from the owner's payment kind, so a stake position holding
+// the owner's hash under the wrong kind is a different address — and
+// the network shared by both addresses each get their own verdict, so
+// a mismatch names WHICH claim failed instead of merely failing. A
+// match is byte equality with the re-derived address, nothing weaker.
+// Verification proves only that this address IS the derivation of that
+// owner credential and that base script hash: it does not prove the
+// base script is deployed, that the hash belongs to a CIP-113
+// deployment, or that any token sits in a registry — those are chain
+// and deployment questions this comparison cannot see.
+export function verifySmartWallet(candidateAddress, ownerAddress, baseScriptHash) {
+  if(typeof baseScriptHash!=='string'||!/^[0-9a-f]{56}$/i.test(baseScriptHash)) throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
+  const script=baseScriptHash.toLowerCase();
+  const candidate=inspectAddress(candidateAddress);
+  const owner=inspectAddress(ownerAddress);
+  const networkMatch=candidate.network===owner.network;
+  const shape=candidate.smartWalletShape;
+  const baseScriptMatch=candidate.payment.hash===script;
+  const ownerMatch=!!candidate.stake&&candidate.stake.hash===owner.payment.hash&&candidate.stake.credential===owner.payment.credential;
+  // Derivation is only attempted on a shared network: deriveSmartWallet
+  // refuses a network the owner address is not on, by design.
+  const derivedAddress=networkMatch?deriveSmartWallet(ownerAddress, script, candidate.network):null;
+  const match=shape&&networkMatch&&baseScriptMatch&&ownerMatch&&derivedAddress===candidate.address;
+  return {
+    match, shape, networkMatch, baseScriptMatch, ownerMatch,
+    address: candidate.address,
+    type: candidate.type,
+    kind: candidate.kind,
+    network: candidate.network,
+    networkName: candidate.networkName,
+    paymentHash: candidate.payment.hash,
+    stake: candidate.stake,
+    pointer: candidate.pointer,
+    ownerAddress: owner.address,
+    ownerPaymentHash: owner.payment.hash,
+    ownerCredential: owner.payment.credential,
+    ownerNetwork: owner.network,
+    ownerNetworkName: owner.networkName,
+    baseScriptHash: script,
+    derivedAddress,
+  };
+}
 export function deriveSmartWallet(ownerAddress, baseScriptHash, network) {
   if(!/^[0-9a-f]{56}$/i.test(baseScriptHash))throw new Error('Base script hash must be exactly 56 hexadecimal characters (28 bytes).');
   if(![0,1].includes(network))throw new Error('Unsupported network.');
