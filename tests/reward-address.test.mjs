@@ -66,9 +66,15 @@ test('every derived reward address round-trips through the reward inspector', ()
       assert.equal(viaBech32.type, derived.type);
       assert.equal(viaBech32.network, network);
       assert.equal(viaBech32.address, derived.address);
-      // CIP-30 hands reward addresses back as hex; that form inspects identically.
+      // CIP-30 hands reward addresses back as hex; that form inspects
+      // identically apart from the recorded input form (hex has no
+      // checksum — the form is part of the result, not a footnote).
       const viaHex = inspectRewardAddress(derived.hex);
-      assert.deepEqual(viaHex, viaBech32);
+      assert.equal(viaHex.inputForm, 'hex');
+      assert.equal(viaBech32.inputForm, 'bech32');
+      const { inputForm: _hexForm, ...hexRest } = viaHex;
+      const { inputForm: _bechForm, ...bechRest } = viaBech32;
+      assert.deepEqual(hexRest, bechRest);
     }
   }
 });

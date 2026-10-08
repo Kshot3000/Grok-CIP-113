@@ -53,8 +53,13 @@ test('every built reward address round-trips through the reward inspector', () =
       assert.equal(viaBech32.type, built.type);
       assert.equal(viaBech32.network, network);
       assert.equal(viaBech32.address, built.address);
-      // CIP-30 hands reward addresses back as hex; that form inspects identically.
-      assert.deepEqual(inspectRewardAddress(built.hex), viaBech32);
+      // CIP-30 hands reward addresses back as hex; that form inspects
+      // identically apart from the recorded input form.
+      const viaHex = inspectRewardAddress(built.hex);
+      assert.equal(viaHex.inputForm, 'hex');
+      const { inputForm: _f, ...hexRest } = viaHex;
+      const { inputForm: _g, ...bechRest } = viaBech32;
+      assert.deepEqual(hexRest, bechRest);
     }
   }
 });

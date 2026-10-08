@@ -164,12 +164,18 @@ export function inspectAddress(address) {
 // credential, 15 = script credential; low nibble = network) followed by the
 // 28-byte stake credential. CIP-30 returns them as hex; the bech32 stake /
 // stake_test form is accepted too. Decoded locally like payment addresses —
-// this says what the credential IS, never what it controls or holds.
+// this says what the credential IS, never what it controls or holds. The
+// two encodings are NOT equally safe, so the result records which one was
+// entered, exactly as the payment inspector does (v1.44): Bech32's checksum
+// is verified, while hex carries no checksum at all — a purely hexadecimal
+// string is unambiguously the hex form, because a Bech32 reward string can
+// never be all-hex (its stake / stake_test prefix contains 'k', 's', 't').
 export function inspectRewardAddress(raw) {
   if(typeof raw!=='string'||raw.length>200) throw new Error('Enter a Shelley reward address.');
-  let bytes;
-  if(/^(?:[a-f0-9]{2})+$/i.test(raw)) {
-    bytes=hexToBytes(raw.toLowerCase());
+  let bytes,form;
+  if(/^[0-9a-f]+$/i.test(raw)) {
+    if(raw.length%2) throw new Error('Reward address hex must have an even number of characters — each byte is two hex digits.');
+    bytes=hexToBytes(raw.toLowerCase()); form='hex';
   } else {
     if(raw!==raw.toLowerCase()&&raw!==raw.toUpperCase()) throw new Error('Mixed-case Bech32 address.');
     const s=raw.toLowerCase(),split=s.lastIndexOf('1'),hrp=s.slice(0,split);
@@ -178,17 +184,23 @@ export function inspectRewardAddress(raw) {
     if(data.some(v=>v<0)||polymod([...expand(hrp),...data])!==1) throw new Error('Address checksum is invalid.');
     bytes=Uint8Array.from(convert(data.slice(0,-6),5,8,false));
     if((bytes[0]&15)===1!==(hrp==='stake')) throw new Error('Address network prefix does not match its header.');
+    form='bech32';
   }
   const type=bytes[0]>>>4,network=bytes[0]&15;
   if(bytes.length!==29||![14,15].includes(type)||![0,1].includes(network)) throw new Error('Use a Shelley reward address (header type 14 or 15, 29 bytes).');
   return {
     address:encodeBech32(network===1?'stake':'stake_test',bytes),
+    hex:bytesToHex(bytes),
     network,
     networkName:network===1?'Mainnet':'Testnet',
     type,
     credential:type===14?'key':'script',
     hash:bytesToHex(bytes.slice(1,29)),
     byteLength:bytes.length,
+    // Which encoding the address was entered in ('bech32' or 'hex'): the
+    // decoded credential is identical either way, but Bech32's checksum was
+    // verified while hex has none — callers state which guarantee applies.
+    inputForm:form,
   };
 }
 // Derive a base address's reward (stake) address locally: a base address's
