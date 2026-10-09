@@ -264,6 +264,60 @@ export function buildRewardAddress(stakeCredential, stakeHashHex, network) {
     byteLength: 29,
   };
 }
+// Reward address verification — the checking half of buildRewardAddress,
+// in the same discipline as verifyAddress: a claimed reward address (the
+// stake1… / stake_test1… — or the hex form CIP-30 returns — that an
+// explorer, a counterparty, a pool tool, or a listing gives you) is
+// compared position by position against the stake credential and network
+// it is claimed to name: the credential (hash AND kind) and the network
+// each get their own verdict, so a mismatch names which claim failed.
+// A reward address carries exactly one credential, so there are fewer
+// positions than a payment address has — but the kind still matters: the
+// same 28-byte hash claimed as a key credential when the address carries
+// it as a script credential is a different reward address (header type 14
+// vs 15), and a hash-only comparison would pass it silently. A match is
+// byte equality with the address rebuilt from the claims
+// (buildRewardAddress itself, so the claim validation is the builder's
+// own: a non-28-byte claimed hash is refused with its count). The
+// candidate is read by inspectRewardAddress, so the result records which
+// encoding it was entered in: a Bech32 candidate's checksum was verified,
+// a hex candidate carries no checksum — the decoded credential is the
+// same either way, but the guarantee is not, and the verifier does not
+// hide the difference. Claims that cannot be evaluated at all (a payment
+// or Byron candidate, a bad-checksum or mixed-case Bech32 string, an
+// odd-length or wrong-length hex string, a malformed claimed hash) are
+// REFUSED, not reported as mismatches: a mismatch is a well-formed reward
+// address naming a different credential. A match proves only the naming —
+// that this reward address is exactly that stake credential on that
+// network. It does not prove the credential is registered or delegated,
+// that anyone holds the stake key, that a script exists behind a script
+// hash, or that the account holds rewards or has ever received any;
+// those are chain questions this comparison cannot see.
+export function verifyRewardAddress(candidateAddress, stakeCredential, stakeHashHex, network) {
+  const candidate = inspectRewardAddress(candidateAddress);
+  const built = buildRewardAddress(stakeCredential, stakeHashHex, network);
+  const credentialMatch = candidate.hash === built.hash && candidate.credential === built.credential;
+  const networkMatch = candidate.network === built.network;
+  const match = credentialMatch && networkMatch && candidate.address === built.address;
+  return {
+    match, credentialMatch, networkMatch,
+    address: candidate.address,
+    hex: candidate.hex,
+    inputForm: candidate.inputForm,
+    type: candidate.type,
+    credential: candidate.credential,
+    hash: candidate.hash,
+    network: candidate.network,
+    networkName: candidate.networkName,
+    claimedCredential: built.credential,
+    claimedHash: built.hash,
+    claimedNetwork: built.network,
+    claimedNetworkName: built.networkName,
+    builtAddress: built.address,
+    builtHex: built.hex,
+    builtType: built.type,
+  };
+}
 // Shelley address construction — the inverse of inspectAddress: assemble a
 // CIP-19 payment address from its credentials, entirely locally. The header
 // byte is fully determined by the credential kinds: base types 0–3 pair a
