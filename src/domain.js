@@ -2234,6 +2234,249 @@ export function verifyDelegatePairing(input, claimed) {
   return { status, valid, expected, claimed: claimedNorm, verdicts, missing: [], shortfall: 0, action: plan.action, registryNodeRef: plan.registryNodeRef, pairs: plan.pairs };
 }
 
+// CIP-113 TransferAct output-value calculation, modeled locally from
+// the spec's "Output Value Calculation" and "Output Validation"
+// sections (TransferAct constructor).
+//
+// The transfer delegate does not ask where each token went, pair by
+// pair. It computes ONE expected value and checks the transaction's
+// outputs at programmableLogicBase addresses against it, per asset:
+//
+//   expected = validated input value + validated mint value
+//
+// - VALIDATED INPUT value: the quantities of a programmable asset in
+//   the UTxOs spent from programmableLogicBase, summed per asset
+//   (policy + asset name). Several spent UTxOs can hold the same
+//   asset; their quantities add — inputs are a list of UTxOs, not a
+//   value map, so duplicate input entries SUM here.
+// - VALIDATED MINT value: tx.mint for that asset, SIGNED — a mint
+//   adds, a burn subtracts. The spec's own examples: input 100, burn
+//   30, expected output 70; input 100, mint 50, expected output 150.
+//   A mint-only asset (nothing spent) has expected = its mint: mint
+//   value is folded into the same accumulator as spent value, which
+//   is also why the registry proofs cover minted and burned policies
+//   alike. tx.mint IS a value map — one entry per asset — so a
+//   modeled mint listing the same asset twice cannot be read as a
+//   mint at all and is REFUSED, never summed.
+// - VALIDATED is the load-bearing word: only policies proven
+//   registered (a TokenExists registry proof) enter the accumulator.
+//   A policy proven absent is treated as an ordinary native token and
+//   its input and mint quantities are reported as EXCLUDED, never
+//   counted — a planner that summed every policy it was handed would
+//   overstate the expected programmable output by exactly the
+//   ordinary tokens' amounts, and the delegate would demand base
+//   outputs no honest transfer owes.
+// - Quantities are decimal strings parsed as BigInt end to end: a
+//   JavaScript number cannot name every int64 quantity, so a numeric
+//   quantity is REFUSED rather than rounded. An input quantity must
+//   be positive (a UTxO does not list an asset it holds none of); a
+//   mint quantity must be non-zero (a mint entry moves supply or it
+//   is not an entry); each modeled quantity is bounded by the signed
+//   64-bit asset ceiling this studio models (MAX_ASSET).
+//
+// A burn larger than the validated input for an asset makes the
+// expected value negative — no output can contain a negative amount,
+// so that modeled transfer is UNPLANNABLE with the offending assets
+// named and the (negative) arithmetic still shown; nothing is
+// clipped to zero, because a clipped expectation would bless a
+// transfer that tries to burn tokens it does not hold.
+//
+// Boundary honesty: the expected value is computed against the
+// modeled lists entered — PRISM read no transaction, no UTxO, and no
+// chain state, and the "validated" policies here are the ones the
+// model is TOLD were proven registered; whether a real transaction's
+// proofs actually validate them, whether each token's transfer logic
+// executed via withdraw-zero, and whether the holder authorized the
+// spend are the delegate's other checks, not judged here.
+function transferAssetName(value, label) {
+  if (typeof value !== 'string') throw new Error(`${label} must be the asset name as a hexadecimal string (empty for the unnamed asset).`);
+  const v = value.trim().toLowerCase();
+  if (!/^(?:[a-f0-9]{2})*$/.test(v)) throw new Error(`${label} is not an even number of hexadecimal characters — ${JSON.stringify(value)} given.`);
+  if (v.length > 64) throw new Error(`${label} is ${v.length / 2} bytes — an asset name is at most 32 bytes.`);
+  return v;
+}
+
+function transferQuantity(value, label, { signed }) {
+  if (typeof value !== 'string') throw new Error(`${label} must be a decimal string — a JavaScript number cannot name every int64 quantity exactly, so a numeric quantity is refused rather than rounded.`);
+  const v = value.trim();
+  if (!(signed ? /^-?\d+$/ : /^\d+$/).test(v)) throw new Error(`${label} must be a ${signed ? 'signed ' : ''}whole-number decimal string — ${JSON.stringify(value)} given, refused rather than rounded.`);
+  const n = BigInt(v);
+  if (signed && n === 0n) throw new Error(`${label} is zero — a mint entry either mints or burns; a zero entry is not an entry in tx.mint.`);
+  if (!signed && n === 0n) throw new Error(`${label} is zero — a spent UTxO does not list an asset it holds none of.`);
+  if ((n < 0n ? -n : n) > MAX_ASSET) throw new Error(`${label} exceeds the signed 64-bit asset ceiling this studio models (${MAX_ASSET.toString()} base units).`);
+  return n;
+}
+
+function transferValueEntries(value, label, kind) {
+  if (!Array.isArray(value)) throw new Error(`The ${label} must be an array, one entry per ${kind === 'inputs' ? 'spent UTxO holding' : kind === 'mint' ? 'minted or burned' : 'output holding'} asset.`);
+  return value.map((e, i) => {
+    if (!e || typeof e !== 'object' || Array.isArray(e)) throw new Error(`${label === 'inputs' ? 'Input' : label === 'mint' ? 'Mint' : 'Output'} entry ${i + 1} must be an object naming a policy, an asset name, and a quantity${kind === 'outputs' ? ', and whether the output sits at a base address' : ''}.`);
+    const fields = kind === 'outputs' ? ['policy', 'assetName', 'quantity', 'atBase'] : ['policy', 'assetName', 'quantity'];
+    for (const k of Object.keys(e)) if (!fields.includes(k)) throw new Error(`${label === 'inputs' ? 'Input' : label === 'mint' ? 'Mint' : 'Output'} entry ${i + 1} carries an unknown field ${JSON.stringify(k)} — it names only ${fields.join(', ')}.`);
+    const entry = {
+      policy: registryPolicyId(e.policy, `${label === 'inputs' ? 'Input' : label === 'mint' ? 'Mint' : 'Output'} entry ${i + 1}'s policy`),
+      assetName: transferAssetName(e.assetName, `${label === 'inputs' ? 'Input' : label === 'mint' ? 'Mint' : 'Output'} entry ${i + 1}'s asset name`),
+      quantity: transferQuantity(e.quantity, `${label === 'inputs' ? 'Input' : label === 'mint' ? 'Mint' : 'Output'} entry ${i + 1}'s quantity`, { signed: kind === 'mint' }),
+    };
+    if (kind === 'outputs') {
+      if (typeof e.atBase !== 'boolean') throw new Error(`Output entry ${i + 1} must say, as a boolean, whether the output sits at a programmableLogicBase address — where an output sits is what this check turns on.`);
+      entry.atBase = e.atBase;
+    }
+    return entry;
+  });
+}
+
+function aggregateValue(entries) {
+  const map = new Map();
+  for (const e of entries) {
+    const key = `${e.policy}|${e.assetName}`;
+    const cur = map.get(key) ?? { policy: e.policy, assetName: e.assetName, quantity: 0n };
+    cur.quantity += e.quantity;
+    map.set(key, cur);
+  }
+  return [...map.values()].sort((a, b) => (a.policy < b.policy ? -1 : a.policy > b.policy ? 1 : a.assetName < b.assetName ? -1 : a.assetName > b.assetName ? 1 : 0));
+}
+
+export function planTransferOutputValue(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('The output-value plan needs an object naming the validated (proven-registered) policies, the input value spent from base addresses, and the transaction mint value.');
+  for (const k of Object.keys(input)) if (!['validatedPolicies', 'inputs', 'mint'].includes(k)) throw new Error(`The output-value plan carries an unknown field ${JSON.stringify(k)} — it names only validatedPolicies, inputs, and mint.`);
+  if (!Array.isArray(input.validatedPolicies)) throw new Error('The validated policies must be an array of policy IDs — the policies a TokenExists registry proof validated.');
+  const validatedPolicies = input.validatedPolicies.map((p, i) => registryPolicyId(p, `Validated policy ${i + 1}`));
+  for (let i = 0; i < validatedPolicies.length; i++) if (validatedPolicies.indexOf(validatedPolicies[i]) !== i) throw new Error(`Validated policies must be unique: ${validatedPolicies[i]} appears more than once — a policy is proven registered once, or not at all.`);
+  const validated = new Set(validatedPolicies);
+  const inputs = transferValueEntries(input.inputs, 'inputs', 'inputs');
+  const mint = transferValueEntries(input.mint, 'mint', 'mint');
+  const mintKeys = new Set();
+  for (const e of mint) {
+    const key = `${e.policy}|${e.assetName}`;
+    if (mintKeys.has(key)) throw new Error(`The mint lists policy ${e.policy} asset ${e.assetName || '(unnamed)'} more than once — tx.mint is a value map and holds each asset once; the two entries cannot be read as one mint.`);
+    mintKeys.add(key);
+  }
+  const aggInputs = aggregateValue(inputs);
+  const aggMint = aggregateValue(mint);
+  const byKey = new Map();
+  for (const e of aggInputs) byKey.set(`${e.policy}|${e.assetName}`, { policy: e.policy, assetName: e.assetName, inputQuantity: e.quantity, mintQuantity: 0n });
+  for (const e of aggMint) {
+    const key = `${e.policy}|${e.assetName}`;
+    const cur = byKey.get(key) ?? { policy: e.policy, assetName: e.assetName, inputQuantity: 0n, mintQuantity: 0n };
+    cur.mintQuantity = e.quantity;
+    byKey.set(key, cur);
+  }
+  const all = [...byKey.values()].sort((a, b) => (a.policy < b.policy ? -1 : a.policy > b.policy ? 1 : a.assetName < b.assetName ? -1 : a.assetName > b.assetName ? 1 : 0));
+  const render = e => ({ policy: e.policy, assetName: e.assetName, inputQuantity: e.inputQuantity.toString(), mintQuantity: e.mintQuantity.toString(), expectedQuantity: (e.inputQuantity + e.mintQuantity).toString() });
+  const entries = all.filter(e => validated.has(e.policy)).map(render);
+  const excluded = all.filter(e => !validated.has(e.policy)).map(e => ({ policy: e.policy, assetName: e.assetName, inputQuantity: e.inputQuantity.toString(), mintQuantity: e.mintQuantity.toString() }));
+  const impossible = entries.filter(e => BigInt(e.expectedQuantity) < 0n).map(e => ({ policy: e.policy, assetName: e.assetName, expectedQuantity: e.expectedQuantity }));
+  return {
+    status: impossible.length ? 'unplannable' : 'planned',
+    validatedPolicies,
+    entries,
+    excluded,
+    impossible,
+    missing: impossible.length ? ['burn-exceeds-input'] : [],
+    inputEntryCount: inputs.length,
+    mintEntryCount: mint.length,
+  };
+}
+
+// CIP-113 TransferAct output verification, checked locally against the
+// planner's own expected value for the same modeled transaction
+// (validate-once discipline: the expected values below ARE
+// planTransferOutputValue's output, so plan and check cannot drift).
+//
+// The delegate's output validation has TWO requirements, and each
+// modeled asset gets both verdicts because they fail separately and
+// the fix differs:
+// - AT LEAST THE EXPECTED VALUE AT BASE: the total of the asset
+//   across outputs at programmableLogicBase addresses is >= the
+//   expected value. AT LEAST is the spec's word — a base total above
+//   expected PASSES this check (the surplus is reported, not failed):
+//   the delegate's check is a floor that keeps programmable value
+//   from leaking away, and the ledger's own value-preservation rule —
+//   not modeled or judged here — is what forbids creating value from
+//   nothing. A shortfall names exactly how much is missing.
+// - NOTHING PROGRAMMABLE LEAVES BASE: any quantity of a validated
+//   asset in an output at another address has ESCAPED, and fails that
+//   asset however comfortably the base total meets its floor —
+//   meeting the floor with one hand while sending the same asset out
+//   the other is exactly the leak the "remain at base" rule exists to
+//   stop. (An asset of an UNvalidated policy in a non-base output is
+//   an ordinary native token moving ordinarily, reported as excluded
+//   and never judged.)
+//
+// The claim here is a whole output list, so there is no 'not-stated'
+// verdict: an expected asset absent from the outputs is a base total
+// of zero — a shortfall stated by the list itself, not a blank field.
+// A claimed output that cannot be read (a fractional quantity, an
+// entry that does not say whether it sits at a base address) is
+// REFUSED, never scored. A modeled transfer the planner finds
+// unplannable (a burn past the validated input) leaves no expected
+// value to check against: any claim is reported UNPLANNABLE.
+//
+// Boundary honesty carries over: a correct verdict proves only the
+// two output requirements against the modeled lists entered — PRISM
+// read no transaction and no chain state, value preservation across
+// the whole transaction, the registry proofs themselves, each
+// token's transfer-logic withdraw-zero, and holder authorization are
+// separate requirements this tool does not judge.
+export function verifyTransferOutputs(input, outputs) {
+  const plan = planTransferOutputValue(input);
+  const outs = transferValueEntries(outputs, 'outputs', 'outputs');
+  if (plan.status === 'unplannable') {
+    return { status: 'unplannable', valid: false, verdicts: null, missing: plan.missing, impossible: plan.impossible, validatedPolicies: plan.validatedPolicies };
+  }
+  const validated = new Set(plan.validatedPolicies);
+  const baseTotals = new Map();
+  const nonBaseTotals = new Map();
+  const excludedMap = new Map();
+  for (const e of outs) {
+    const key = `${e.policy}|${e.assetName}`;
+    if (!validated.has(e.policy)) {
+      const cur = excludedMap.get(key) ?? { policy: e.policy, assetName: e.assetName, quantity: 0n };
+      cur.quantity += e.quantity;
+      excludedMap.set(key, cur);
+      continue;
+    }
+    const map = e.atBase ? baseTotals : nonBaseTotals;
+    map.set(key, (map.get(key) ?? 0n) + e.quantity);
+  }
+  const verdictFor = (policy, assetName, expected) => {
+    const key = `${policy}|${assetName}`;
+    const baseOutput = baseTotals.get(key) ?? 0n;
+    const nonBaseOutput = nonBaseTotals.get(key) ?? 0n;
+    return {
+      policy,
+      assetName,
+      expectedQuantity: expected.toString(),
+      baseOutputQuantity: baseOutput.toString(),
+      nonBaseOutputQuantity: nonBaseOutput.toString(),
+      meetsExpected: baseOutput >= expected,
+      escaped: nonBaseOutput > 0n,
+      surplusQuantity: (baseOutput > expected ? baseOutput - expected : 0n).toString(),
+      shortfallQuantity: (baseOutput < expected ? expected - baseOutput : 0n).toString(),
+    };
+  };
+  const verdicts = plan.entries.map(e => verdictFor(e.policy, e.assetName, BigInt(e.expectedQuantity)));
+  const expectedKeys = new Set(plan.entries.map(e => `${e.policy}|${e.assetName}`));
+  const extraKeys = [...new Set([...baseTotals.keys(), ...nonBaseTotals.keys()])].filter(k => !expectedKeys.has(k)).sort();
+  for (const key of extraKeys) {
+    const [policy, assetName] = key.split('|');
+    verdicts.push({ ...verdictFor(policy, assetName, 0n), unexpected: true });
+  }
+  for (const v of verdicts) if (v.unexpected !== true) v.unexpected = false;
+  const valid = verdicts.every(v => v.meetsExpected && !v.escaped);
+  return {
+    status: valid ? 'correct' : 'incorrect',
+    valid,
+    verdicts,
+    missing: [],
+    impossible: [],
+    validatedPolicies: plan.validatedPolicies,
+    excludedOutputs: [...excludedMap.values()].sort((a, b) => (a.policy < b.policy ? -1 : a.policy > b.policy ? 1 : a.assetName < b.assetName ? -1 : 1)).map(e => ({ policy: e.policy, assetName: e.assetName, quantity: e.quantity.toString() })),
+    outputEntryCount: outs.length,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
