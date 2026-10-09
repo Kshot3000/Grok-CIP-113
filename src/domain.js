@@ -2078,6 +2078,162 @@ export function verifyBaseSpendRedeemer(input, claimed) {
   return { status, valid, expected, claimed: claimedNorm, verdicts, missing: [], paramsRef: plan.paramsRef, globalCredential: plan.globalCredential };
 }
 
+// CIP-113 action-delegate pairing planning, modeled locally from the
+// spec's ThirdPartyAct and UnfrackingAct sections.
+//
+// TransferAct is not the only action. ThirdPartyAct (an action on a
+// holder's tokens without their consent, as the token's substandard
+// permits — seizure is the common case) and UnfrackingAct (the holder
+// restructuring their own UTxOs for one policy, ownership unchanged)
+// each carry a delegate redeemer of the same shape:
+//
+//   type ThirdPartyRedeemer { registry_node_idx: Int, outputs_start_idx: Int }
+//   type UnfrackingRedeemer { registry_node_idx: Int, outputs_start_idx: Int }
+//
+// - registry_node_idx is the index, in the transaction's REFERENCE
+//   INPUTS as listed, of the RegistryNode for the policy being acted
+//   on. Like params_idx, it counts the list as built — reference
+//   inputs are not reordered by the ledger.
+// - outputs_start_idx is the index in tx.outputs at which the paired
+//   continuing outputs begin. The delegate walks tx.inputs IN ORDER:
+//   every input at a programmableLogicBase address is paired with the
+//   next consecutive output starting from outputs_start_idx, and
+//   inputs at other addresses are skipped and consume no output. The
+//   n-th base input encountered is therefore paired with
+//   outputs[outputs_start_idx + n]. Outputs before outputs_start_idx
+//   are paired with nothing — but for a third-party action, any of the
+//   acted-on policy's tokens they hold at base addresses still count
+//   toward the output side of that action's balance invariant, which
+//   is what lets a third-party action share a transaction with other
+//   actions that produce earlier base outputs.
+//
+// The trap this planner exists to prevent is counting inputs instead
+// of BASE inputs: a builder who pairs the k-th input with
+// outputs[start + k] misaligns every pair after the first non-base
+// input, and the delegate then compares each continuing output
+// against the wrong input — same-address and same-datum checks fail,
+// or worse, pass against a different UTxO than the one being acted on.
+// The two hints are again hints the delegate resolves and checks, not
+// values it trusts. The verifier below judges a claimed redeemer
+// against this planner's own output (validate-once discipline).
+//
+// Refusal vs unplannable: a modeled transaction that cannot be READ —
+// an unknown action, a duplicated reference input, an input or output
+// entry that does not say whether it sits at a base address, a start
+// index that is fractional or negative — is REFUSED. A readable
+// transaction whose pairing cannot be completed — the acted-on
+// policy's RegistryNode is not among the reference inputs, the start
+// index points past the last output, or there are fewer outputs from
+// the start than base inputs to pair — is UNPLANNABLE, naming what is
+// missing and inventing no index and no pair.
+//
+// Boundary honesty: the pairing is computed for the modeled lists
+// entered, in which each input and output is reduced to the one fact
+// the pairing consumes — whether it sits at a programmableLogicBase
+// address. PRISM read no transaction and no registry, and the pairing
+// alone does not make an action valid: whether each paired output
+// keeps its input's address and datum, keeps every other policy's
+// tokens byte-identical, actually changes the acted-on policy's
+// tokens (third-party) or strips that policy entirely (unfracking),
+// executes the token's logic script via withdraw-zero, and satisfies
+// the balance invariant are the delegate's checks against the real
+// values, which this model does not carry and does not judge.
+function delegateAction(value) {
+  if (value !== 'third-party' && value !== 'unfracking') throw new Error(`The delegate action must be third-party or unfracking — ${JSON.stringify(value)} given. TransferAct carries registry proofs instead (the proof planner above), not a pairing redeemer.`);
+  return value;
+}
+
+function delegateEntries(value, label) {
+  if (!Array.isArray(value)) throw new Error(`The ${label} must be an array, one entry per ${label === 'inputs' ? 'input' : 'output'} in transaction order.`);
+  return value.map((e, i) => {
+    if (!e || typeof e !== 'object' || Array.isArray(e)) throw new Error(`${label === 'inputs' ? 'Input' : 'Output'} ${i + 1} must be an object saying whether it sits at a programmableLogicBase address.`);
+    for (const k of Object.keys(e)) if (k !== 'atBase') throw new Error(`${label === 'inputs' ? 'Input' : 'Output'} ${i + 1} carries an unknown field ${JSON.stringify(k)} — the pairing reads only whether it sits at a base address.`);
+    if (typeof e.atBase !== 'boolean') throw new Error(`${label === 'inputs' ? 'Input' : 'Output'} ${i + 1} must say, as a boolean, whether it sits at a programmableLogicBase address — the pairing turns on exactly that fact.`);
+    return { atBase: e.atBase };
+  });
+}
+
+function delegateStartIndex(value) {
+  if (!Number.isInteger(value) || value < 0) throw new Error(`outputs_start_idx must be a non-negative integer — ${JSON.stringify(value)} given, refused rather than rounded.`);
+  return value;
+}
+
+export function planDelegatePairing(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('The pairing plan needs an object naming the action, the reference inputs, which of them is the acted-on policy\u2019s RegistryNode, the inputs, the outputs, and where the paired outputs start.');
+  for (const k of Object.keys(input)) if (!['action', 'referenceInputs', 'registryNodeRef', 'inputs', 'outputs', 'outputsStartIdx'].includes(k)) throw new Error(`The pairing plan carries an unknown field ${JSON.stringify(k)} — it names only action, referenceInputs, registryNodeRef, inputs, outputs, and outputsStartIdx.`);
+  const action = delegateAction(input.action);
+  const refs = baseReferenceInputs(input.referenceInputs);
+  if (typeof input.registryNodeRef !== 'string' || !input.registryNodeRef.trim()) throw new Error('The registry node reference must name one of the reference inputs — the RegistryNode of the policy being acted on.');
+  const registryNodeRef = input.registryNodeRef.trim();
+  const inputs = delegateEntries(input.inputs, 'inputs');
+  const outputs = delegateEntries(input.outputs, 'outputs');
+  const outputsStartIdx = delegateStartIndex(input.outputsStartIdx);
+  const registryNodeIndex = refs.indexOf(registryNodeRef);
+  const baseInputIndexes = inputs.map((e, i) => (e.atBase ? i : -1)).filter(i => i !== -1);
+  const pairs = baseInputIndexes.map((inputIndex, n) => ({ baseOrdinal: n, inputIndex, outputIndex: outputsStartIdx + n }));
+  const missing = [];
+  if (registryNodeIndex === -1) missing.push('registry-node');
+  let shortfall = 0;
+  if (outputsStartIdx > outputs.length) missing.push('outputs-start');
+  else if (outputsStartIdx + pairs.length > outputs.length) { missing.push('paired-outputs'); shortfall = outputsStartIdx + pairs.length - outputs.length; }
+  const plannable = missing.length === 0;
+  return {
+    status: plannable ? 'planned' : 'unplannable',
+    action,
+    registryNodeRef,
+    registryNodeIndex: registryNodeIndex === -1 ? null : registryNodeIndex,
+    outputsStartIdx,
+    pairs: plannable ? pairs : [],
+    baseInputCount: pairs.length,
+    skippedInputCount: inputs.length - pairs.length,
+    inputCount: inputs.length,
+    outputCount: outputs.length,
+    referenceCount: refs.length,
+    earlyOutputCount: Math.min(outputsStartIdx, outputs.length),
+    earlyBaseOutputCount: outputs.slice(0, outputsStartIdx).filter(e => e.atBase).length,
+    trailingOutputCount: plannable ? outputs.length - (outputsStartIdx + pairs.length) : 0,
+    missing,
+    shortfall,
+  };
+}
+
+// CIP-113 delegate redeemer verification, checked locally against the
+// pairing planner's own output for the same modeled transaction.
+//
+// Each hint gets its own verdict — registry_node_idx and
+// outputs_start_idx — because they fail separately: a node index
+// pointing at the wrong reference input makes the delegate read a
+// different policy's configuration, while a start index off by one
+// shifts EVERY pair by one output, so each continuing output is
+// compared against the wrong input. An unstated hint (undefined) is
+// 'not-stated' and the claim INCOMPLETE; a malformed hint is REFUSED.
+// A transaction the planner finds unplannable leaves nothing to
+// score: any claim for it is reported UNPLANNABLE with the missing
+// pieces named. Boundary honesty carries over from the planner.
+export function verifyDelegatePairing(input, claimed) {
+  const plan = planDelegatePairing(input);
+  if (!claimed || typeof claimed !== 'object' || Array.isArray(claimed)) throw new Error('The claimed redeemer must be an object naming a registry_node_idx and an outputs_start_idx.');
+  for (const k of Object.keys(claimed)) if (!['registryNodeIdx', 'outputsStartIdx'].includes(k)) throw new Error(`The claimed redeemer carries an unknown field ${JSON.stringify(k)} — a delegate redeemer names only registry_node_idx and outputs_start_idx.`);
+  const readHint = (value, label) => {
+    if (value === undefined) return 'not-stated';
+    if (!Number.isInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer — ${JSON.stringify(value)} given, refused rather than rounded.`);
+    return value;
+  };
+  const claimedNorm = { registryNodeIdx: readHint(claimed.registryNodeIdx, 'Claimed registry_node_idx'), outputsStartIdx: readHint(claimed.outputsStartIdx, 'Claimed outputs_start_idx') };
+  if (plan.status === 'unplannable') {
+    return { status: 'unplannable', valid: false, expected: null, claimed: claimedNorm, verdicts: null, missing: plan.missing, shortfall: plan.shortfall, action: plan.action, registryNodeRef: plan.registryNodeRef };
+  }
+  const expected = { registryNodeIdx: plan.registryNodeIndex, outputsStartIdx: plan.outputsStartIdx };
+  const verdicts = {
+    registryNodeIdx: claimedNorm.registryNodeIdx === 'not-stated' ? 'not-stated' : claimedNorm.registryNodeIdx === expected.registryNodeIdx,
+    outputsStartIdx: claimedNorm.outputsStartIdx === 'not-stated' ? 'not-stated' : claimedNorm.outputsStartIdx === expected.outputsStartIdx,
+  };
+  const values = Object.values(verdicts);
+  const valid = values.every(v => v === true);
+  const status = valid ? 'correct' : values.includes(false) ? 'incorrect' : 'incomplete';
+  return { status, valid, expected, claimed: claimedNorm, verdicts, missing: [], shortfall: 0, action: plan.action, registryNodeRef: plan.registryNodeRef, pairs: plan.pairs };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
