@@ -1523,6 +1523,118 @@ export function diffRegistryProofs(beforeKeys, afterKeys, queriedPolicies) {
   };
 }
 
+// CIP-113 registry insertion planning, modeled locally against the same
+// registry list the proof planner plans against.
+//
+// Registering a programmable token inserts one node into the registry's
+// sorted linked list (spec: "Programmable token registration"). The
+// registering transaction MUST spend the node preceding the new policy
+// (prev_node), and its outputs carry that node back with only its `next`
+// rewritten to the new key, plus the new node whose `next` is prev_node's
+// old `next`. The RegistryInsert redeemer names the key being registered
+// and the minting logic credential — and the validator binds the two
+// together (the official issuance script parameterized by that credential
+// MUST hash to the key), so the credential is issuer/deployment data this
+// plan reports as required, never invents.
+//
+// The insertion position comes from the planner itself: planRegistryProofs
+// over the single policy being registered names the covering node for an
+// unregistered policy — and the covering node IS prev_node, the largest
+// key below the policy whose next passes it. Planning the insertion
+// through the planner means the two can never disagree about where a
+// policy belongs, and the modeled list inherits the planner's refusal
+// discipline (28-byte keys, each once, strictly increasing).
+//
+// The boundary cases are where this plan goes past the planner, honestly:
+// an absence PROOF for a policy before the first key or after the last
+// key is unprovable in this model, because the covering node's next is a
+// terminal value the list does not carry — but an INSERTION still has a
+// definite shape there. Before the first key, prev_node is the registry's
+// origin node: not in the modeled list, so its key and index are reported
+// as origin, while the new node's next IS known (the current first key).
+// After the last key, prev_node is the last node itself — fully known —
+// and the new node's next is prev_node's old next, the list's terminal
+// value, which the model does not carry and does not invent. Into an
+// empty list, prev_node is the origin and the new node's next is the
+// terminal: the position is known, both neighbours are deployment data.
+//
+// A policy already in the list is not an insertion at all: it is reported
+// as already registered, naming the node it already occupies — a second
+// RegistryInsert for the same key has no position to plan.
+export function planRegistryInsertion(registryKeys, newPolicy) {
+  const plan = planRegistryProofs(registryKeys, [newPolicy]);
+  const keys = plan.keys;
+  const policy = plan.proofs[0].policy;
+  const proof = plan.proofs[0];
+  if (proof.status === 'registered') {
+    return {
+      keys,
+      registrySize: keys.length,
+      policy,
+      status: 'already-registered',
+      insertionIndex: proof.nodeIndex,
+      existingNode: { index: proof.nodeIndex, key: proof.nodeKey, nextKey: proof.nextKey },
+      prevNode: null,
+      prevKind: null,
+      newNode: null,
+      successorKey: null,
+      shiftedKeys: [],
+      resultingKeys: [...keys],
+      resultingSize: keys.length,
+    };
+  }
+  let insertionIndex, prevNode, prevKind, successorKey, newNext, newNextKind;
+  if (proof.status === 'unregistered') {
+    // The covering node is prev_node; the new node takes its place in the
+    // chain with next = the covering node's current next.
+    insertionIndex = proof.nodeIndex + 1;
+    prevNode = { index: proof.nodeIndex, key: proof.nodeKey, nextBefore: proof.nextKey, nextAfter: policy };
+    prevKind = 'node';
+    successorKey = proof.nextKey;
+    newNext = proof.nextKey;
+    newNextKind = 'node';
+  } else if (proof.reason === 'before-first') {
+    insertionIndex = 0;
+    prevNode = null;
+    prevKind = 'origin';
+    successorKey = keys[0];
+    newNext = keys[0];
+    newNextKind = 'node';
+  } else if (proof.reason === 'after-last') {
+    const last = keys.length - 1;
+    insertionIndex = keys.length;
+    prevNode = { index: last, key: keys[last], nextBefore: null, nextAfter: policy };
+    prevKind = 'node';
+    successorKey = null;
+    newNext = null;
+    newNextKind = 'terminal';
+  } else {
+    // empty-registry
+    insertionIndex = 0;
+    prevNode = null;
+    prevKind = 'origin';
+    successorKey = null;
+    newNext = null;
+    newNextKind = 'terminal';
+  }
+  const resultingKeys = [...keys.slice(0, insertionIndex), policy, ...keys.slice(insertionIndex)];
+  return {
+    keys,
+    registrySize: keys.length,
+    policy,
+    status: 'insertable',
+    insertionIndex,
+    existingNode: null,
+    prevNode,
+    prevKind,
+    newNode: { key: policy, nextKey: newNext, nextKind: newNextKind },
+    successorKey,
+    shiftedKeys: keys.slice(insertionIndex),
+    resultingKeys,
+    resultingSize: resultingKeys.length,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
