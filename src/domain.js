@@ -1253,6 +1253,14 @@ export function makeManifest(design, network) {
 // a real registry node is created by the pinned reference implementation.
 // Deterministic by design (no timestamp), so two exports of the same design
 // can be diffed field by field.
+export const REGISTRY_FIELDS_STILL_REQUIRED = Object.freeze([
+  'Token policy ID, issued by reviewed and deployed validators',
+  'Registry node position and membership / non-membership proofs from the live deployment',
+  'Protocol parameters and programmable-logic base script hash of the target deployment',
+  'Datum encoding (Plutus Data / CBOR) produced by the pinned reference implementation',
+]);
+export const REGISTRY_PREVIEW_NOTE = 'This preview is a PRISM design aid, not a CIP-113 registry datum, Plutus blueprint, policy ID, or on-chain registration. PRISM does not register, mint, or deploy anything. A developer must implement the token with the pinned Foundation reference implementation, create the registry entry on a test network, and verify it independently before any production use.';
+
 export function registryDatumPreview(design, network) {
   const errors=validateDesign(design);
   if(errors.length) throw new Error(errors.join(' '));
@@ -1270,13 +1278,87 @@ export function registryDatumPreview(design, network) {
       eligibilityRequired:design.identity,
     },
     substandard:{id:design.substandard,name:sub.name,reference:sub.source,modeledLocally:true},
-    registryFieldsStillRequired:[
-      'Token policy ID, issued by reviewed and deployed validators',
-      'Registry node position and membership / non-membership proofs from the live deployment',
-      'Protocol parameters and programmable-logic base script hash of the target deployment',
-      'Datum encoding (Plutus Data / CBOR) produced by the pinned reference implementation',
-    ],
-    note:'This preview is a PRISM design aid, not a CIP-113 registry datum, Plutus blueprint, policy ID, or on-chain registration. PRISM does not register, mint, or deploy anything. A developer must implement the token with the pinned Foundation reference implementation, create the registry entry on a test network, and verify it independently before any production use.',
+    registryFieldsStillRequired:[...REGISTRY_FIELDS_STILL_REQUIRED],
+    note:REGISTRY_PREVIEW_NOTE,
+  };
+}
+
+// Verify a registry-datum preview file someone was handed, the checking
+// counterpart to the export above. The preview is a developer handoff: it
+// travels without the design it came from, so until now an edited copy —
+// one claiming to BE a CIP datum or an on-chain registration, carrying an
+// inflated supply, naming a different substandard, or quietly dropping
+// the Plutus Data / CBOR item from the still-required list — could not be
+// checked in PRISM at all. This parser applies the manifest discipline to
+// the preview format: amounts must be canonical exact decimal strings (a
+// JSON number has already lost precision at parse time and a leading-zero
+// string is not the form PRISM exports — both rejected, never converted),
+// the honesty flags must state exactly what a preview is, the
+// substandard section must match PRISM's catalog field by field, the
+// still-required list and the note must match the canonical text when
+// present, and no section or field PRISM never writes may appear — a
+// policyId or cbor field smuggled into a preview is precisely the claim
+// this check exists to refuse. Hand-trimmed files may omit the flags,
+// the still-required list, or the note (absent is tolerated, as in the
+// manifest parser), but nothing present may contradict the canonical
+// values. The return is a freshly built canonical preview containing
+// only the fields PRISM writes, in export order — verifying imports
+// nothing, registers nothing, and changes no design.
+function previewAmount(value, label) {
+  if(typeof value!=='string') throw new Error(`Registry preview ${label} must be an exact decimal string, not a JSON ${Array.isArray(value)?'array':typeof value}. Re-export the preview from PRISM.`);
+  if(!/^\d+$/.test(value)||BigInt(value).toString()!==value) throw new Error(`Registry preview ${label} is not a canonical decimal string. Re-export the preview from PRISM.`);
+  const n=BigInt(value);
+  if(n<=0n) throw new Error(`Registry preview ${label} must be greater than zero.`);
+  if(n>MAX_ASSET) throw new Error(`Registry preview ${label} exceeds the supported signed 64-bit asset limit.`);
+  return value;
+}
+function noUnknownKeys(section, allowed, label) {
+  for(const k of Object.keys(section)) if(!allowed.includes(k)) throw new Error(`This registry preview has an unexpected ${label} field (${k}). PRISM previews never carry one — re-export it from PRISM.`);
+}
+
+export function parseRegistryDatumPreview(raw) {
+  if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
+  let p;
+  try { p=JSON.parse(raw); } catch { throw new Error('This file is not valid JSON.'); }
+  if(p?.kind!=='prism.registry-datum-preview'||p.previewVersion!==1||!NETWORKS[p.network]) throw new Error('This is not a supported PRISM registry preview.');
+  noUnknownKeys(p,['kind','previewVersion','applicationSpecific','cipDatum','registeredOnChain','network','token','transferPolicy','substandard','registryFieldsStillRequired','note'],'top-level');
+  if(p.applicationSpecific!==undefined&&p.applicationSpecific!==true) throw new Error('This preview claims it is not application-specific. A PRISM registry preview is application-specific design information, not a CIP datum.');
+  if(p.cipDatum!==undefined&&p.cipDatum!==false) throw new Error('This preview claims to be a CIP-113 registry datum. A PRISM preview never is — re-export it from PRISM.');
+  if(p.registeredOnChain!==undefined&&p.registeredOnChain!==false) throw new Error('This preview claims an on-chain registration, which PRISM cannot back. PRISM registers nothing — re-export it from PRISM.');
+  if(!p.token||typeof p.token!=='object'||Array.isArray(p.token)) throw new Error('This registry preview is missing its token section. Re-export the preview from PRISM.');
+  noUnknownKeys(p.token,['name','ticker','decimals','initialSupplyBaseUnits'],'token');
+  if(typeof p.token.name!=='string'||p.token.name!==p.token.name.trim()||!p.token.name||new TextEncoder().encode(p.token.name).length>32) throw new Error('Registry preview token name must be 1–32 UTF-8 bytes, exactly as exported (no padding).');
+  if(typeof p.token.ticker!=='string'||!(/^[A-Z][A-Z0-9]{1,7}$/).test(p.token.ticker)) throw new Error('Registry preview ticker must use 2–8 uppercase letters or digits and start with a letter.');
+  if(!Number.isInteger(p.token.decimals)||p.token.decimals<0||p.token.decimals>6) throw new Error('Registry preview decimals must be between 0 and 6.');
+  const supply=previewAmount(p.token.initialSupplyBaseUnits,'initial supply');
+  if(!p.transferPolicy||typeof p.transferPolicy!=='object'||Array.isArray(p.transferPolicy)) throw new Error('This registry preview is missing its transfer policy section. Re-export the preview from PRISM.');
+  noUnknownKeys(p.transferPolicy,['access','perTransferLimitBaseUnits','issuerPauseModeled','eligibilityRequired'],'transfer policy');
+  if(!['allowlist','open'].includes(p.transferPolicy.access)) throw new Error('Registry preview transfer access must be allowlist or open.');
+  for(const k of ['issuerPauseModeled','eligibilityRequired']) if(typeof p.transferPolicy[k]!=='boolean') throw new Error(`Registry preview transfer policy ${k} must be true or false.`);
+  let limit=null;
+  if(p.transferPolicy.perTransferLimitBaseUnits!==null) {
+    limit=previewAmount(p.transferPolicy.perTransferLimitBaseUnits,'per-transfer limit');
+    if(BigInt(limit)>BigInt(supply)) throw new Error('Registry preview per-transfer limit is larger than its initial supply. The file may have been edited after export — re-export it from PRISM.');
+  }
+  if(!p.substandard||typeof p.substandard!=='object'||Array.isArray(p.substandard)) throw new Error('This registry preview is missing its substandard section. Re-export the preview from PRISM.');
+  noUnknownKeys(p.substandard,['id','name','reference','modeledLocally'],'substandard');
+  const sub=substandardById(p.substandard.id);
+  if(!sub) throw new Error('This registry preview names an unknown substandard module. Re-export the preview from PRISM.');
+  const expectedSub={id:sub.id,name:sub.name,reference:sub.source,modeledLocally:true};
+  for(const k of Object.keys(expectedSub)) if(p.substandard[k]!==expectedSub[k]) throw new Error(`Registry preview substandard does not match PRISM's catalog (${k}). The file may have been edited after export — re-export it from PRISM.`);
+  if(p.registryFieldsStillRequired!==undefined) {
+    if(!Array.isArray(p.registryFieldsStillRequired)||p.registryFieldsStillRequired.length!==REGISTRY_FIELDS_STILL_REQUIRED.length||p.registryFieldsStillRequired.some((v,i)=>v!==REGISTRY_FIELDS_STILL_REQUIRED[i])) throw new Error('Registry preview still-required list does not match the fields every PRISM preview names. The file may have been edited after export — re-export it from PRISM.');
+  }
+  if(p.note!==undefined&&p.note!==REGISTRY_PREVIEW_NOTE) throw new Error('Registry preview note does not match the note every PRISM preview carries. The file may have been edited after export — re-export it from PRISM.');
+  return {
+    kind:'prism.registry-datum-preview', previewVersion:1,
+    applicationSpecific:true, cipDatum:false, registeredOnChain:false,
+    network:p.network,
+    token:{name:p.token.name,ticker:p.token.ticker,decimals:p.token.decimals,initialSupplyBaseUnits:supply},
+    transferPolicy:{access:p.transferPolicy.access,perTransferLimitBaseUnits:limit,issuerPauseModeled:p.transferPolicy.issuerPauseModeled,eligibilityRequired:p.transferPolicy.eligibilityRequired},
+    substandard:{...expectedSub},
+    registryFieldsStillRequired:[...REGISTRY_FIELDS_STILL_REQUIRED],
+    note:REGISTRY_PREVIEW_NOTE,
   };
 }
 
