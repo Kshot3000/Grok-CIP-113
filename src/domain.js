@@ -1900,6 +1900,184 @@ export function checkRegistryNodeDatum(datum) {
   return { valid, kind, fields, chainOrdered, unfrackingMode, globalState, fieldOrder: REGISTRY_NODE_FIELD_ORDER, key, next };
 }
 
+// CIP-113 BaseSpendRedeemer hint planning, modeled locally from the
+// spec's delegation architecture ("Architecture: Delegation Pattern" and
+// "Transaction Construction").
+//
+// Every programmable-token input a transaction spends runs
+// programmableLogicBase once. That validator decides nothing itself: it
+// locates the protocol parameters UTxO among the transaction's REFERENCE
+// INPUTS, reads the live programmableLogicGlobal credential from that
+// UTxO's datum, and requires that credential's withdraw-zero. The base
+// input's redeemer is how it finds both things:
+//
+//   type BaseSpendRedeemer { params_idx: Int, wdrl_idx: Int }
+//
+// - params_idx is the index of the protocol parameters UTxO in the
+//   transaction's reference inputs — in the order the transaction lists
+//   them. Reference inputs are NOT reordered by the ledger, so this
+//   index is a position in the list as built.
+// - wdrl_idx is the index of the programmableLogicGlobal credential's
+//   entry in the transaction's WITHDRAWAL MAP — and that map the ledger
+//   DOES order: script credentials first, bytewise within each kind,
+//   then public-key credentials, bytewise within each kind. The index
+//   is therefore a position in the LEDGER-ORDERED map, not in whatever
+//   order the builder happened to insert the withdrawals. A builder
+//   who counts insertions instead of the ledger order points wdrl_idx
+//   at the wrong credential whenever a public-key withdrawal was
+//   inserted before a script one, or script credentials were inserted
+//   out of byte order — and the base validator resolves the hint to a
+//   different credential than the global one and the spend fails.
+//
+// Both fields are HINTS the validator resolves and then checks, rather
+// than values it trusts (spec): a wrong hint resolves to something
+// other than what the validator requires and the check fails, so a
+// dishonest hint can only invalidate its own transaction. This planner
+// computes the two correct hints for a modeled transaction; the
+// verifier below judges a claimed pair against the planner's own
+// output, so plan and check can never disagree (the validate-once
+// discipline of v1.58/v1.64/v1.67, applied to redeemer hints).
+//
+// Refusal vs unplannable, as in PRISM's other tools: a modeled
+// transaction that cannot be READ — a reference input listed twice
+// (reference inputs are a set on chain), the same withdrawal credential
+// listed twice (a withdrawal map holds each credential once), a
+// credential of an unknown kind or with a hash that is not 28 bytes —
+// is REFUSED with the reason. A readable transaction that is missing
+// one of the two things a hint must point at — the protocol parameters
+// UTxO is not among its reference inputs, or the global credential is
+// not among its withdrawals (no withdraw-zero for it is executed) —
+// is UNPLANNABLE: there is no correct hint to give, and the result
+// names what is missing instead of inventing an index.
+//
+// Boundary honesty: the hints are computed for the modeled lists
+// entered. PRISM read no transaction, no protocol parameters UTxO, and
+// no chain state: which reference input actually HOLDS the protocol
+// parameters NFT, and which credential the parameters datum actually
+// names as programmableLogicGlobal today, are deployment data the
+// builder supplies here — an upgrade can re-point the global
+// credential, and the parameters UTxO, not a cached value, is the
+// authority on the current wiring (spec: "Protocol upgradability").
+function baseCredential(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be a credential naming a kind (pubkey or script) and a hash.`);
+  for (const k of Object.keys(value)) if (k !== 'kind' && k !== 'hash') throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a credential names only a kind and a hash.`);
+  if (value.kind === undefined || value.hash === undefined) throw new Error(`${label} must name both a kind (pubkey or script) and a hash.`);
+  if (value.kind !== 'pubkey' && value.kind !== 'script') throw new Error(`${label}'s kind must be pubkey or script — ${JSON.stringify(value.kind)} given.`);
+  const hash = registryBytesHex(value.hash, `${label}'s hash`);
+  if (hash.length / 2 !== 28) throw new Error(`${label}'s hash must be a 28-byte credential hash (56 hexadecimal characters) — ${hash.length / 2} bytes given.`);
+  return { kind: value.kind, hash };
+}
+
+function baseReferenceInputs(referenceInputs) {
+  if (!Array.isArray(referenceInputs)) throw new Error('The reference inputs must be an array naming each reference input.');
+  const refs = referenceInputs.map((r, i) => {
+    if (typeof r !== 'string' || !r.trim()) throw new Error(`Reference input ${i + 1} must be a non-empty name — a hint can only point at an input the transaction actually lists.`);
+    return r.trim();
+  });
+  const seen = new Set();
+  for (const r of refs) {
+    if (seen.has(r)) throw new Error(`Reference input ${JSON.stringify(r)} is listed more than once — reference inputs are a set on chain, so a transaction cannot carry the same input twice and an index into a duplicated list names nothing.`);
+    seen.add(r);
+  }
+  return refs;
+}
+
+function baseWithdrawals(withdrawals) {
+  if (!Array.isArray(withdrawals)) throw new Error('The withdrawals must be an array of credentials.');
+  const list = withdrawals.map((w, i) => baseCredential(w, `Withdrawal ${i + 1}`));
+  const seen = new Set();
+  for (const w of list) {
+    const key = `${w.kind}:${w.hash}`;
+    if (seen.has(key)) throw new Error(`Withdrawal credential ${w.hash} (${w.kind}) is listed more than once — a withdrawal map holds each credential once, so an index into a duplicated map names nothing.`);
+    seen.add(key);
+  }
+  return list;
+}
+
+// The ledger's withdrawal-map order: script credentials first, then
+// public-key credentials, bytewise within each kind (spec, quoted
+// above). Hex-string comparison of lowercase 28-byte hashes IS bytewise
+// comparison, as registryBytesCompare states for bytestrings.
+function ledgerWithdrawalOrder(withdrawals) {
+  const rank = c => (c.kind === 'script' ? 0 : 1);
+  return [...withdrawals].sort((a, b) => rank(a) - rank(b) || registryBytesCompare(a.hash, b.hash));
+}
+
+export function planBaseSpendRedeemer(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('The redeemer plan needs an object naming the reference inputs, which of them holds the protocol parameters, the withdrawals, and the global credential.');
+  for (const k of Object.keys(input)) if (!['referenceInputs', 'paramsRef', 'withdrawals', 'globalCredential'].includes(k)) throw new Error(`The redeemer plan carries an unknown field ${JSON.stringify(k)} — it names only referenceInputs, paramsRef, withdrawals, and globalCredential.`);
+  const refs = baseReferenceInputs(input.referenceInputs);
+  if (typeof input.paramsRef !== 'string' || !input.paramsRef.trim()) throw new Error('The protocol parameters reference must name one of the reference inputs — the UTxO holding the protocol parameters NFT.');
+  const paramsRef = input.paramsRef.trim();
+  const withdrawals = baseWithdrawals(input.withdrawals);
+  const globalCredential = baseCredential(input.globalCredential, 'The programmableLogicGlobal credential');
+  const orderedWithdrawals = ledgerWithdrawalOrder(withdrawals);
+  const paramsIndex = refs.indexOf(paramsRef);
+  const givenWithdrawalIndex = withdrawals.findIndex(w => w.kind === globalCredential.kind && w.hash === globalCredential.hash);
+  const wdrlIndex = orderedWithdrawals.findIndex(w => w.kind === globalCredential.kind && w.hash === globalCredential.hash);
+  const missing = [];
+  if (paramsIndex === -1) missing.push('params');
+  if (wdrlIndex === -1) missing.push('global-withdrawal');
+  return {
+    status: missing.length ? 'unplannable' : 'planned',
+    paramsRef,
+    paramsIndex: paramsIndex === -1 ? null : paramsIndex,
+    globalCredential,
+    wdrlIndex: wdrlIndex === -1 ? null : wdrlIndex,
+    givenWithdrawalIndex: givenWithdrawalIndex === -1 ? null : givenWithdrawalIndex,
+    orderedWithdrawals,
+    referenceCount: refs.length,
+    withdrawalCount: withdrawals.length,
+    missing,
+  };
+}
+
+// CIP-113 BaseSpendRedeemer hint verification, checked locally against
+// the planner's own output for the same modeled transaction.
+//
+// Each hint gets its own verdict — params_idx and wdrl_idx — because
+// they fail separately and the fix differs: a params_idx pointing at a
+// registry node instead of the parameters UTxO, and a wdrl_idx counted
+// in insertion order instead of the ledger's withdrawal order, are
+// different mistakes in different parts of the transaction. An unstated
+// hint (undefined) is 'not-stated' and the claim INCOMPLETE, never a
+// pass and never a failure — the v1.67 discipline. A malformed hint (a
+// fractional or negative index) is REFUSED, never scored. A modeled
+// transaction the planner finds unplannable (no parameters reference,
+// no global withdrawal) leaves nothing to score: any claim for it is
+// reported UNPLANNABLE with the missing pieces named.
+//
+// Boundary honesty carries over from the planner: a correct pair proves
+// only that the two hints resolve to the modeled parameters input and
+// the modeled global credential in the modeled lists entered — PRISM
+// read no transaction and no chain state, and the hints alone do not
+// make a spend valid: the action delegate, the registry proofs, and
+// each registered token's logic withdraw-zero are separate requirements
+// this tool does not judge.
+export function verifyBaseSpendRedeemer(input, claimed) {
+  const plan = planBaseSpendRedeemer(input);
+  if (!claimed || typeof claimed !== 'object' || Array.isArray(claimed)) throw new Error('The claimed redeemer must be an object naming a params_idx and a wdrl_idx.');
+  for (const k of Object.keys(claimed)) if (!['paramsIdx', 'wdrlIdx'].includes(k)) throw new Error(`The claimed redeemer carries an unknown field ${JSON.stringify(k)} — a BaseSpendRedeemer names only params_idx and wdrl_idx.`);
+  const readHint = (value, label) => {
+    if (value === undefined) return 'not-stated';
+    if (!Number.isInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer — ${JSON.stringify(value)} given, refused rather than rounded.`);
+    return value;
+  };
+  const claimedNorm = { paramsIdx: readHint(claimed.paramsIdx, 'Claimed params_idx'), wdrlIdx: readHint(claimed.wdrlIdx, 'Claimed wdrl_idx') };
+  if (plan.status === 'unplannable') {
+    return { status: 'unplannable', valid: false, expected: null, claimed: claimedNorm, verdicts: null, missing: plan.missing, paramsRef: plan.paramsRef, globalCredential: plan.globalCredential };
+  }
+  const expected = { paramsIdx: plan.paramsIndex, wdrlIdx: plan.wdrlIndex };
+  const verdicts = {
+    paramsIdx: claimedNorm.paramsIdx === 'not-stated' ? 'not-stated' : claimedNorm.paramsIdx === expected.paramsIdx,
+    wdrlIdx: claimedNorm.wdrlIdx === 'not-stated' ? 'not-stated' : claimedNorm.wdrlIdx === expected.wdrlIdx,
+  };
+  const values = Object.values(verdicts);
+  const valid = values.every(v => v === true);
+  const status = valid ? 'correct' : values.includes(false) ? 'incorrect' : 'incomplete';
+  return { status, valid, expected, claimed: claimedNorm, verdicts, missing: [], paramsRef: plan.paramsRef, globalCredential: plan.globalCredential };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
