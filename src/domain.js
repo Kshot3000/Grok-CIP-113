@@ -2803,6 +2803,40 @@ export function parseManifest(raw) {
   return {design,network:m.network};
 }
 
+// Verify a design manifest file someone was handed, WITHOUT importing it —
+// the checking counterpart to the import above, as parseRegistryDatumPreview
+// is to the registry preview export. Until now the only way to check a
+// manifest in PRISM was to import it, and importing replaces the design on
+// screen and the draft saved on this device: checking a file a collaborator
+// sent cost you your own work in progress unless you exported it first.
+// Verification runs exactly the import's checks — it calls parseManifest
+// itself, so verify and import can never disagree about whether a file is
+// genuine (validate-once) — and reports only a summary of the design the
+// file describes. The design itself is deliberately NOT returned: there is
+// nothing here for a caller to apply, so verifying can never become a
+// quiet import. The file's own createdAt is carried only when it is a
+// string, and is reported as the file's statement, never as a verified
+// time; an implementation section counts as checked only when it was
+// present to cross-check.
+export function verifyManifest(raw) {
+  const {design,network}=parseManifest(raw);
+  const m=JSON.parse(raw);
+  const sub=substandardById(design.substandard);
+  return {network,summary:{
+    tokenName:design.tokenName,ticker:design.ticker,decimals:design.decimals,
+    supply:design.supply,supplyBaseUnits:toUnits(design.supply,design.decimals).toString(),
+    limitEnabled:design.limitEnabled,
+    limit:design.limitEnabled?design.limit:null,
+    limitBaseUnits:design.limitEnabled?toUnits(design.limit,design.decimals).toString():null,
+    template:design.template,
+    allowlist:design.allowlist,pausable:design.pausable,identity:design.identity,
+    startsPaused:design.paused,
+    substandardId:sub.id,substandardName:sub.name,
+    createdAt:typeof m.createdAt==='string'?m.createdAt:null,
+    implementationChecked:m.implementation!==undefined,
+  }};
+}
+
 export function creditScenario({principal,rate,months,collateral,advance}) {
   const v=[principal,rate,months,collateral,advance].map(Number);
   if(v.some(x=>!Number.isFinite(x))||v[0]<=0||v[0]>1e12||v[1]<0||v[1]>100||v[2]<1||v[2]>360||v[3]<=0||v[3]>1e12||v[4]<1||v[4]>100) throw new Error('Use positive principal and collateral, 0–100% APR, 1–360 months, and a 1–100% advance rate.');
