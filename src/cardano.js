@@ -501,6 +501,69 @@ export function buildPointerAddress(paymentCredential, paymentHashHex, pointer, 
     smartWalletShape: false,
   };
 }
+// Pointer address verification — the checking half of buildPointerAddress,
+// completing the verifier set: every CIP-19 builder in PRISM now has one.
+// verifyAddress cannot check a pointer claim — a pointer address's stake
+// position carries no credential to compare — so a claimed pointer address
+// (the addr1g… / addr_test1g… an explorer, a counterparty, or a listing
+// gives you) is compared POSITION BY POSITION against the payment
+// credential and the chain pointer it is claimed to carry: the payment
+// credential (hash AND kind), each pointer coordinate (slot, transaction
+// index, certificate index), and the network each get their own verdict,
+// so a mismatch names which claim failed. The coordinates are compared
+// individually because they fail individually: a pointer off by one
+// certificate index names a DIFFERENT registration certificate, and a
+// slot-only difference is a different certificate again — collapsing them
+// into one pointer verdict would hide which coordinate to re-check.
+// A match is byte equality with the address rebuilt from the claims
+// (buildPointerAddress itself, so the claim validation is the builder's
+// own: a non-28-byte claimed hash is refused with its count, and a
+// fractional, negative, or missing coordinate is refused by name rather
+// than rounded). The candidate is read by inspectAddress, so the result
+// records which encoding it was entered in: a Bech32 candidate's checksum
+// was verified, a hex candidate (the form CIP-30 returns) carries none —
+// a flipped hex digit is a well-formed mismatch, a flipped Bech32
+// character a checksum refusal. A candidate that is not a pointer address
+// at all (a base, enterprise, or reward address, a Byron address, or
+// garbage) is REFUSED, not reported as a mismatch: a mismatch is a
+// well-formed pointer address built from a different credential or
+// pointer. A match proves only the composition — that this address is
+// exactly that payment credential carrying exactly that pointer on that
+// network. It does not prove the certificate the pointer names exists,
+// which credential it registered, or whether it was later deregistered —
+// resolving the pointer is a chain lookup — and it proves nothing about
+// who holds the payment key or whether a script stands behind a script
+// hash; those are chain and key questions this comparison cannot see.
+export function verifyPointerAddress(candidateAddress, paymentCredential, paymentHashHex, pointer, network) {
+  const candidate = inspectAddress(candidateAddress);
+  if (candidate.kind !== 'Pointer') throw new Error(`That is a ${candidate.kind.toLowerCase()} address, not a pointer address — it carries ${candidate.kind === 'Enterprise' ? 'no stake position at all' : 'a stake credential, not a chain pointer'}. Verify it with the address verifier above, which compares credential claims.`);
+  const built = buildPointerAddress(paymentCredential, paymentHashHex, pointer, network);
+  const paymentMatch = candidate.payment.hash === built.payment.hash && candidate.payment.credential === built.payment.credential;
+  const slotMatch = candidate.pointer.slot === built.pointer.slot;
+  const txIndexMatch = candidate.pointer.txIndex === built.pointer.txIndex;
+  const certIndexMatch = candidate.pointer.certIndex === built.pointer.certIndex;
+  const pointerMatch = slotMatch && txIndexMatch && certIndexMatch;
+  const networkMatch = candidate.network === built.network;
+  const match = paymentMatch && pointerMatch && networkMatch && candidate.address === built.address;
+  return {
+    match, paymentMatch, pointerMatch, slotMatch, txIndexMatch, certIndexMatch, networkMatch,
+    address: candidate.address,
+    inputForm: candidate.inputForm,
+    type: candidate.type,
+    kind: candidate.kind,
+    network: candidate.network,
+    networkName: candidate.networkName,
+    payment: candidate.payment,
+    pointer: candidate.pointer,
+    claimedPayment: built.payment,
+    claimedPointer: built.pointer,
+    claimedNetwork: built.network,
+    claimedNetworkName: built.networkName,
+    builtAddress: built.address,
+    builtHex: built.hex,
+    builtType: built.type,
+  };
+}
 export function normalizeWalletAddress(raw) {
   const address=raw?.startsWith('addr')?raw:encodeAddress(hexToBytes(raw));
   decodeAddress(address); return address;
