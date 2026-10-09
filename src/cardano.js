@@ -1032,6 +1032,69 @@ export function buildByronAddress(rootHex, type, networkDiscriminant = null, der
     byteLength: outer.length,
   };
 }
+// Byron address verification — the checking half of buildByronAddress,
+// and the last builder in PRISM to gain one: a claimed Byron address
+// (the Base58 text a legacy wallet, an old explorer record, or a
+// counterparty gives you) is compared POSITION BY POSITION against the
+// parts it is claimed to be built from — the 28-byte address root, the
+// type, the network discriminant, and the encrypted derivation-path
+// ciphertext — each getting its own verdict, so a mismatch names which
+// claim failed. A match is byte equality with the address rebuilt from
+// the claims (buildByronAddress itself, so the claim validation is the
+// builder's own: a root or ciphertext that is not exactly 28 bytes is
+// refused with its count, an unknown type is refused, and a
+// discriminant outside the CBOR uint32 range is refused rather than
+// truncated). Two positions deserve their own statement. The
+// derivation path is compared AS CIPHERTEXT, byte for byte, and never
+// decrypted — decryption needs the wallet's spending password, which
+// PRISM never asks for. And an address can carry an attribute the
+// builder never writes (any key other than 1 or 2): such an address
+// can match on every NAMED position yet still not be the address the
+// claims build, so the unrecognised attributes are reported as their
+// own verdict instead of leaving an all-positions match that silently
+// differs. The candidate is read by inspectByronAddress, whose CRC32
+// check runs before anything in the payload is read, so a corrupted
+// candidate is REFUSED on its checksum, never reported as a mismatch —
+// a mismatch is a well-formed Byron address built from different
+// parts, and a Shelley candidate or garbage is refused the same way.
+// A match proves only the composition — that this address is exactly
+// that root under that type with those attributes. The root is a
+// double hash (SHA3-256, then Blake2b-224), so a match does not prove
+// which key or script stands behind it and recovers no spending data;
+// Byron predates staking, so there is no stake credential, delegation,
+// or reward address to confirm; and whether the address holds funds
+// is chain state this comparison cannot see.
+export function verifyByronAddress(candidateAddress, rootHex, type, networkDiscriminant = null, derivationPathHex = null) {
+  const candidate = inspectByronAddress(candidateAddress);
+  const built = buildByronAddress(rootHex, type, networkDiscriminant, derivationPathHex);
+  const rootMatch = candidate.root === built.root;
+  const typeMatch = candidate.type === built.type;
+  const networkMatch = candidate.networkDiscriminant === built.networkDiscriminant;
+  const derivationPathMatch = candidate.derivationPathCiphertext === built.derivationPathCiphertext;
+  const match = rootMatch && typeMatch && networkMatch && derivationPathMatch
+    && candidate.unknownAttributes.length === 0 && candidate.address === built.address;
+  return {
+    match, rootMatch, typeMatch, networkMatch, derivationPathMatch,
+    address: candidate.address,
+    root: candidate.root,
+    type: candidate.type,
+    typeName: candidate.typeName,
+    networkDiscriminant: candidate.networkDiscriminant,
+    networkName: candidate.networkName,
+    hasDerivationPath: candidate.hasDerivationPath,
+    derivationPathCiphertext: candidate.derivationPathCiphertext,
+    unknownAttributes: candidate.unknownAttributes,
+    checksumHex: candidate.checksumHex,
+    claimedRoot: built.root,
+    claimedType: built.type,
+    claimedTypeName: built.typeName,
+    claimedNetworkDiscriminant: built.networkDiscriminant,
+    claimedNetworkName: built.networkName,
+    claimedDerivationPathCiphertext: built.derivationPathCiphertext,
+    builtAddress: built.address,
+    builtChecksumHex: built.checksumHex,
+  };
+}
 // Smart-wallet verification — the checking half of deriveSmartWallet:
 // given an address claimed to be a CIP-113 smart wallet, a claimed owner
 // address, and a claimed programmable base script hash, re-derive what
