@@ -319,6 +319,64 @@ export function buildAddress(paymentCredential, paymentHashHex, stakeCredential,
     smartWalletShape: !!stakeBytes && paymentCredential === 'script',
   };
 }
+// Address verification — the checking half of buildAddress, in the same
+// discipline as verifySmartWallet and verifyAssetFingerprint: a claimed
+// payment address (the addr1… / addr_test1… an explorer, a counterparty,
+// or a listing gives you) is compared POSITION BY POSITION against the
+// credentials and network it is claimed to be built from — payment
+// credential (hash AND kind), stake credential (hash AND kind), and
+// network each get their own verdict, so a mismatch names which claim
+// failed instead of merely failing. Eyeballing cannot do this: two
+// 28-byte hashes that differ in one character produce unrelated-looking
+// Bech32 strings. A match is byte equality with the address rebuilt
+// from the claims (buildAddress itself, so the claim validation is the
+// builder's own: a non-28-byte hash is refused with its count, and a
+// stake hash supplied alongside "no stake credential" is refused rather
+// than silently dropped — exactly as the builder refuses it). A pointer
+// address's stake position carries a chain pointer, not a credential, so
+// its stake verdict is always "differs" with the pointer reported — the
+// address may be exactly the pointer address it claims to be, but that
+// is the pointer builder's claim, not a credential claim this verifier
+// can confirm. Claims that cannot be evaluated at all (an undecodable
+// candidate — reward, Byron, garbage — or a malformed claimed hash) are
+// REFUSED, not reported as mismatches: a mismatch is a well-formed
+// address built from different credentials. A match proves only the
+// composition — that this address is exactly those credentials on that
+// network. It does not prove anyone holds the payment key, that a
+// script exists behind a script hash, that the stake credential is
+// registered or delegated, or that the address holds anything; those
+// are key, deployment, and chain questions this comparison cannot see.
+export function verifyAddress(candidateAddress, paymentCredential, paymentHashHex, stakeCredential, stakeHashHex, network) {
+  const candidate = inspectAddress(candidateAddress);
+  const built = buildAddress(paymentCredential, paymentHashHex, stakeCredential, stakeHashHex, network);
+  const paymentMatch = candidate.payment.hash === built.payment.hash && candidate.payment.credential === built.payment.credential;
+  const stakeMatch = candidate.pointer
+    ? false
+    : candidate.stake === null && built.stake === null
+      ? true
+      : !!candidate.stake && !!built.stake && candidate.stake.hash === built.stake.hash && candidate.stake.credential === built.stake.credential;
+  const networkMatch = candidate.network === built.network;
+  const match = paymentMatch && stakeMatch && networkMatch && candidate.address === built.address;
+  return {
+    match, paymentMatch, stakeMatch, networkMatch,
+    address: candidate.address,
+    type: candidate.type,
+    kind: candidate.kind,
+    network: candidate.network,
+    networkName: candidate.networkName,
+    payment: candidate.payment,
+    stake: candidate.stake,
+    pointer: candidate.pointer,
+    smartWalletShape: candidate.smartWalletShape,
+    claimedPayment: built.payment,
+    claimedStake: built.stake,
+    claimedNetwork: built.network,
+    claimedNetworkName: built.networkName,
+    builtAddress: built.address,
+    builtType: built.type,
+    builtKind: built.kind,
+  };
+}
 // CIP-19 chain pointer construction — the inverse of the pointer parsing
 // in decodeAddressBytes: each coordinate (absolute slot, transaction
 // index, certificate index) is written as a variable-length natural —
