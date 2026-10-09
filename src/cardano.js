@@ -845,6 +845,54 @@ export function buildAssetUnit(policyHex, assetNameHex) {
     decoded: decodeAssetName(nameHex),
   };
 }
+// Asset unit verification — the checking half of buildAssetUnit, in the
+// same discipline as the other verifiers: a claimed unit (the concatenated
+// hex an explorer, a counterparty, or a listing gives you) is split by
+// parseAssetUnit and rebuilt from the policy ID and asset name it is
+// claimed to name (buildAssetUnit itself, so claim validation IS the
+// builder's own — a policy that is not exactly 28 bytes is refused with
+// its count, a name over 32 bytes is refused rather than truncated), and
+// the two positions are compared individually: policy ID and asset name
+// each get their own verdict, because they fail individually — the same
+// name under a different policy is a different asset, and the same policy
+// with a different name is a different asset under that policy, and a
+// builder told only 'the unit differs' would have to re-split it by hand
+// to find which half was copied wrong. A match is byte equality with the
+// rebuilt unit, stated in canonical lowercase (an all-uppercase claim is
+// the same unit). The fingerprint of each side is returned as a cross-
+// check: it matches exactly when both positions match. A candidate that
+// cannot be split at all (shorter than a policy ID, a name part over the
+// limit, non-hex, or a Bech32 fingerprint — a hash, which is a different
+// identifier and cannot be split back) is REFUSED, never reported as a
+// mismatch: a mismatch is a well-formed unit of a DIFFERENT asset. A
+// match proves only the composition — not that the asset was minted,
+// exists on chain, is authentic or backed, or sits in a CIP-113 registry;
+// existence is the lookup's question, answered on chain.
+export function verifyAssetUnit(candidateUnitHex, policyHex, assetNameHex) {
+  const candidate = parseAssetUnit(typeof candidateUnitHex === 'string' ? candidateUnitHex.trim() : candidateUnitHex);
+  const built = buildAssetUnit(typeof policyHex === 'string' ? policyHex.trim() : policyHex, typeof assetNameHex === 'string' ? assetNameHex.trim() : assetNameHex);
+  const policyMatch = candidate.policyId === built.policyId;
+  const nameMatch = candidate.assetNameHex === built.assetNameHex;
+  const fingerprintMatch = candidate.fingerprint === built.fingerprint;
+  const match = policyMatch && nameMatch && fingerprintMatch && candidate.unitHex === built.unitHex;
+  return {
+    match, policyMatch, nameMatch, fingerprintMatch,
+    unitHex: candidate.unitHex,
+    byteLength: candidate.byteLength,
+    policyId: candidate.policyId,
+    assetNameHex: candidate.assetNameHex,
+    nameByteLength: candidate.nameByteLength,
+    fingerprint: candidate.fingerprint,
+    decoded: candidate.decoded,
+    claimedPolicyId: built.policyId,
+    claimedAssetNameHex: built.assetNameHex,
+    claimedNameByteLength: built.nameByteLength,
+    builtUnitHex: built.unitHex,
+    builtByteLength: built.byteLength,
+    builtFingerprint: built.fingerprint,
+    builtDecoded: built.decoded,
+  };
+}
 // ---------------------------------------------------------------------------
 // Byron-era (bootstrap) addresses: the pre-Shelley address form, kept for
 // backward compatibility (CIP-19). A Byron address is Base58 text carrying
