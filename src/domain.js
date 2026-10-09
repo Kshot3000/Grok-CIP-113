@@ -1445,6 +1445,84 @@ export function verifyRegistryProofs(registryKeys, queriedPolicies, claimedProof
   };
 }
 
+// CIP-113 registry change impact, compared locally between two modeled
+// registry lists — the registry as it was (the planner's list) and as it
+// would be after a change (a policy registering, a key inserted, a key
+// removed). Registries are living lists: an insertion between two keys
+// shifts the node index of every key after it, a registration turns a
+// covering-node absence proof into an existence proof, and a removal can
+// strand a policy past the new last key altogether. A proof list planned
+// against the old list and carried into a transaction after the change
+// fails verification for reasons that have nothing to do with the policies
+// themselves — this comparison names, per distinct queried policy, exactly
+// which proofs survive the change and which positions moved.
+//
+// Both lists are planned through planRegistryProofs itself, so the impact
+// comparison inherits the planner's disciplines for free: each list is
+// validated as the on-chain list is built (28-byte keys, each once,
+// strictly increasing) and refused if it breaks those invariants, queried
+// duplicates collapse to the one distinct proof, and the per-policy order
+// is lexicographic. Planning and diffing can never disagree about what
+// either list requires, for the same reason planning and verifying
+// cannot (v1.64).
+//
+// Each policy's change is classified by its registration story first —
+// NEWLY REGISTERED and NO LONGER REGISTERED take precedence over the
+// provability story, because a policy that gained or lost registration is
+// the headline even when it also crossed the provable boundary — then
+// NEWLY PROVABLE / NEWLY UNPROVABLE, then PROOF CHANGED (provable on both
+// sides with the same registration status, but the proof itself differs:
+// a shifted node index, a different covering node, a different next key).
+// changedFields names the proof positions that differ — status, proof
+// type, node index, node key, next key — so the re-plan a builder must do
+// is scoped to exactly those positions.
+//
+// Boundary honesty carries over: "unprovable" on either side means the
+// list given carries no covering node for that policy (before its first
+// key, after its last, or an empty list) — a real registry carries those
+// cases on its origin/terminal nodes, deployment data neither modeled
+// list invents. The comparison is between the two lists supplied; PRISM
+// read no live registry, and neither list is one.
+export function diffRegistryProofs(beforeKeys, afterKeys, queriedPolicies) {
+  const before = planRegistryProofs(beforeKeys, queriedPolicies);
+  const after = planRegistryProofs(afterKeys, queriedPolicies);
+  const beforeSet = new Set(before.keys), afterSet = new Set(after.keys);
+  const addedKeys = after.keys.filter(k => !beforeSet.has(k));
+  const removedKeys = before.keys.filter(k => !afterSet.has(k));
+  const afterByPolicy = new Map(after.proofs.map(p => [p.policy, p]));
+  const changedFieldNames = [['status', 'status'], ['proofType', 'proof type'], ['nodeIndex', 'node index'], ['nodeKey', 'node key'], ['nextKey', 'next key']];
+  const perPolicy = before.proofs.map(b => {
+    const a = afterByPolicy.get(b.policy);
+    const differs = changedFieldNames.filter(([f]) => b[f] !== a[f]);
+    if (!differs.length) return { policy: b.policy, change: 'unchanged', changedFields: [], before: b, after: a };
+    let change;
+    if (b.status !== 'registered' && a.status === 'registered') change = 'newly-registered';
+    else if (b.status === 'registered' && a.status !== 'registered') change = 'no-longer-registered';
+    else if (b.status === 'unprovable' && a.status !== 'unprovable') change = 'newly-provable';
+    else if (b.status !== 'unprovable' && a.status === 'unprovable') change = 'newly-unprovable';
+    else change = 'proof-changed';
+    return { policy: b.policy, change, changedFields: differs.map(([, label]) => label), before: b, after: a };
+  });
+  const count = c => perPolicy.filter(p => p.change === c).length;
+  const unchangedCount = count('unchanged');
+  return {
+    beforeSize: before.registrySize,
+    afterSize: after.registrySize,
+    queriedCount: before.queriedCount,
+    addedKeys,
+    removedKeys,
+    perPolicy,
+    unchangedCount,
+    changedCount: perPolicy.length - unchangedCount,
+    newlyRegisteredCount: count('newly-registered'),
+    noLongerRegisteredCount: count('no-longer-registered'),
+    newlyProvableCount: count('newly-provable'),
+    newlyUnprovableCount: count('newly-unprovable'),
+    proofChangedCount: count('proof-changed'),
+    allUnchanged: unchangedCount === perPolicy.length,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
