@@ -2818,11 +2818,9 @@ export function parseManifest(raw) {
 // string, and is reported as the file's statement, never as a verified
 // time; an implementation section counts as checked only when it was
 // present to cross-check.
-export function verifyManifest(raw) {
-  const {design,network}=parseManifest(raw);
-  const m=JSON.parse(raw);
+function designSummary(design) {
   const sub=substandardById(design.substandard);
-  return {network,summary:{
+  return {
     tokenName:design.tokenName,ticker:design.ticker,decimals:design.decimals,
     supply:design.supply,supplyBaseUnits:toUnits(design.supply,design.decimals).toString(),
     limitEnabled:design.limitEnabled,
@@ -2832,9 +2830,90 @@ export function verifyManifest(raw) {
     allowlist:design.allowlist,pausable:design.pausable,identity:design.identity,
     startsPaused:design.paused,
     substandardId:sub.id,substandardName:sub.name,
+  };
+}
+
+export function verifyManifest(raw) {
+  const {design,network}=parseManifest(raw);
+  const m=JSON.parse(raw);
+  return {network,summary:{
+    ...designSummary(design),
     createdAt:typeof m.createdAt==='string'?m.createdAt:null,
     implementationChecked:m.implementation!==undefined,
   }};
+}
+
+// The fields a design comparison judges, in the order differences are
+// reported. The substandard is ONE field (its id — the name is derived
+// from the catalog, so counting it separately would double-count a
+// single change), and the file's createdAt / implementation presence
+// are NOT fields here: they are statements about the file, not about
+// the design, so two exports of the same design at different times
+// compare as identical.
+export const DESIGN_COMPARE_FIELDS = Object.freeze([
+  ['network','Network'],
+  ['tokenName','Asset name'],
+  ['ticker','Ticker'],
+  ['decimals','Decimals'],
+  ['supply','Designed supply'],
+  ['supplyBaseUnits','Supply in base units'],
+  ['limitEnabled','Transfer limit on'],
+  ['limit','Per-transfer limit'],
+  ['limitBaseUnits','Limit in base units'],
+  ['template','Template'],
+  ['allowlist','Allowlist'],
+  ['pausable','Issuer controls'],
+  ['identity','Private eligibility'],
+  ['startsPaused','Starts paused'],
+  ['substandard','CIP-113 substandard'],
+]);
+
+// Compare a handed design file against the design currently open,
+// WITHOUT importing it — the comparison counterpart to verifyManifest.
+// Verifying a file (v1.76) says what design it describes; this says how
+// that design differs from yours, field by field, which is the question
+// a collaborator's file actually raises: did they change only the supply,
+// or the rules too? The file runs exactly the import's checks first —
+// this calls verifyManifest itself, so a file that would fail import
+// fails comparison with the same reason, refused whole and never
+// partially compared (validate-once). Both sides are then reduced
+// through the SAME designSummary builder the verifier uses, so the
+// comparison can never disagree with verification about what the file
+// describes, and amounts compare as exact base-unit strings (BigInt
+// arithmetic in the builder — a supply past 2^53 compares bit-for-bit,
+// never through a rounded number). The current design must itself be
+// valid and the current network known, or there is nothing sound to
+// compare against. Like the verifier, the return carries summaries and
+// differences only — no design object for a caller to apply — so
+// comparing can never become a quiet import either. File metadata is
+// reported separately (fileCreatedAt, as the file states it, and
+// fileImplementationChecked) and never counts as a difference.
+export function diffDesignFile(raw, currentDesign, currentNetwork) {
+  if(!NETWORKS[currentNetwork]) throw new Error('Unknown current network — choose a network before comparing.');
+  if(!currentDesign||typeof currentDesign!=='object'||Array.isArray(currentDesign)) throw new Error('There is no current design to compare against.');
+  const currentErrors=validateDesign(currentDesign);
+  if(currentErrors.length) throw new Error(`Your current design cannot be compared yet: ${currentErrors.join(' ')}`);
+  const verified=verifyManifest(raw);
+  const {createdAt,implementationChecked,...fileSummary}=verified.summary;
+  const currentSummary=designSummary(currentDesign);
+  const valueOf=(summary,network,key)=>key==='network'?network:key==='substandard'?summary.substandardId:summary[key];
+  const differences=[];
+  for(const [field,label] of DESIGN_COMPARE_FIELDS) {
+    const file=valueOf(fileSummary,verified.network,field);
+    const current=valueOf(currentSummary,currentNetwork,field);
+    if(file!==current) differences.push({field,label,file,current});
+  }
+  return {
+    network:verified.network,
+    currentNetwork,
+    same:differences.length===0,
+    compared:DESIGN_COMPARE_FIELDS.length,
+    differences,
+    fileSummary,
+    currentSummary,
+    fileCreatedAt:createdAt,
+    fileImplementationChecked:implementationChecked,
+  };
 }
 
 export function creditScenario({principal,rate,months,collateral,advance}) {
