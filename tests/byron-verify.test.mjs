@@ -178,7 +178,10 @@ test('a corrupted candidate is refused on its CRC32, never reported as a mismatc
 
 test('Shelley and garbage candidates are refused, not mismatches', () => {
   assert.throws(() => verifyByronAddress(SHELLEY, YOROI_ROOT, 0), /Base58 alphabet/);
-  assert.throws(() => verifyByronAddress('not an address at all', YOROI_ROOT, 0), /Base58 alphabet/);
+  // Short garbage is refused by the inspector's length gate; longer
+  // garbage reaches the Base58 alphabet check. Both are refusals.
+  assert.throws(() => verifyByronAddress('not an address at all', YOROI_ROOT, 0), /Byron \(bootstrap\) address/);
+  assert.throws(() => verifyByronAddress('this is not a byron address, it is just words', YOROI_ROOT, 0), /Base58 alphabet/);
   assert.throws(() => verifyByronAddress('', YOROI_ROOT, 0), /Byron/);
 });
 
