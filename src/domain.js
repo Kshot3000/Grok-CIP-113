@@ -2477,6 +2477,177 @@ export function verifyTransferOutputs(input, outputs) {
   };
 }
 
+// CIP-113 protocol upgradability (spec section "Protocol
+// upgradability", re-read from the raw upstream spec): the credentials
+// that make up a deployment live in the protocol parameters datum as
+// data, so a deployment can be re-pointed without redeploying the
+// tokens that depend on it — every programmable token reads the wiring
+// live at validation time.
+//
+// The modeled parameters name eight credentials:
+// - global (programmableLogicGlobal), issuanceLogic (the protocol-level
+//   issuance logic), and the three action delegates (transferDelegate,
+//   thirdPartyDelegate, unfrackingDelegate) — the RE-POINTABLE wiring;
+// - base (programmableLogicBase) — MUST NOT move: it is the payment
+//   credential of every smart-wallet address in the deployment, so
+//   changing it would relocate every holder's funds; a deployment with
+//   a different base is a different deployment. (An individual token's
+//   minting policy is likewise permanent, but it is per-token data, not
+//   a protocol parameter, and is not modeled here.)
+// - upgradeAuthority — the credential holding the right to upgrade;
+//   the standard does not prescribe what it is (a key, a multisig, a
+//   governance script all satisfy it), only how it may change hands.
+// - nominee — the standing nominee for an authority handover, or null
+//   when no handover is in progress.
+//
+// The spec's four requirements on the upgrade path:
+// 1. An authority change is TWO-PHASE: a nomination, then a separate
+//    promotion of the standing nominee. Replacing the authority in a
+//    single step is not conforming, however it is authorised.
+// 2. The promotion MUST be authorised by the nominee itself — the
+//    evidence the incoming authority exists, can act, and consents.
+// 3. A wiring change MUST NOT carry an authority change, and vice
+//    versa: a handover is always a transaction of its own.
+// 4. Each upgrade transaction MUST declare which kind it is.
+//
+// Refusal discipline holds throughout: a parameters state or claim
+// that cannot be read (a missing field, a credential whose hash is not
+// 28 bytes, an unknown upgrade kind) is REFUSED, never scored in part;
+// a readable intent that cannot produce a conforming upgrade is
+// UNPLANNABLE, with the reason named and no resulting state invented.
+export const PROTOCOL_PARAMETER_FIELDS = ['global', 'issuanceLogic', 'transferDelegate', 'thirdPartyDelegate', 'unfrackingDelegate', 'base', 'upgradeAuthority', 'nominee'];
+export const PROTOCOL_WIRING_FIELDS = ['global', 'issuanceLogic', 'transferDelegate', 'thirdPartyDelegate', 'unfrackingDelegate'];
+export const PROTOCOL_UPGRADE_KINDS = ['wiring', 'nominate', 'promote'];
+
+function protocolCredential(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be a credential naming a kind (pubkey or script) and a 28-byte hash.`);
+  for (const k of Object.keys(value)) if (k !== 'kind' && k !== 'hash') throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a credential names only a kind and a hash.`);
+  if (value.kind === undefined || value.hash === undefined) throw new Error(`${label} must name both a kind (pubkey or script) and a hash.`);
+  if (value.kind !== 'pubkey' && value.kind !== 'script') throw new Error(`${label}'s kind must be pubkey or script — ${JSON.stringify(value.kind)} given.`);
+  return { kind: value.kind, hash: registryPolicyId(value.hash, `${label}'s hash`) };
+}
+
+function readProtocolParameters(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming the eight protocol parameters — the five wiring credentials, the base credential, the upgrade authority, and the standing nominee (or null).`);
+  for (const k of Object.keys(value)) if (!PROTOCOL_PARAMETER_FIELDS.includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — the protocol parameters name only ${PROTOCOL_PARAMETER_FIELDS.join(', ')}.`);
+  for (const k of PROTOCOL_PARAMETER_FIELDS) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — parameters that cannot be read in full are refused, never scored in part.`);
+  const out = {};
+  for (const k of PROTOCOL_PARAMETER_FIELDS) {
+    if (k === 'nominee') { out.nominee = value.nominee === null ? null : protocolCredential(value.nominee, `${label}'s nominee`); continue; }
+    out[k] = protocolCredential(value[k], `${label}'s ${k}`);
+  }
+  return out;
+}
+
+const credEq = (a, b) => (a === null && b === null) || (a !== null && b !== null && a.kind === b.kind && a.hash === b.hash);
+
+function protocolChangedFields(before, after) {
+  return PROTOCOL_PARAMETER_FIELDS.filter(k => !credEq(before[k], after[k]));
+}
+
+export function planProtocolUpgrade(beforeInput, intent) {
+  const before = readProtocolParameters(beforeInput, 'The current protocol parameters');
+  if (!intent || typeof intent !== 'object' || Array.isArray(intent)) throw new Error('The upgrade intent must be an object naming a kind — wiring, nominate, or promote.');
+  for (const k of Object.keys(intent)) if (!['kind', 'changes', 'nominee'].includes(k)) throw new Error(`The upgrade intent carries an unknown field ${JSON.stringify(k)} — an intent names only a kind, its changes (for a wiring upgrade), and its nominee (for a nomination).`);
+  if (!PROTOCOL_UPGRADE_KINDS.includes(intent.kind)) throw new Error(`The upgrade kind must be wiring, nominate, or promote — ${JSON.stringify(intent.kind)} given. Each upgrade transaction must declare which of these it is.`);
+  const unplannable = missing => ({ status: 'unplannable', kind: intent.kind, before, after: null, changedFields: [], requiredAuthorizer: null, missing });
+  if (intent.kind === 'wiring') {
+    if (!intent.changes || typeof intent.changes !== 'object' || Array.isArray(intent.changes)) throw new Error('A wiring upgrade must name its changes — the wiring credentials it re-points.');
+    for (const k of Object.keys(intent.changes)) if (!PROTOCOL_PARAMETER_FIELDS.includes(k)) throw new Error(`The wiring changes name an unknown parameter ${JSON.stringify(k)} — the parameters are ${PROTOCOL_PARAMETER_FIELDS.join(', ')}.`);
+    const changes = {};
+    for (const [k, v] of Object.entries(intent.changes)) changes[k] = protocolCredential(v, `The wiring change to ${k}`);
+    const missing = [];
+    if (changes.base !== undefined && !credEq(changes.base, before.base)) missing.push('base-immovable');
+    if (changes.upgradeAuthority !== undefined && !credEq(changes.upgradeAuthority, before.upgradeAuthority)) missing.push('authority-not-wiring');
+    if (changes.nominee !== undefined && !credEq(changes.nominee, before.nominee)) missing.push('nominee-not-wiring');
+    const after = { ...before };
+    for (const k of PROTOCOL_WIRING_FIELDS) if (changes[k] !== undefined) after[k] = changes[k];
+    const changedFields = protocolChangedFields(before, after);
+    if (!changedFields.length && !missing.length) missing.push('no-wiring-change');
+    if (missing.length) return unplannable(missing);
+    return { status: 'planned', kind: 'wiring', before, after, changedFields, requiredAuthorizer: before.upgradeAuthority, missing: [] };
+  }
+  if (intent.kind === 'nominate') {
+    if (intent.nominee === undefined) throw new Error('A nomination must name its nominee credential — the first phase of an authority handover names who would take over.');
+    const nominee = protocolCredential(intent.nominee, 'The nominee');
+    if (credEq(nominee, before.upgradeAuthority)) return unplannable(['nominee-is-authority']);
+    if (credEq(nominee, before.nominee)) return unplannable(['nominee-already-standing']);
+    const after = { ...before, nominee };
+    return { status: 'planned', kind: 'nominate', before, after, changedFields: protocolChangedFields(before, after), requiredAuthorizer: before.upgradeAuthority, missing: [] };
+  }
+  // promote
+  if (before.nominee === null) return unplannable(['no-standing-nominee']);
+  const after = { ...before, upgradeAuthority: before.nominee, nominee: null };
+  return { status: 'planned', kind: 'promote', before, after, changedFields: protocolChangedFields(before, after), requiredAuthorizer: before.nominee, missing: [] };
+}
+
+// CIP-113 protocol upgrade verification, checked locally against the
+// same modeled parameters (validate-once discipline: the conforming
+// shapes below are the planner's own — a wiring upgrade is what
+// planProtocolUpgrade with kind wiring produces, a promotion is
+// exactly the promotion of the standing nominee — so plan and check
+// cannot drift). Six verdicts, because they fail separately and the
+// fix differs:
+// - baseImmovable: the base credential is unchanged (any move fails,
+//   whatever else the transaction does well);
+// - separation: no wiring field changed in a transaction that also
+//   changed the authority path (the authority or the nominee) — the
+//   promotion's own pair (authority takes the nominee, nominee clears)
+//   is one authority step, not a mixture;
+// - authorityPath: if the authority changed, it changed ONLY by
+//   promotion — the new authority is the standing nominee and the
+//   nomination is consumed; a direct replacement fails here however
+//   it was authorised;
+// - authorisation: the transaction's authoriser is the credential the
+//   kind requires — the standing upgrade authority for a wiring change
+//   or a nomination, the nominee itself for a promotion; an unstated
+//   authoriser is 'not-stated' and the claim incomplete;
+// - declaration: the declared kind is the kind the changes actually
+//   are; unstated is 'not-stated'. A claim that changes nothing
+//   declares no kind truthfully and fails here.
+// - nomineeShape: outside a promotion, a nominee change must BE a
+//   nomination — it sets a nominee, and not the sitting authority
+//   (clearing the standing nominee without promoting it abandons a
+//   handover half-done; there is no such step in the standard).
+//
+// Boundary honesty: a correct verdict proves only that the modeled
+// before/after parameters and the stated authoriser satisfy the
+// standard's upgrade-path rules — PRISM read no protocol parameters
+// UTxO and no chain state, built no transaction, and does not judge
+// whether the stated authoriser actually signed, what the deployment's
+// authority credential IS (a key, a multisig, a governance script —
+// the deployment's documented choice), or any token's own minting
+// policy, which is permanent per-token data outside these parameters.
+export function verifyProtocolUpgrade(beforeInput, claimed) {
+  const before = readProtocolParameters(beforeInput, 'The current protocol parameters');
+  if (!claimed || typeof claimed !== 'object' || Array.isArray(claimed)) throw new Error('The claimed upgrade must be an object naming a declared kind, the parameters after the upgrade, and the credential that authorised it.');
+  for (const k of Object.keys(claimed)) if (!['declaredKind', 'after', 'authorizedBy'].includes(k)) throw new Error(`The claimed upgrade carries an unknown field ${JSON.stringify(k)} — a claim names only a declaredKind, the after parameters, and an authorizedBy credential.`);
+  const declaredKind = claimed.declaredKind === undefined ? 'not-stated' : claimed.declaredKind;
+  if (declaredKind !== 'not-stated' && !PROTOCOL_UPGRADE_KINDS.includes(declaredKind)) throw new Error(`The declared kind must be wiring, nominate, or promote — ${JSON.stringify(claimed.declaredKind)} given.`);
+  if (claimed.after === undefined) throw new Error('The claimed upgrade must name the parameters after the upgrade — a claim without its resulting state cannot be read.');
+  const after = readProtocolParameters(claimed.after, 'The claimed parameters after the upgrade');
+  const authorizedBy = claimed.authorizedBy === undefined ? 'not-stated' : protocolCredential(claimed.authorizedBy, 'The claimed authoriser');
+  const changedFields = protocolChangedFields(before, after);
+  const wiringChanged = PROTOCOL_WIRING_FIELDS.some(k => changedFields.includes(k));
+  const authorityChanged = changedFields.includes('upgradeAuthority');
+  const nomineeChanged = changedFields.includes('nominee');
+  const promotionShape = authorityChanged && before.nominee !== null && credEq(after.upgradeAuthority, before.nominee) && after.nominee === null;
+  const derivedKind = authorityChanged ? 'promote' : nomineeChanged ? 'nominate' : wiringChanged ? 'wiring' : 'none';
+  const requiredAuthorizer = authorityChanged ? before.nominee : before.upgradeAuthority;
+  const verdicts = {
+    baseImmovable: credEq(after.base, before.base),
+    separation: !(wiringChanged && (authorityChanged || nomineeChanged)),
+    authorityPath: !authorityChanged || promotionShape,
+    authorisation: authorizedBy === 'not-stated' ? 'not-stated' : requiredAuthorizer !== null && credEq(authorizedBy, requiredAuthorizer),
+    declaration: declaredKind === 'not-stated' ? 'not-stated' : declaredKind === derivedKind,
+    nomineeShape: authorityChanged || !nomineeChanged || (after.nominee !== null && !credEq(after.nominee, before.upgradeAuthority)),
+  };
+  const values = Object.values(verdicts);
+  const valid = values.every(v => v === true);
+  const status = valid ? 'correct' : values.includes(false) ? 'incorrect' : 'incomplete';
+  return { status, valid, before, after, declaredKind, derivedKind, authorizedBy, requiredAuthorizer, changedFields, wiringChanged, authorityChanged, nomineeChanged, promotionShape, verdicts };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
