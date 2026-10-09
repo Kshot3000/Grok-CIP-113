@@ -441,6 +441,59 @@ export function assetFingerprint(policyHex, assetNameHex) {
   if(assetNameHex) bytes.set(hexToBytes(assetNameHex.toLowerCase()),28);
   return encodeBech32('asset', blake2b(bytes,20));
 }
+// CIP-14 fingerprint decoding — the reading half of assetFingerprint:
+// a claimed asset1… string is Bech32-decoded locally and its checksum
+// verified, yielding the 20-byte BLAKE2b-160 digest it carries. Decoding
+// is strict so a string decodes to exactly one digest or none: mixed
+// case is refused (Bech32 permits all-lower or all-upper only), a prefix
+// other than 'asset' is refused, and a payload that is not exactly
+// 20 bytes is refused with its byte count — a shorter or longer payload
+// is not a CIP-14 fingerprint under any reading, whatever its checksum
+// says. The canonical fingerprint (re-encoded from the decoded digest)
+// is returned alongside the digest, so an all-uppercase entry and its
+// lowercase form are the same fingerprint, stated in one form.
+export function decodeAssetFingerprint(fingerprint) {
+  if(typeof fingerprint!=='string'||!fingerprint) throw new Error('Enter an asset fingerprint (asset1…).');
+  if(fingerprint!==fingerprint.toLowerCase()&&fingerprint!==fingerprint.toUpperCase()) throw new Error('Mixed-case Bech32 fingerprint.');
+  const s=fingerprint.toLowerCase(),split=s.lastIndexOf('1'),hrp=s.slice(0,split);
+  if(hrp!=='asset'||s.length-split<7) throw new Error('Enter a Cardano asset fingerprint (asset1…) — an address or a unit hex is a different identifier.');
+  const data=[...s.slice(split+1)].map(c=>CHARSET.indexOf(c));
+  if(data.some(v=>v<0)||polymod([...expand(hrp),...data])!==1) throw new Error('Fingerprint checksum is invalid.');
+  const bytes=Uint8Array.from(convert(data.slice(0,-6),5,8,false));
+  if(bytes.length!==20) throw new Error(`An asset fingerprint carries a 20-byte digest — this one carries ${bytes.length} bytes, so it is not a CIP-14 fingerprint.`);
+  return {fingerprint:encodeBech32('asset',bytes),digestHex:bytesToHex(bytes),byteLength:bytes.length};
+}
+// CIP-14 fingerprint verification — the checking half of
+// assetFingerprint, in the same discipline as verifySmartWallet: a
+// claimed fingerprint (the asset1… an explorer, a counterparty, or a
+// registry listing shows for an asset) is recomputed from the policy ID
+// and asset name it is claimed to identify and compared digest by
+// digest. The comparison is exact — a fingerprint is a hash, so there
+// are no positions to partially match: it either is the fingerprint of
+// exactly these identifiers or it is the fingerprint of something else.
+// A claim that cannot even be decoded (bad checksum, wrong prefix, a
+// payload that is not 20 bytes) is REFUSED, not reported as a mismatch:
+// a mismatch is a well-formed fingerprint of a DIFFERENT asset, and
+// conflating the two would send a builder hunting for a second asset
+// when the string itself is simply corrupt. A match proves only that
+// the claimed string is the CIP-14 fingerprint of these identifiers —
+// it does not prove the asset was minted, exists on chain, is
+// authentic, is backed, or sits in any CIP-113 registry; existence is
+// the lookup's question, answered on chain.
+export function verifyAssetFingerprint(policyHex, assetNameHex, claimed) {
+  const computed=assetFingerprint(policyHex, assetNameHex);
+  const claimedDecoded=decodeAssetFingerprint(typeof claimed==='string'?claimed.trim():claimed);
+  const computedDecoded=decodeAssetFingerprint(computed);
+  return {
+    match:claimedDecoded.digestHex===computedDecoded.digestHex,
+    computedFingerprint:computed,
+    claimedFingerprint:claimedDecoded.fingerprint,
+    computedDigestHex:computedDecoded.digestHex,
+    claimedDigestHex:claimedDecoded.digestHex,
+    policyId:policyHex.toLowerCase(),
+    assetNameHex:(assetNameHex??'').toLowerCase(),
+  };
+}
 // CIP-67 asset-name labels as registered for CIP-68: the first four bytes
 // of the asset name declare the token's role, and the remaining bytes are
 // the shared token name both the reference and the user token carry.
