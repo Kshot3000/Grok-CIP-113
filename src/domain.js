@@ -1342,6 +1342,109 @@ export function planRegistryProofs(registryKeys, queriedPolicies) {
   };
 }
 
+// CIP-113 registry proof list verification, checked locally against the
+// same modeled registry list the planner plans against.
+//
+// A transfer's proofs list must satisfy three requirements at once (spec:
+// "RegistryProof Requirements"): COMPLETENESS — one proof for each distinct
+// policy the transaction touches; ORDERING — the list order matches the
+// policies' lexicographic ordering; CORRECTNESS — each proof accurately
+// represents its policy's registration status (TokenExists naming the node
+// whose key IS the policy, at that node's index; TokenDoesNotExist naming
+// the covering node: the largest key below the policy, whose next is above
+// it, at that node's index).
+//
+// The expected proofs are the planner's own output (planRegistryProofs), so
+// planning and verification can never disagree about what a correct proof
+// is. A claimed proof is checked POSITION BY POSITION — proof type, node
+// index, node key, and next key (when the claim states one) each get their
+// own verdict — because they fail individually: a TokenExists proof naming
+// the right node at the wrong index is a different reference input, and a
+// covering node whose stated next does not pass the policy proves nothing.
+//
+// Refusal vs mismatch, as in PRISM's other verifiers: a claimed proof that
+// cannot be read at all (a policy or node key that is not a 28-byte ID, an
+// unknown proof type, a node index that is not a non-negative integer) is
+// REFUSED with the reason, never scored as a wrong proof — conflating the
+// two would send a builder re-checking nodes when the claim itself is
+// malformed. A well-formed claim that names the wrong node, type, or index
+// is a MISMATCH, with the correct proof shown.
+//
+// Boundary honesty carries over from the planner: a policy the modeled
+// list cannot prove (before the first key, after the last, empty list) is
+// reported UNVERIFIABLE IN THIS MODEL whether or not a proof is claimed
+// for it — a real registry carries those cases on its origin/terminal
+// nodes, deployment data this model does not invent, so no claimed proof
+// for such a policy can be confirmed or refuted from the list given.
+export function verifyRegistryProofs(registryKeys, queriedPolicies, claimedProofs) {
+  const plan = planRegistryProofs(registryKeys, queriedPolicies);
+  if (!Array.isArray(claimedProofs)) throw new Error('The claimed proofs must be an array of proof entries.');
+  const claimed = claimedProofs.map((entry, i) => {
+    const label = `Claimed proof ${i + 1}`;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${label} must be an object naming a policy, a proof type, a node index, and a node key.`);
+    const policy = registryPolicyId(entry.policy, `${label}'s policy`);
+    if (entry.proofType !== 'TokenExists' && entry.proofType !== 'TokenDoesNotExist') throw new Error(`${label}'s proof type must be TokenExists or TokenDoesNotExist — ${JSON.stringify(entry.proofType)} given.`);
+    if (!Number.isInteger(entry.nodeIndex) || entry.nodeIndex < 0) throw new Error(`${label}'s node index must be a non-negative integer — ${JSON.stringify(entry.nodeIndex)} given, refused rather than rounded.`);
+    const nodeKey = registryPolicyId(entry.nodeKey, `${label}'s node key`);
+    const nextKey = entry.nextKey === undefined || entry.nextKey === null ? null : registryPolicyId(entry.nextKey, `${label}'s next key`);
+    return { policy, proofType: entry.proofType, nodeIndex: entry.nodeIndex, nodeKey, nextKey };
+  });
+  const expectedByPolicy = new Map(plan.proofs.map(p => [p.policy, p]));
+  const firstClaimByPolicy = new Map();
+  const duplicates = [];
+  for (const c of claimed) {
+    if (firstClaimByPolicy.has(c.policy)) duplicates.push(c.policy);
+    else firstClaimByPolicy.set(c.policy, c);
+  }
+  const missing = [], extra = [], perProof = [];
+  for (const c of claimed) if (!expectedByPolicy.has(c.policy) && !extra.includes(c.policy)) extra.push(c.policy);
+  for (const expected of plan.proofs) {
+    const claim = firstClaimByPolicy.get(expected.policy) ?? null;
+    if (expected.status === 'unprovable') {
+      perProof.push({ policy: expected.policy, status: 'unverifiable', expected, claimed: claim, verdicts: null });
+      continue;
+    }
+    if (!claim) { missing.push(expected.policy); perProof.push({ policy: expected.policy, status: 'missing', expected, claimed: null, verdicts: null }); continue; }
+    const verdicts = {
+      proofType: claim.proofType === expected.proofType,
+      nodeIndex: claim.nodeIndex === expected.nodeIndex,
+      nodeKey: claim.nodeKey === expected.nodeKey,
+      nextKey: claim.nextKey === null ? 'not-stated' : claim.nextKey === expected.nextKey,
+    };
+    const correct = verdicts.proofType && verdicts.nodeIndex && verdicts.nodeKey && verdicts.nextKey !== false;
+    perProof.push({ policy: expected.policy, status: correct ? 'correct' : 'incorrect', expected, claimed: claim, verdicts });
+  }
+  // Ordering is judged on the claimed sequence as given: the spec requires
+  // the list itself to be in the policies' lexicographic order, so any
+  // adjacent pair out of order (a duplicate is out of order with itself)
+  // fails it, at the first offending position.
+  let firstOutOfOrder = null;
+  for (let i = 1; i < claimed.length; i++) {
+    if (claimed[i].policy <= claimed[i - 1].policy) { firstOutOfOrder = i; break; }
+  }
+  const completeness = { complete: missing.length === 0 && extra.length === 0 && duplicates.length === 0, missing, extra, duplicates };
+  const ordering = { ordered: firstOutOfOrder === null, firstOutOfOrder };
+  const unverifiableCount = perProof.filter(p => p.status === 'unverifiable').length;
+  const correctCount = perProof.filter(p => p.status === 'correct').length;
+  const incorrectCount = perProof.filter(p => p.status === 'incorrect').length;
+  const valid = completeness.complete && ordering.ordered && incorrectCount === 0 && unverifiableCount === 0;
+  return {
+    registrySize: plan.registrySize,
+    queriedCount: plan.queriedCount,
+    claimedCount: claimed.length,
+    valid,
+    completeness,
+    ordering,
+    perProof,
+    correctCount,
+    incorrectCount,
+    missingCount: missing.length,
+    extraCount: extra.length,
+    duplicateCount: duplicates.length,
+    unverifiableCount,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
