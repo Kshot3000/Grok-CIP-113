@@ -1362,6 +1362,91 @@ export function parseRegistryDatumPreview(raw) {
   };
 }
 
+// The fields a registry-preview comparison judges, in the order
+// differences are reported. The preview carries amounts only as exact
+// base-unit strings (there is no display-supply field to double-count),
+// and the substandard is ONE field (its id — the name and reference are
+// catalog-derived, so counting them separately would triple-count a
+// single change). The honesty flags, the still-required list, and the
+// note are NOT fields here: the verifier canonicalises them (a file
+// stating them wrongly is refused, one omitting them is completed), so
+// by the time a file reaches comparison they are identical on both
+// sides by construction — they are what the file IS, not how the
+// designs differ.
+export const REGISTRY_COMPARE_FIELDS = Object.freeze([
+  ['network','Network'],
+  ['tokenName','Token name'],
+  ['ticker','Ticker'],
+  ['decimals','Decimals'],
+  ['supplyBaseUnits','Initial supply (base units)'],
+  ['access','Transfer access'],
+  ['perTransferLimit','Per-transfer limit (base units)'],
+  ['issuerPauseModeled','Issuer pause modeled'],
+  ['eligibilityRequired','Eligibility required'],
+  ['substandard','CIP-113 substandard'],
+]);
+
+// Compare a handed registry-datum preview file against the preview of
+// the design currently open, WITHOUT registering or importing anything —
+// the comparison counterpart to parseRegistryDatumPreview, as
+// diffDesignFile is to verifyManifest. Verifying a preview (v1.75) says
+// whether it is a genuine PRISM preview; this says how the design it
+// describes differs from yours, which is the question a reviewer's copy
+// actually raises: did the supply move, or the transfer policy too?
+// The file runs exactly the verifier's checks first — this calls
+// parseRegistryDatumPreview itself, so a file that would fail
+// verification fails comparison with the same reason, refused whole and
+// never partially compared (validate-once). The current side is built
+// by the exporter itself (registryDatumPreview), and the verifier's
+// return is already the canonical preview in export shape, so both
+// sides are the same shape from the same two builders and comparison
+// can never disagree with verification or with the export on screen
+// about what a preview says. Amounts compare as the exact base-unit
+// strings both builders write — a supply past 2^53 compares bit-for-bit.
+// The current design must itself be valid and its network known, or
+// there is nothing sound to compare against. The return carries the two
+// canonical previews and the differences — a preview describes a design
+// but IS not one: it carries no design object, so comparing can never
+// become a quiet import either.
+export function diffRegistryDatumPreview(raw, currentDesign, currentNetwork) {
+  if(!NETWORKS[currentNetwork]) throw new Error('Unknown current network — choose a network before comparing.');
+  if(!currentDesign||typeof currentDesign!=='object'||Array.isArray(currentDesign)) throw new Error('There is no current design to compare against.');
+  const currentErrors=validateDesign(currentDesign);
+  if(currentErrors.length) throw new Error(`Your current design cannot be compared yet: ${currentErrors.join(' ')}`);
+  const filePreview=parseRegistryDatumPreview(raw);
+  const currentPreview=registryDatumPreview(currentDesign,currentNetwork);
+  const valueOf=(p,field)=>{
+    switch(field){
+      case 'network': return p.network;
+      case 'tokenName': return p.token.name;
+      case 'ticker': return p.token.ticker;
+      case 'decimals': return p.token.decimals;
+      case 'supplyBaseUnits': return p.token.initialSupplyBaseUnits;
+      case 'access': return p.transferPolicy.access;
+      case 'perTransferLimit': return p.transferPolicy.perTransferLimitBaseUnits;
+      case 'issuerPauseModeled': return p.transferPolicy.issuerPauseModeled;
+      case 'eligibilityRequired': return p.transferPolicy.eligibilityRequired;
+      case 'substandard': return p.substandard.id;
+      default: return undefined;
+    }
+  };
+  const differences=[];
+  for(const [field,label] of REGISTRY_COMPARE_FIELDS) {
+    const file=valueOf(filePreview,field);
+    const current=valueOf(currentPreview,field);
+    if(file!==current) differences.push({field,label,file,current});
+  }
+  return {
+    network:filePreview.network,
+    currentNetwork,
+    same:differences.length===0,
+    compared:REGISTRY_COMPARE_FIELDS.length,
+    differences,
+    filePreview,
+    currentPreview,
+  };
+}
+
 // CIP-113 registry proofs, planned locally against a modeled registry list.
 //
 // A transfer spending programmable tokens must carry, for each DISTINCT
