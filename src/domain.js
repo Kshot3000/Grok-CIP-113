@@ -1732,6 +1732,174 @@ export function verifyRegistryInsertion(registryKeys, newPolicy, claimed) {
   };
 }
 
+// CIP-113 RegistryNode datum checking, modeled locally from the spec's
+// datum definition ("RegistryNode datum") and the Foundation reference
+// implementation's registry_node module, which pins the two values the
+// spec's prose alone leaves ambiguous.
+//
+// A registry entry is an inline datum of exactly seven fields, IN THIS
+// ORDER — the order is load-bearing, because it fixes the Plutus Data
+// layout on-chain and off-chain code reads:
+//   key, next, minting_logic_script, transfer_logic_script,
+//   third_party_logic_script, unfracking_logic_script, global_state_cs
+//
+// Field rules, as the spec states them and the reference pins them:
+// - `key` MUST be a 28-byte bytestring: the token's policy ID, and also
+//   the name of the registry NFT in the node's UTxO. The ONE exception is
+//   the registry's origin node, whose key is the EMPTY bytestring — the
+//   smallest possible value, sorting before every policy ID.
+// - `next` MUST be a 28-byte bytestring: the next key in lexicographic
+//   order. The ONE exception is the terminal value the last node (and the
+//   origin node of an empty registry) points at: the reference
+//   implementation's sentinel, THIRTY bytes of 0xff — deliberately not
+//   28, because Plutus compares bytestrings byte by byte and treats the
+//   longer string as greater when the shared prefix is equal, so the
+//   30-byte sentinel sorts strictly after EVERY 28-byte policy ID,
+//   including an all-0xff one, which a 28-byte sentinel would collide
+//   with. (The spec's datum prose says 28 bytes; the reference code is
+//   explicit that the 30-byte length is intentional and load-bearing,
+//   and this checker follows the reference where the two differ,
+//   saying so here and in the UI.)
+// - Each logic field MUST be a Credential: a public-key credential or a
+//   script credential carrying a 28-byte hash. The origin node's four
+//   credentials are all the empty public-key credential — and the origin
+//   node is canonical: the reference holds it as a single equality
+//   target, so an empty key with any other field differing is not an
+//   origin node, it is a broken datum.
+// - `unfracking_logic_script` is the one field where an empty public-key
+//   credential is a MEANING on a token node, not a defect: it forbids
+//   unfracking for that policy (least permission — no such script
+//   exists, so no unfracking transaction can invoke it). A 28-byte
+//   public-key credential makes unfracking signature-gated (a withdrawal
+//   against a public-key reward account requires that key's signature);
+//   a 28-byte script credential delegates the decision to the issuer's
+//   hook validator.
+// - `global_state_cs` MUST be 0 or 28 bytes: empty means the token has
+//   no global state and no reference input is expected for one; a
+//   28-byte value is the policy of the NFT marking the global-state
+//   UTxO, and every transfer of the token MUST then carry that UTxO as
+//   a reference input (spec: "Reference Inputs").
+//
+// Chain order is a datum rule, not a list rule: `next` names the NEXT
+// key in lexicographic order, so it must sort strictly after `key`
+// under Plutus bytestring comparison (byte by byte; when the shared
+// prefix is equal, the longer bytestring is greater). Equality is a
+// failure — a node pointing at itself links nothing.
+//
+// Refusal vs verdict, as in PRISM's other checkers: a datum that cannot
+// be READ — a missing field, an unknown extra field, a credential of an
+// unknown kind, a value that is not even-length hexadecimal — is
+// REFUSED with the reason, never scored in part. A readable datum whose
+// field breaks its rule is SCORED field by field, because the fix
+// differs per field.
+//
+// Boundary honesty: a datum meeting every rule is still not a
+// registration. This checker reads no Plutus Data / CBOR, inspects no
+// UTxO, and cannot judge the one binding that makes a node trustworthy —
+// the registry validator's cryptographic binding of
+// `minting_logic_script` to `key` at insertion — nor whether the node
+// sits in any real registry, holds the registry NFT, or was written by
+// the registry validator at all.
+export const REGISTRY_NODE_FIELD_ORDER = Object.freeze(['key', 'next', 'minting_logic_script', 'transfer_logic_script', 'third_party_logic_script', 'unfracking_logic_script', 'global_state_cs']);
+export const REGISTRY_SENTINEL_NEXT = 'ff'.repeat(30);
+export const REGISTRY_ORIGIN_NODE = Object.freeze({
+  key: '', next: REGISTRY_SENTINEL_NEXT,
+  minting: Object.freeze({ kind: 'pubkey', hash: '' }),
+  transfer: Object.freeze({ kind: 'pubkey', hash: '' }),
+  thirdParty: Object.freeze({ kind: 'pubkey', hash: '' }),
+  unfracking: Object.freeze({ kind: 'pubkey', hash: '' }),
+  globalStateCs: '',
+});
+
+function registryBytesHex(value, label) {
+  if (typeof value !== 'string') throw new Error(`${label} must be a hexadecimal string — ${value === null ? 'null' : typeof value} given, refused rather than read as bytes.`);
+  const v = value.trim().toLowerCase();
+  if (!/^([0-9a-f]{2})*$/.test(v)) throw new Error(`${label} is not an even number of hexadecimal characters — ${JSON.stringify(value)} given, refused rather than padded or guessed at.`);
+  return v;
+}
+
+// Plutus bytestring order: byte by byte; when every shared byte is
+// equal, the longer bytestring is the greater one.
+function registryBytesCompare(a, b) {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i += 2) {
+    const d = parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16);
+    if (d !== 0) return d;
+  }
+  return a.length - b.length;
+}
+
+export function checkRegistryNodeDatum(datum) {
+  if (!datum || typeof datum !== 'object' || Array.isArray(datum)) throw new Error('The registry node datum must be an object naming its seven fields — key, next, the four logic credentials, and global_state_cs.');
+  const inputFields = ['key', 'next', 'minting', 'transfer', 'thirdParty', 'unfracking', 'globalStateCs'];
+  for (const k of Object.keys(datum)) if (!inputFields.includes(k)) throw new Error(`The registry node datum carries an unknown field ${JSON.stringify(k)} — a RegistryNode has exactly seven fields, in the order key, next, minting_logic_script, transfer_logic_script, third_party_logic_script, unfracking_logic_script, global_state_cs.`);
+  for (const k of inputFields) if (datum[k] === undefined) throw new Error(`The registry node datum is missing its ${JSON.stringify(k)} field — a datum that cannot be read in full is refused, never scored in part.`);
+  const readCredential = (value, label) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be a credential naming a kind (pubkey or script) and a hash.`);
+    for (const k of Object.keys(value)) if (k !== 'kind' && k !== 'hash') throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a credential names only a kind and a hash.`);
+    if (value.kind === undefined || value.hash === undefined) throw new Error(`${label} must name both a kind (pubkey or script) and a hash.`);
+    if (value.kind !== 'pubkey' && value.kind !== 'script') throw new Error(`${label}'s kind must be pubkey or script — ${JSON.stringify(value.kind)} given.`);
+    return { kind: value.kind, hash: registryBytesHex(value.hash, `${label}'s hash`) };
+  };
+  const key = registryBytesHex(datum.key, 'Registry node key');
+  const next = registryBytesHex(datum.next, 'Registry node next');
+  const minting = readCredential(datum.minting, 'Registry node minting_logic_script');
+  const transfer = readCredential(datum.transfer, 'Registry node transfer_logic_script');
+  const thirdParty = readCredential(datum.thirdParty, 'Registry node third_party_logic_script');
+  const unfracking = readCredential(datum.unfracking, 'Registry node unfracking_logic_script');
+  const globalStateCs = registryBytesHex(datum.globalStateCs, 'Registry node global_state_cs');
+  const creds = { minting, transfer, thirdParty, unfracking };
+  const isCanonicalOrigin = key === '' && next === REGISTRY_SENTINEL_NEXT
+    && Object.values(creds).every(c => c.kind === 'pubkey' && c.hash === '') && globalStateCs === '';
+  const credField = (c, allowEmptyMeaning) => {
+    const bytes = c.hash.length / 2;
+    const emptyPubkey = bytes === 0 && c.kind === 'pubkey';
+    const ok = bytes === 28 || (emptyPubkey && (allowEmptyMeaning || isCanonicalOrigin));
+    const detail = bytes === 28 ? `28-byte ${c.kind === 'pubkey' ? 'public-key' : 'script'} credential`
+      : emptyPubkey && ok && isCanonicalOrigin && !allowEmptyMeaning ? 'the origin node’s empty public-key credential'
+      : emptyPubkey && ok ? 'empty public-key credential'
+      : bytes === 0 ? `empty ${c.kind === 'pubkey' ? 'public-key' : 'script'} credential — names no ${c.kind === 'pubkey' ? 'key' : 'script'}`
+      : `${bytes}-byte hash — a credential hash is 28 bytes`;
+    return { ok, kind: c.kind, hash: c.hash, bytes, detail };
+  };
+  const fields = {
+    key: {
+      ok: key.length / 2 === 28 || (key === '' && isCanonicalOrigin),
+      bytes: key.length / 2, value: key,
+      detail: key.length / 2 === 28 ? '28-byte policy ID'
+        : key === '' && isCanonicalOrigin ? 'empty — the origin node’s key, sorting before every policy ID'
+        : key === '' ? 'empty — only the canonical origin node carries an empty key, and this datum is not it'
+        : `${key.length / 2} bytes — a policy ID is 28 bytes`,
+    },
+    next: {
+      ok: next.length / 2 === 28 || next === REGISTRY_SENTINEL_NEXT,
+      bytes: next.length / 2, value: next,
+      detail: next === REGISTRY_SENTINEL_NEXT ? 'the 30-byte terminal sentinel — sorts after every 28-byte policy ID'
+        : next.length / 2 === 28 ? '28-byte successor key'
+        : `${next.length / 2} bytes — next is a 28-byte key or the 30-byte terminal sentinel`,
+    },
+    minting: credField(minting, false),
+    transfer: credField(transfer, false),
+    thirdParty: credField(thirdParty, false),
+    unfracking: credField(unfracking, true),
+    globalStateCs: {
+      ok: globalStateCs === '' || globalStateCs.length / 2 === 28,
+      bytes: globalStateCs.length / 2, value: globalStateCs,
+      detail: globalStateCs === '' ? 'empty — no global state'
+        : globalStateCs.length / 2 === 28 ? '28-byte global-state policy'
+        : `${globalStateCs.length / 2} bytes — global_state_cs is empty or 28 bytes`,
+    },
+  };
+  const chainOrdered = registryBytesCompare(next, key) > 0;
+  const unfrackingMode = !fields.unfracking.ok ? null
+    : unfracking.hash === '' ? 'forbidden'
+    : unfracking.kind === 'pubkey' ? 'signature-gated' : 'script-delegated';
+  const globalState = globalStateCs === '' ? 'none' : globalStateCs.length / 2 === 28 ? 'present' : null;
+  const kind = isCanonicalOrigin ? 'origin' : key.length / 2 === 28 ? 'token' : null;
+  const valid = Object.values(fields).every(f => f.ok) && chainOrdered;
+  return { valid, kind, fields, chainOrdered, unfrackingMode, globalState, fieldOrder: REGISTRY_NODE_FIELD_ORDER, key, next };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
