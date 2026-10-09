@@ -1280,6 +1280,68 @@ export function registryDatumPreview(design, network) {
   };
 }
 
+// CIP-113 registry proofs, planned locally against a modeled registry list.
+//
+// A transfer spending programmable tokens must carry, for each DISTINCT
+// policy it touches, one registry proof, and the proofs list must be in the
+// policies' lexicographic order (spec: "RegistryProof Requirements"). A
+// policy that IS registered is proved by its own RegistryNode
+// (TokenExists); a policy that is NOT is proved by the "covering node" —
+// the node whose key is the largest key still less than the policy and
+// whose `next` is greater than the policy (TokenDoesNotExist) — after which
+// the asset is treated as an ordinary native token. Policy IDs are 28-byte
+// bytestrings; for equal-length lowercase hex, string order IS byte order.
+//
+// The registry list itself is validated as the on-chain list is built:
+// every key exactly 28 bytes, no key twice, strictly increasing — a list
+// that breaks those invariants is REFUSED, never silently sorted or
+// deduplicated, because sortedness is the property the proofs rest on.
+// The queried policies are the planner's own input, so duplicates there
+// collapse to the one distinct proof the spec requires and the output is
+// ordered lexicographically whatever order they were asked in.
+//
+// Boundary honesty: a policy sorting before the first key, after the last
+// key, or into an empty list has NO covering node in the list given, so it
+// is reported as unprovable in this model — a real registry carries those
+// cases on nodes this list does not contain (its origin/terminal nodes),
+// which are deployment data this local model does not invent.
+function registryPolicyId(value, label) {
+  if (typeof value !== 'string') throw new Error(`${label} must be a policy ID string of 56 hexadecimal characters.`);
+  const v = value.trim().toLowerCase();
+  if (!/^[a-f0-9]{56}$/.test(v)) throw new Error(`${label} is not a 28-byte policy ID (56 hexadecimal characters) — ${value.trim().length} characters given.`);
+  return v;
+}
+
+export function planRegistryProofs(registryKeys, queriedPolicies) {
+  if (!Array.isArray(registryKeys)) throw new Error('The registry list must be an array of policy IDs.');
+  if (!Array.isArray(queriedPolicies)) throw new Error('The policies to prove must be an array of policy IDs.');
+  const keys = registryKeys.map((k, i) => registryPolicyId(k, `Registry key ${i + 1}`));
+  for (let i = 1; i < keys.length; i++) {
+    if (keys[i] === keys[i - 1]) throw new Error(`Registry keys must be unique: ${keys[i]} appears more than once — a sorted linked list holds each policy once.`);
+    if (keys[i] < keys[i - 1]) throw new Error(`Registry keys must be sorted in lexicographic (byte) order: ${keys[i]} comes after ${keys[i - 1]} in the list but sorts before it.`);
+  }
+  const distinct = [...new Set(queriedPolicies.map((q, i) => registryPolicyId(q, `Policy to prove ${i + 1}`)))].sort();
+  const proofs = distinct.map(policy => {
+    const at = keys.indexOf(policy);
+    if (at !== -1) return { policy, status: 'registered', proofType: 'TokenExists', nodeIndex: at, nodeKey: policy, nextKey: keys[at + 1] ?? null, reason: null };
+    if (!keys.length) return { policy, status: 'unprovable', proofType: null, nodeIndex: null, nodeKey: null, nextKey: null, reason: 'empty-registry' };
+    if (policy < keys[0]) return { policy, status: 'unprovable', proofType: null, nodeIndex: null, nodeKey: null, nextKey: null, reason: 'before-first' };
+    if (policy > keys[keys.length - 1]) return { policy, status: 'unprovable', proofType: null, nodeIndex: null, nodeKey: null, nextKey: null, reason: 'after-last' };
+    let cover = 0;
+    while (cover + 1 < keys.length && keys[cover + 1] < policy) cover++;
+    return { policy, status: 'unregistered', proofType: 'TokenDoesNotExist', nodeIndex: cover, nodeKey: keys[cover], nextKey: keys[cover + 1], reason: null };
+  });
+  return {
+    keys,
+    registrySize: keys.length,
+    queriedCount: distinct.length,
+    proofs,
+    registeredCount: proofs.filter(p => p.status === 'registered').length,
+    unregisteredCount: proofs.filter(p => p.status === 'unregistered').length,
+    unprovableCount: proofs.filter(p => p.status === 'unprovable').length,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
