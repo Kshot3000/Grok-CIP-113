@@ -13,7 +13,7 @@ export const PROCESS_URL = 'https://github.com/cardano-foundation/CIPs/tree/mast
 // the spec, never by assumption.
 export const CIP113_STATUS = Object.freeze({
   status: 'Proposed',
-  checked: '2026-10-04',
+  checked: '2026-10-09',
   merged: '2026-09-29',
   specVersion: '3.0',
   category: 'Tokens',
@@ -113,6 +113,20 @@ export const LEARNING_PATH = Object.freeze([
     plain: 'Two other actions complete the model. Third-party actions let someone other than the holder act on a token — seizure by an authorised issuer, forced transfers, or auto-compounding — but only as the token’s substandard allows. “Unfracking” is the holder reorganising their own UTxOs without changing ownership, for example separating programmable tokens from ordinary ones; the default is least-permission — an empty credential in the registry entry forbids it.',
     detail: 'Each action has its own delegate and its own redeemer carrying the indices and registry proofs that action needs, validated by the delegate itself.',
     specSection: 'Transfer',
+  },
+  {
+    id: 'upgradability',
+    title: 'Upgrading the rules without moving anyone’s tokens',
+    plain: 'A deployment is not frozen at launch. The credentials that wire it together — the global logic, the protocol-level issuance logic, and the three action delegates — are held as data in a protocol parameters record and read live every time a transaction is validated, so the upgrade authority can re-point any of them and the new wiring applies to every programmable token at once, from the very next transaction.',
+    detail: 'Two things can never move. The base credential is the payment credential of every smart-wallet address, so changing it would relocate every holder’s funds — a different base is a different deployment, identified by its own bootstrap transaction. And each token’s own minting policy is permanent, which is what lets a token’s identity survive an upgrade of the logic governing it. Changing the upgrade authority itself is deliberately two-phase: first a nomination, then a separate promotion that the nominee must authorise — the evidence the incoming authority exists, can act, and consents. A wiring change may not smuggle in an authority change, and every upgrade must declare which kind it is. The standard does not say what the authority is — a single key, a multisig, or a governance script all satisfy it — so judging a deployment means reading who its authority is in the protocol parameters, not assuming. PRISM’s Network explorer models this upgrade planner and checker locally; no protocol parameters record is read.',
+    specSection: 'Protocol upgradability',
+  },
+  {
+    id: 'defi',
+    title: 'Programmable tokens in DeFi and wallets',
+    plain: 'Programmable tokens are ordinary native tokens that happen to live at the shared base address, so existing DeFi can use them — with extra steps. A DEX swap must run the token’s transfer logic through the withdraw-zero pattern and carry its registry entry as a reference input, and liquidity tokens must be paid to the user’s smart-wallet address. A lending protocol holds collateral at a smart wallet it controls, and its liquidations need registry proofs like any other transfer.',
+    detail: 'The step protocols most easily miss is checking the substandard before accepting a token: a freeze-and-seize token lets an authorised third party move it without the holder’s consent, which changes what it is worth as collateral. Wallets face the mirror-image task — deriving each user’s smart-wallet address and reading balances there, because that is where the tokens live. PRISM’s RealFi lab models the lending maths locally; it is not connected to any DEX, lending protocol, or wallet, and no integration is deployed.',
+    specSection: 'Implementing programmable tokens in DeFi protocols',
   },
 ]);
 
