@@ -1635,6 +1635,103 @@ export function planRegistryInsertion(registryKeys, newPolicy) {
   };
 }
 
+// CIP-113 registry insertion verification, checked locally against the
+// same modeled registry list the insertion planner plans against.
+//
+// A claimed insertion — the shape a registering transaction is said to
+// have — is judged against the spec's "Programmable token registration"
+// requirements as this model can state them: the transaction spends the
+// correct prev_node, returns it with only its `next` rewritten to the new
+// key, and adds the new node pointing at prev_node's old `next`, at the
+// position the sorted list requires. Each of those is a separate claim
+// and gets its own verdict — prev node, prev rewrite, new node's next,
+// insertion index — because they fail separately: spending the right node
+// but pointing the new node at the wrong successor breaks the chain just
+// as surely as spending the wrong node, and the fix differs.
+//
+// The expected insertion is the PLANNER'S OWN OUTPUT
+// (planRegistryInsertion), so planning and verification can never
+// disagree about where a policy belongs — the validate-once discipline
+// of v1.58/v1.64 applied to the registry's constructive pair. A claim
+// field left unstated (undefined) is 'not-stated', never a pass and
+// never a failure: the verdict is INCOMPLETE until every position is
+// stated, because a registration claim missing its new node's next has
+// not yet claimed the thing the chain depends on. null, by contrast, IS
+// a statement — prevKey null claims the origin node precedes the new
+// policy, newNext null claims the new node inherits the terminal next —
+// and is judged true or false like any key.
+//
+// Refusal vs mismatch, as in PRISM's other verifiers: a claim that
+// cannot be read at all (a prev/rewrite/next value that is not a 28-byte
+// ID or the null statement, an index that is not a non-negative integer)
+// is REFUSED with the reason, never scored as a wrong insertion.
+//
+// Boundary honesty carries over: a policy already in the modeled list
+// has NO insertion to verify — a second RegistryInsert for the same key
+// has no position — so any claim for it is reported NOT INSERTABLE, not
+// scored. And a correct verdict proves only the list mechanics against
+// this modeled list: the RegistryInsert redeemer's minting logic
+// credential, its cryptographic binding to the key, and the registry NFT
+// are issuer/deployment data no modeled list carries, so this verifier
+// does not judge them and does not pretend to.
+export function verifyRegistryInsertion(registryKeys, newPolicy, claimed) {
+  const plan = planRegistryInsertion(registryKeys, newPolicy);
+  if (!claimed || typeof claimed !== 'object' || Array.isArray(claimed)) throw new Error('The claimed insertion must be an object naming a prev node, its rewritten next, the new node\u2019s next, and an insertion index.');
+  const policyIdOrNull = (value, label) => {
+    if (value === undefined) return 'not-stated';
+    if (value === null) return null;
+    return registryPolicyId(value, label);
+  };
+  const prevKey = policyIdOrNull(claimed.prevKey, 'Claimed insertion\u2019s prev_node key');
+  const newNext = policyIdOrNull(claimed.newNext, 'Claimed insertion\u2019s new node next');
+  const prevNextAfter = claimed.prevNextAfter === undefined ? 'not-stated' : registryPolicyId(claimed.prevNextAfter, 'Claimed insertion\u2019s prev_node next after the rewrite');
+  let insertionIndex = 'not-stated';
+  if (claimed.insertionIndex !== undefined) {
+    if (!Number.isInteger(claimed.insertionIndex) || claimed.insertionIndex < 0) throw new Error(`Claimed insertion's index must be a non-negative integer \u2014 ${JSON.stringify(claimed.insertionIndex)} given, refused rather than rounded.`);
+    insertionIndex = claimed.insertionIndex;
+  }
+  const claimedNorm = { prevKey, prevNextAfter, newNext, insertionIndex };
+  if (plan.status === 'already-registered') {
+    return {
+      registrySize: plan.registrySize,
+      policy: plan.policy,
+      status: 'not-insertable',
+      valid: false,
+      expected: null,
+      existingNode: plan.existingNode,
+      claimed: claimedNorm,
+      verdicts: null,
+    };
+  }
+  const expected = {
+    insertionIndex: plan.insertionIndex,
+    prevKind: plan.prevKind,
+    prevKey: plan.prevNode?.key ?? null,
+    prevNextAfter: plan.policy,
+    newNext: plan.newNode.nextKey,
+    newNextKind: plan.newNode.nextKind,
+  };
+  const verdicts = {
+    prevNode: prevKey === 'not-stated' ? 'not-stated' : prevKey === expected.prevKey,
+    prevRewrite: prevNextAfter === 'not-stated' ? 'not-stated' : prevNextAfter === expected.prevNextAfter,
+    newNodeNext: newNext === 'not-stated' ? 'not-stated' : newNext === expected.newNext,
+    insertionIndex: insertionIndex === 'not-stated' ? 'not-stated' : insertionIndex === expected.insertionIndex,
+  };
+  const values = Object.values(verdicts);
+  const valid = values.every(v => v === true);
+  const status = valid ? 'correct' : values.includes(false) ? 'incorrect' : 'incomplete';
+  return {
+    registrySize: plan.registrySize,
+    policy: plan.policy,
+    status,
+    valid,
+    expected,
+    existingNode: null,
+    claimed: claimedNorm,
+    verdicts,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
