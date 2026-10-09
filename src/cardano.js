@@ -776,6 +776,59 @@ export function encodeAssetName(label, text) {
     maxTextBytes: label === null ? 32 : 28,
   };
 }
+// CIP-68 asset-name verification — the checking half of encodeAssetName,
+// the one builder in this file that lacked one. A claimed asset name (the
+// hex an explorer, a counterparty, or a listing gives you) is decoded by
+// decodeAssetName and rebuilt from the label and name text it is claimed
+// to carry by encodeAssetName itself, so the expectation IS the builder's
+// own output and claim validation IS the builder's own — an unknown label,
+// unprintable or oversize claimed text is refused with the builder's
+// reason, never scored (validate-once). The two positions are compared
+// individually, because they fail individually and the failure that matters
+// most in CIP-68 is the quiet one: a label-100 reference token and a
+// label-222 user token minted under one policy share the SAME name bytes
+// after the prefix, so the name bytes can match exactly while the label
+// differs — and those are different tokens, only one of which holds the
+// metadata datum. A builder told only 'the name differs' would not know
+// whether they were handed the paired token or a different name entirely.
+// The candidate's bytes are decomposed by the decoder, so a candidate
+// whose name bytes are not printable UTF-8 is a well-formed name of
+// different bytes — a mismatch standing as hex, its text reported as null,
+// never guessed at — while a candidate that cannot be decoded at all
+// (non-hex, odd-length, over Cardano's 32-byte limit, or a Bech32
+// fingerprint, which is a hash and a different identifier) is REFUSED,
+// never reported as a mismatch. A match is byte equality with the rebuilt
+// name, stated in canonical lowercase (an all-uppercase claim is the same
+// name). A match proves only the naming — not that the token was minted,
+// exists on chain, holds CIP-68 metadata in a reference-token datum, is
+// authentic or backed, or sits in a CIP-113 registry; existence is the
+// lookup's question, answered on chain.
+export function verifyAssetName(candidateHex, claimedLabel, claimedText) {
+  const candidate = decodeAssetName(typeof candidateHex === 'string' ? candidateHex.trim() : candidateHex);
+  const built = encodeAssetName(claimedLabel, claimedText);
+  const candidateNameHex = (candidate.label ? candidate.label.prefixHex : '') + candidate.contentHex;
+  const candidateLabel = candidate.label?.label ?? null;
+  const labelMatch = candidateLabel === claimedLabel;
+  const contentMatch = candidate.contentHex === built.contentHex;
+  const match = labelMatch && contentMatch && candidateNameHex === built.nameHex;
+  return {
+    match, labelMatch, contentMatch,
+    nameHex: candidateNameHex,
+    byteLength: candidate.byteLength,
+    label: candidate.label,
+    contentHex: candidate.contentHex,
+    text: candidate.text,
+    textDecodable: candidate.textDecodable,
+    decoded: candidate,
+    claimedLabel,
+    claimedText,
+    builtNameHex: built.nameHex,
+    builtByteLength: built.byteLength,
+    builtLabel: built.label,
+    builtContentHex: built.contentHex,
+    builtDecoded: decodeAssetName(built.nameHex),
+  };
+}
 // Asset unit splitting: explorers, Koios asset lists, and wallet APIs
 // commonly identify a native asset by its UNIT — the policy ID (28 bytes)
 // and the asset name (0–32 bytes) concatenated as one hex string. Splitting
