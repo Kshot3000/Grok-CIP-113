@@ -71,3 +71,47 @@ test('malformed containers fail with clear errors, not crashes',()=>{
   assert.throws(()=>parseManifest(tampered('rwa',m=>{m.design=[d];})),/no design section/);
   assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation='deployed';})),/malformed implementation/);
 });
+
+test('implementation substandard must match the design it claims to describe',()=>{
+  // The design is kyc-extended; naming any other module in the
+  // implementation copy — or the right module with a forged name, a forged
+  // reference, or a claim it is not modeled locally — is an edited file.
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.substandard.id='freeze-seize';})),/substandard does not match its design \(id\)/);
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.substandard.name='Freeze-and-seize';})),/substandard does not match its design \(name\)/);
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.substandard.reference='https://example.invalid/forged';})),/substandard does not match its design \(reference\)/);
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.substandard.modeledLocally=false;})),/substandard does not match its design \(modeledLocally\)/);
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.substandard='kyc-extended';})),/malformed implementation substandard/);
+  // The generic module's reference is null, and that null is checked too:
+  // a community design (generic) may not acquire a reference link by edit.
+  assert.throws(()=>parseManifest(tampered('community',m=>{m.implementation.substandard.reference='https://example.invalid/forged';})),/substandard does not match its design \(reference\)/);
+});
+
+test('implementation Midnight mode is derived from the design eligibility toggle',()=>{
+  // rwa has identity on, so its export plans an eligibility attestation;
+  // claiming no Midnight mode — or the reverse for community, which has
+  // identity off — contradicts the design in the same file.
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.midnight.mode='none';})),/Midnight mode does not match its design \(mode\)/);
+  assert.throws(()=>parseManifest(tampered('community',m=>{m.implementation.midnight.mode='planned-eligibility-attestation';})),/Midnight mode does not match its design \(mode\)/);
+});
+
+test('implementation required steps cannot be shortened, reordered, or replaced',()=>{
+  // Dropping the independent security review is the edit this check exists
+  // for: the imported design would otherwise present a handoff with no
+  // review step as if PRISM had exported it that way.
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.required=m.implementation.required.filter(s=>s!=='Independent security review');})),/required steps do not match/);
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.required=[...m.implementation.required].reverse();})),/required steps do not match/);
+  assert.throws(()=>parseManifest(tampered('rwa',m=>{m.implementation.required='none';})),/required steps do not match/);
+});
+
+test('legacy designs that never stated a substandard still migrate to generic',()=>{
+  // The migration rule predates this cross-check: a file whose design
+  // section omits the module imports as generic, and its implementation
+  // copy is not held to a module the design never claimed.
+  const m=roundTrip('rwa');delete m.design.substandard;
+  assert.equal(parseManifest(JSON.stringify(m)).design.substandard,'generic');
+});
+
+test('hand-trimmed implementation subsections still import when absent, never when contradicting',()=>{
+  const m=roundTrip('credit');delete m.implementation.substandard;delete m.implementation.required;delete m.implementation.midnight.mode;
+  assert.deepEqual(parseManifest(JSON.stringify(m)),{design:fromTemplate('credit'),network:'preview'});
+});

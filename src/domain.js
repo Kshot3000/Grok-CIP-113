@@ -2665,6 +2665,7 @@ export function parseManifest(raw) {
     tokenName:typeof m.design.tokenName==='string'?m.design.tokenName.trim():m.design.tokenName,
     supply:m.design.supply.trim(), limit:m.design.limit.trim()};
   // Manifests written before substandards existed default to the generic rule set.
+  const designStatedSubstandard=rawDesign.substandard!==undefined;
   if(rawDesign.substandard===undefined) rawDesign.substandard='generic';
   const errors=validateDesign(rawDesign);
   if(errors.length) throw new Error(errors.join(' '));
@@ -2677,8 +2678,14 @@ export function parseManifest(raw) {
   // Honesty claims are verified, not trusted. Sections written by every PRISM
   // export may be absent in a hand-trimmed file, but when present they must
   // not claim a deployment, a verified proof, an affiliation, or a standard
-  // status PRISM cannot back. (The design's substandard is authoritative;
-  // implementation is descriptive metadata.)
+  // status PRISM cannot back. The implementation section is a second copy of
+  // facts the design itself determines — which substandard it models, whether
+  // its eligibility toggle plans a Midnight attestation, and the developer
+  // handoff steps every PRISM export requires — so, like the token summary,
+  // it is cross-checked against the design when present: a file edited to
+  // name a different module than the design models, to misstate its
+  // eligibility plan, or to drop the independent security review from its
+  // required steps is rejected instead of silently imported.
   if(m.status!==undefined&&m.status!=='design-only') throw new Error('This manifest claims a status other than design-only. PRISM designs are not deployed assets — re-export it from PRISM.');
   const impl=m.implementation;
   if(impl!==undefined) {
@@ -2688,6 +2695,24 @@ export function parseManifest(raw) {
     for(const [section,key,label] of [['midnight','proofVerified','a verified Midnight proof'],['midnight','bridgeDeployed','a deployed Midnight bridge'],['realfi','affiliation','a RealFi affiliation'],['realfi','productIssued','an issued RealFi product']]) {
       const v=impl[section]?.[key];
       if(v!==undefined&&v!==false) throw new Error(`This manifest claims ${label}, which PRISM cannot back. Re-export it from PRISM.`);
+    }
+    // Legacy exception: a design section that never stated a substandard
+    // imports as generic by the migration rule above, so its implementation
+    // copy — written against a design that had no module to name — is not
+    // cross-checked. A design that DOES state its module is held to it.
+    if(impl.substandard!==undefined&&designStatedSubstandard) {
+      if(!impl.substandard||typeof impl.substandard!=='object'||Array.isArray(impl.substandard)) throw new Error('This manifest has a malformed implementation substandard section.');
+      const sub=substandardById(rawDesign.substandard);
+      const expectedSub={id:sub.id,name:sub.name,reference:sub.source,modeledLocally:true};
+      for(const k of Object.keys(expectedSub)) if(impl.substandard[k]!==expectedSub[k]) throw new Error(`Manifest implementation substandard does not match its design (${k}). The file may have been edited after export — re-export it from PRISM.`);
+    }
+    if(impl.midnight&&typeof impl.midnight==='object'&&!Array.isArray(impl.midnight)&&impl.midnight.mode!==undefined) {
+      const expectedMode=rawDesign.identity?'planned-eligibility-attestation':'none';
+      if(impl.midnight.mode!==expectedMode) throw new Error(`Manifest implementation Midnight mode does not match its design (mode). The file may have been edited after export — re-export it from PRISM.`);
+    }
+    if(impl.required!==undefined) {
+      const expectedRequired=['Reviewed issuance and transfer validators','Registered token policy and protocol deployment','Validated state and transaction builders','Independent security review'];
+      if(!Array.isArray(impl.required)||impl.required.length!==expectedRequired.length||impl.required.some((v,i)=>v!==expectedRequired[i])) throw new Error('Manifest implementation required steps do not match the steps every PRISM export requires. The file may have been edited after export — re-export it from PRISM.');
     }
   }
   // Whitelist fields; imported objects never become app configuration or API endpoints.
