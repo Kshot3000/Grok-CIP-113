@@ -168,6 +168,101 @@ export function registryChainCheck(group, protocols) {
   return {registryNodePolicyId:group?.protocolParams?.registryNodePolicyId??null,nodeCount:nodes.length,sorted,linked,terminatesAtSentinel,protocolFound,logicMatches,countMatches,ok:sorted&&linked&&terminatesAtSentinel&&protocolFound&&logicMatches&&countMatches};
 }
 
+const NODE_FIELDS = ['mintingLogicScript','transferLogicScript','thirdPartyTransferLogicScript','unfrackingLogicScript','globalStatePolicyId'];
+const NODE_FIELD_LABELS = {mintingLogicScript:'minting logic script',transferLogicScript:'transfer logic script',thirdPartyTransferLogicScript:'third-party logic script',unfrackingLogicScript:'unfracking logic script',globalStatePolicyId:'global state policy ID'};
+function parseRegistryNode(n, allowOrigin) {
+  if(!n||typeof n!=='object'||Array.isArray(n))throw new Error('Invalid registry node record.');
+  const isOrigin = allowOrigin && n.key === '';
+  if(!isOrigin && !(HEX28).test(n.key??''))throw new Error('Invalid registry node record: key.');
+  const next=String(n.next??'').toLowerCase();
+  if(!((HEX28).test(next)||next===REGISTRY_TERMINAL_NEXT))throw new Error('Invalid registry node record: next.');
+  for(const field of NODE_FIELDS) {
+    if(isOrigin) { if(n[field]!=='')throw new Error(`Invalid registry node record: origin node carries a ${NODE_FIELD_LABELS[field]}.`); }
+    else if(!hex28OrEmpty(n[field]))throw new Error(`Invalid registry node record: ${NODE_FIELD_LABELS[field]}.`);
+  }
+  return {key:isOrigin?'':n.key.toLowerCase(),next,mintingLogicScript:String(n.mintingLogicScript).toLowerCase(),transferLogicScript:String(n.transferLogicScript).toLowerCase(),thirdPartyTransferLogicScript:String(n.thirdPartyTransferLogicScript).toLowerCase(),unfrackingLogicScript:String(n.unfrackingLogicScript).toLowerCase(),globalStatePolicyId:String(n.globalStatePolicyId).toLowerCase()};
+}
+function parseRegistryGroupParams(g) {
+  const pp=g?.protocolParams;
+  if(!pp||typeof pp!=='object'||Array.isArray(pp))throw new Error('Invalid registry token group: protocol parameters.');
+  if(!(HEX28).test(pp.registryNodePolicyId??''))throw new Error('Invalid registry token group: registry node policy ID.');
+  if(!(HEX28).test(pp.programmableLogicBaseScriptHash??''))throw new Error('Invalid registry token group: programmable logic base script hash.');
+  return {registryNodePolicyId:pp.registryNodePolicyId.toLowerCase(),programmableLogicBaseScriptHash:pp.programmableLogicBaseScriptHash.toLowerCase()};
+}
+
+// Pure parser for the Foundation registry indexer's nodes/all response
+// (GET /api/v1/registry/nodes/all?protocolParamsId=<id> on the same
+// per-network indexers — the endpoint the platform's own frontend client
+// names for a full registry walk). Unlike /registry/tokens, this response
+// INCLUDES the head of the chain: the origin node, keyed by the empty
+// bytestring, carrying no logic of its own (all five logic / global-state
+// fields empty — a non-empty one is refused, because an origin that
+// carries logic is not the origin the spec defines), pointing at the
+// first registered token — or straight at the 30-byte terminal sentinel
+// when the registry is empty. An empty-key node anywhere but the head, a
+// group with no nodes at all (no origin to walk from), and any malformed
+// node refuse the whole response, exactly as the tokens parser refuses.
+export function parseRegistryNodesAll(rows) {
+  if(!Array.isArray(rows))throw new Error('Unexpected registry walk response.');
+  return rows.map(g=>{
+    if(!g||typeof g!=='object'||Array.isArray(g))throw new Error('Invalid registry walk group.');
+    const protocolParams=parseRegistryGroupParams(g);
+    if(!Array.isArray(g.registryNodes)||g.registryNodes.length===0)throw new Error('Invalid registry walk group: registry nodes — the origin node is missing.');
+    const registryNodes=g.registryNodes.map((n,i)=>parseRegistryNode(n,i===0));
+    return {protocolParams,registryNodes};
+  });
+}
+
+// Verify one parsed nodes/all group as a FULL registry walk — the head
+// the tokens endpoint cannot show, plus the chain it can, plus agreement
+// between the two reads. The walk itself: an origin node at the head
+// carrying no logic, its next naming the first token key (or the
+// terminal sentinel for an empty registry — an origin-only walk that
+// terminates IS a complete walk of an empty registry, verified as such,
+// not a vacuous pass: the head and its termination were both checked).
+// The token nodes after the head must satisfy registryChainCheck itself
+// (validate-once — the walk reuses the chain verdicts rather than
+// restating them) and must agree NODE FOR NODE, every field, with the
+// tokens endpoint's group for the same deployment: two reads of one
+// chain that disagree anywhere fail the walk, however tidy each looks
+// alone. When no tokens group was supplied to compare (its own read
+// failed upstream), tokensAgree is null — not compared — and the walk
+// verdict says so instead of claiming the cross-check ran.
+export function registryWalkCheck(walkGroup, tokensGroup, protocols) {
+  const nodes=walkGroup?.registryNodes??[];
+  const origin=nodes[0]??null;
+  const tokenNodes=nodes.slice(1);
+  const hasOrigin=!!origin&&origin.key==='';
+  const originCarriesNoLogic=hasOrigin&&NODE_FIELDS.every(f=>origin[f]==='');
+  const originLinked=hasOrigin&&(tokenNodes.length?origin.next===tokenNodes[0].key:origin.next===REGISTRY_TERMINAL_NEXT);
+  const chain=registryChainCheck({protocolParams:walkGroup?.protocolParams,registryNodes:tokenNodes},protocols);
+  const matched=tokensGroup&&tokensGroup.protocolParams?.registryNodePolicyId===walkGroup?.protocolParams?.registryNodePolicyId?tokensGroup:null;
+  const tokensCompared=matched!==null;
+  const nodesEqual=(a,b)=>!!a&&!!b&&a.key===b.key&&a.next===b.next&&NODE_FIELDS.every(f=>a[f]===b[f]);
+  const tokensAgree=!tokensCompared?null:(matched.registryNodes.length===tokenNodes.length&&matched.registryNodes.every((n,i)=>nodesEqual(n,tokenNodes[i])));
+  const chainOk=tokenNodes.length?chain.sorted&&chain.linked&&chain.terminatesAtSentinel:true;
+  const ok=hasOrigin&&originCarriesNoLogic&&originLinked&&chainOk&&chain.protocolFound&&chain.logicMatches&&chain.countMatches&&tokensAgree!==false;
+  return {registryNodePolicyId:walkGroup?.protocolParams?.registryNodePolicyId??null,nodeCount:nodes.length,tokenCount:tokenNodes.length,hasOrigin,originCarriesNoLogic,originLinked,sorted:tokenNodes.length?chain.sorted:true,linked:tokenNodes.length?chain.linked:true,terminatesAtSentinel:tokenNodes.length?chain.terminatesAtSentinel:originLinked,protocolFound:chain.protocolFound,logicMatches:chain.logicMatches,countMatches:chain.countMatches,tokensCompared,tokensAgree,ok};
+}
+
+// Live read of one deployment's FULL registry walk (origin included)
+// from the same Foundation indexer. The registry endpoints are keyed by
+// the NUMERIC protocol parameters ID that only the protocols endpoint
+// reports, so the caller passes the id from that list — an id that is
+// not a non-negative integer is refused before any fetch, because a
+// wrong id returns an empty or unrelated walk that looks like an empty
+// registry. Read-only; strictly parsed; cross-checked against both the
+// tokens groups and the deployments list the caller already read.
+export async function getRegistryNodesAll(network, protocolParamsId, tokensGroups, protocols) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before reading its registry.');
+  if(!Number.isSafeInteger(protocolParamsId)||protocolParamsId<0)throw new Error('A registry walk needs the deployment’s protocol parameters ID from the deployments list.');
+  const origin=new URL(net.registryApi);
+  if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
+  const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/registry/nodes/all?protocolParamsId=${protocolParamsId}`);
+  const groups=parseRegistryNodesAll(rows);
+  return {network,indexer:origin.origin,protocolParamsId,groups,walks:groups.map(g=>registryWalkCheck(g,(tokensGroups??[]).find(t=>t.protocolParams.registryNodePolicyId===g.protocolParams.registryNodePolicyId)??null,protocols)),fetchedAt:Date.now()};
+}
 // Live read of one network's registered token nodes from the same
 // Foundation indexer getRegistry reads, cross-checked against that
 // endpoint's deployments list. Read-only; strictly parsed.

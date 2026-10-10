@@ -147,5 +147,5 @@ test('app wires the datum builder into the registry node panel, labeled honestly
   assert.match(app, /BUILT DATUM/);
   assert.match(app, /Building is not registering/);
   assert.match(app, /NOT BUILT/);
-  assert.match(app, /v1.93/);
+  assert.match(app, /v1.94/);
 });
