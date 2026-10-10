@@ -318,6 +318,74 @@ export function verifyRewardAddress(candidateAddress, stakeCredential, stakeHash
     builtType: built.type,
   };
 }
+// Derived reward address verification — the checking half of
+// deriveRewardAddress, in the same shape as verifySmartWallet (the
+// checking half of the other derivation): verifyRewardAddress checks a
+// reward address against the stake credential's COMPONENTS (kind, hash,
+// network), so checking a claimed reward address against a base address
+// meant extracting those components by hand first. This verifier takes
+// the source payment address itself and judges the claim against
+// deriveRewardAddress's own output (validate-once), so it can never
+// disagree with the derivation the address inspector shows. The
+// credential (hash AND kind) and the network each get their own verdict,
+// because they fail separately: the same stake credential on the other
+// network passes the credential verdict exactly and fails the network
+// verdict alone, and the same 28-byte hash carried as a script credential
+// in the source when the candidate carries it as a key credential (header
+// type 15 vs 14) fails the credential verdict alone. THE SUBSTANCE is
+// what derivation ignores: the payment credential plays no part, so two
+// DIFFERENT base addresses carrying the same stake credential derive the
+// SAME reward address, and a candidate that verifies against one verifies
+// against the other — a match ties the reward address to the stake
+// credential, never to one particular payment address (pinned by test).
+// A source that carries no stake credential has no reward address to
+// check against: an enterprise source is refused with derivation's own
+// reason, and a pointer source is refused because its stake rights follow
+// a registration certificate only a chain lookup can resolve — neither is
+// scored as a mismatch. A candidate that is not a reward address at all
+// (a payment or Byron candidate, a bad-checksum or mixed-case Bech32
+// string, malformed hex) is likewise REFUSED by inspectRewardAddress,
+// never scored. Both encodings are accepted on both sides and each side's
+// form is recorded: a Bech32 string's checksum was verified, hex carries
+// none — the decoded bytes are the same either way, but the guarantee is
+// not, and the verifier does not hide the difference. A match is byte
+// equality with the derived address in canonical Bech32. A match proves
+// only the derivation — that this reward address is exactly the one this
+// source's stake credential derives on its network. It does not prove
+// the credential is registered or delegated, that anyone holds the stake
+// key or the source's payment key, that a script exists behind a script
+// hash, or that the account holds rewards or has ever received any; those
+// are chain questions this comparison cannot see.
+export function verifyDerivedRewardAddress(candidateAddress, sourceAddress) {
+  const candidate = inspectRewardAddress(typeof candidateAddress === 'string' ? candidateAddress.trim() : candidateAddress);
+  const sourceTrimmed = typeof sourceAddress === 'string' ? sourceAddress.trim() : sourceAddress;
+  const derived = deriveRewardAddress(sourceTrimmed);
+  const source = inspectAddress(sourceTrimmed);
+  const credentialMatch = candidate.hash === derived.hash && candidate.credential === derived.credential;
+  const networkMatch = candidate.network === derived.network;
+  const match = credentialMatch && networkMatch && candidate.address === derived.address;
+  return {
+    match, credentialMatch, networkMatch,
+    address: candidate.address,
+    hex: candidate.hex,
+    inputForm: candidate.inputForm,
+    type: candidate.type,
+    credential: candidate.credential,
+    hash: candidate.hash,
+    network: candidate.network,
+    networkName: candidate.networkName,
+    sourceAddress: source.address,
+    sourceInputForm: source.inputForm,
+    sourceType: derived.sourceType,
+    derivedAddress: derived.address,
+    derivedHex: derived.hex,
+    derivedType: derived.type,
+    derivedCredential: derived.credential,
+    derivedHash: derived.hash,
+    derivedNetwork: derived.network,
+    derivedNetworkName: derived.networkName,
+  };
+}
 // Shelley address construction — the inverse of inspectAddress: assemble a
 // CIP-19 payment address from its credentials, entirely locally. The header
 // byte is fully determined by the credential kinds: base types 0–3 pair a
