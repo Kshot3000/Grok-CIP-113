@@ -275,6 +275,74 @@ export async function getRegistryTokens(network, protocols) {
   const groups=parseRegistryTokens(rows);
   return {network,indexer:origin.origin,groups,chains:groups.map(g=>registryChainCheck(g,protocols)),fetchedAt:Date.now()};
 }
+// Pure parser for the Foundation registry indexer's protocol parameter
+// versions response (GET /api/v1/protocol-params/versions on the same
+// per-network indexers — the endpoint the platform's own frontend reads
+// for protocol version history). Each record is one version of the
+// protocol parameters a deployment has run under: the registry node
+// policy and programmable-logic hash that version deployed, the
+// transaction that deployed it, its slot and time, and whether it is the
+// version standing as the default now. Every field is validated and hex
+// canonicalised — the default flag must be a real boolean, not a truthy
+// stand-in — and a malformed record refuses the whole response, exactly
+// as the other registry parsers refuse.
+export function parseProtocolParamVersions(rows) {
+  if(!Array.isArray(rows))throw new Error('Unexpected protocol versions response.');
+  return rows.map(v=>{
+    if(!v||typeof v!=='object'||Array.isArray(v))throw new Error('Invalid protocol version record.');
+    if(!(HEX28).test(v.registryNodePolicyId??''))throw new Error('Invalid protocol version record: registry node policy ID.');
+    if(!(HEX28).test(v.progLogicScriptHash??''))throw new Error('Invalid protocol version record: programmable logic script hash.');
+    if(!(/^[a-f0-9]{64}$/i).test(v.txHash??''))throw new Error('Invalid protocol version record: deployment transaction.');
+    if(!Number.isSafeInteger(v.slot)||v.slot<0)throw new Error('Invalid protocol version record: slot.');
+    if(!Number.isSafeInteger(v.timestamp)||v.timestamp<=0)throw new Error('Invalid protocol version record: timestamp.');
+    if(typeof v.default!=='boolean')throw new Error('Invalid protocol version record: default flag.');
+    return {registryNodePolicyId:v.registryNodePolicyId.toLowerCase(),progLogicScriptHash:v.progLogicScriptHash.toLowerCase(),txHash:v.txHash.toLowerCase(),slot:v.slot,timestamp:v.timestamp,default:v.default};
+  });
+}
+
+// Verify one parsed protocol-versions list AS A HISTORY, and cross-check
+// its standing default against the deployments list from the protocols
+// endpoint — the endpoint that reports which parameters stand NOW. A
+// history is coherent only when exactly one version stands as the
+// default (zero leaves nothing standing; two leaves the standing version
+// ambiguous), no deployment transaction is listed twice, and the list as
+// returned runs in slot order, oldest first. The default cross-check:
+// the deployments list must carry the default's deployment transaction,
+// with the same registry node policy, the same programmable-logic hash,
+// and the same slot — the version history and the current deployments
+// are two reads of one deployment story and must agree on the version
+// both call current. When no deployments list was supplied (its own read
+// failed), defaultAgrees is null — not compared — never a fabricated
+// agreement. An empty list verifies nothing: every verdict is false.
+export function protocolVersionsCheck(versions, protocols) {
+  const list=versions??[];
+  const defaults=list.filter(v=>v.default);
+  const exactlyOneDefault=defaults.length===1;
+  const uniqueDeployments=list.length>0&&new Set(list.map(v=>v.txHash)).size===list.length;
+  const slotsInOrder=list.length>0&&list.every((v,i)=>i===0||list[i-1].slot<=v.slot);
+  const standing=exactlyOneDefault?defaults[0]:null;
+  const compared=protocols!=null&&standing!==null;
+  const record=compared?(protocols??[]).find(p=>p.txHash===standing.txHash)??null:null;
+  const defaultListed=compared?record!==null:null;
+  const defaultAgrees=!compared?null:!!record&&record.registryNodePolicyId===standing.registryNodePolicyId&&record.progLogicScriptHash===standing.progLogicScriptHash&&record.slot===standing.slot;
+  const ok=list.length>0&&exactlyOneDefault&&uniqueDeployments&&slotsInOrder&&defaultAgrees!==false;
+  return {versionCount:list.length,defaultCount:defaults.length,exactlyOneDefault,uniqueDeployments,slotsInOrder,defaultTxHash:standing?.txHash??null,defaultCompared:compared,defaultListed,defaultAgrees,ok};
+}
+// Live read of one network's protocol parameter version history from the
+// same Foundation indexer the registry reads use, cross-checked against
+// the deployments list the caller already read. Read-only; strictly
+// parsed. This is the indexer's record of the parameter versions its
+// deployment has run under — the live counterpart of the upgrade history
+// PRISM's protocol-upgrade model plans against locally.
+export async function getProtocolParamVersions(network, protocols) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before reading its protocol versions.');
+  const origin=new URL(net.registryApi);
+  if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
+  const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/protocol-params/versions`);
+  const versions=parseProtocolParamVersions(rows);
+  return {network,indexer:origin.origin,versions,check:protocolVersionsCheck(versions,protocols),fetchedAt:Date.now()};
+}
 export function cardanoWallets(root=globalThis) {
   return Object.entries(root.cardano??{}).filter(([,w])=>w&&typeof w.enable==='function'&&typeof w.name==='string').map(([id,w])=>({id,name:w.name,provider:w}));
 }
