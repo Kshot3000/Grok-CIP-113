@@ -3442,6 +3442,119 @@ export function verifyProtocolUpgrade(beforeInput, claimed) {
   return { status, valid, before, after, declaredKind, derivedKind, authorizedBy, requiredAuthorizer, changedFields, wiringChanged, authorityChanged, nomineeChanged, promotionShape, verdicts };
 }
 
+export const PROTOCOL_UPGRADE_COMPARE_FIELDS = Object.freeze([
+  ['status', 'status'],
+  ['global', 'global'],
+  ['issuanceLogic', 'issuance logic'],
+  ['transferDelegate', 'transfer delegate'],
+  ['thirdPartyDelegate', 'third-party delegate'],
+  ['unfrackingDelegate', 'unfracking delegate'],
+  ['base', 'base'],
+  ['upgradeAuthority', 'upgrade authority'],
+  ['nominee', 'nominee'],
+]);
+
+// CIP-113 protocol upgrade staleness, compared locally: ONE upgrade
+// intent planned against TWO versions of the current protocol
+// parameters — the parameters as they stood when the upgrade was
+// planned, and the parameters as they stand now, after another upgrade
+// may have landed first. This temporal shape differs from the other
+// families' diffs (two versions of a transaction or registry): an
+// upgrade intent is not consumed by a changing artifact, it is STALED
+// by a changing baseline, because every plan reads the current
+// parameters live — a promotion planned against a nominee who has
+// since been replaced would promote whoever stands now, and a wiring
+// change planned against an authority who has since handed over must
+// be authorised by the successor. The registry, base redeemer,
+// delegate pairing, and transfer output-value families already had
+// their temporal half; this completes the family audit.
+//
+// Both parameter versions are planned through planProtocolUpgrade
+// itself with the same intent (validate-once, twenty-sixth
+// application), so comparison and planning can never disagree about
+// the intent's effect against either version, and a version that
+// cannot be read is refused on either side with the planner's reason,
+// never compared around. The intent is one object shared by both
+// plans, so it needs no target check: there is no second intent it
+// could drift from.
+//
+// Nine positions are compared: the plan's status, and each of the
+// eight resulting parameters (a side with no resulting state — an
+// unplannable plan — reads null in every parameter position). THE
+// SUBSTANCE is what is NOT compared as a position. The required
+// authoriser is a restatement of the resulting authority in every
+// planned case — for a wiring change or a nomination it IS the
+// standing authority, which the plan leaves in place; for a promotion
+// it IS the standing nominee, who becomes the resulting authority —
+// so it differs only when the resulting authority or the status
+// already differs, and counting it would double-count the authority's
+// single move (pinned: an intervening nomination change moves a
+// planned promotion's authoriser and its resulting authority together,
+// counted once). It is reported separately as authorizerChanged. The
+// plan's changedFields are likewise derived within each plan, not
+// positions: an intervening upgrade that already applied part of a
+// wiring intent leaves the plan changing fewer fields while landing on
+// exactly the same resulting parameters, so that compares as unchanged
+// with the effect change reported separately as effectChanged, never
+// counted (pinned). And the intervening change itself — which current
+// parameters moved between the two versions — is reported separately
+// as interveningFields, never counted: it is the cause, the positions
+// are the consequence for THIS intent, and an intervening change the
+// intent's plan carries through untouched (a new nominee, under a
+// wiring intent whose resulting nominee follows the current one) is a
+// consequence, while one the plan overwrites identically (the same
+// wiring change re-pointed to the same credential) is none.
+//
+// Classification puts the plannability story first — BECAME
+// UNPLANNABLE (the intent no longer produces a conforming upgrade
+// against the current parameters: the change it names is already
+// applied, or the nominee it would promote no longer stands) and
+// BECAME PLANNABLE take precedence — then STILL UNPLANNABLE (both
+// sides unplannable, for different stated reasons), then RESULT
+// CHANGED. Two unplannable plans with the same missing reasons compare
+// as unchanged: the intent is equally impossible against both.
+//
+// Boundary honesty carries over from the planner: the comparison is
+// between the two modeled parameter versions entered — PRISM read no
+// protocol parameters UTxO and no chain state, and comparing applies
+// neither plan and performs no upgrade.
+export function diffProtocolUpgrade(plannedAgainstInput, currentInput, intent) {
+  const planned = planProtocolUpgrade(plannedAgainstInput, intent);
+  const current = planProtocolUpgrade(currentInput, intent);
+  const valueOf = (plan, field) => field === 'status' ? plan.status : plan.after === null ? null : plan.after[field];
+  const positions = PROTOCOL_UPGRADE_COMPARE_FIELDS.map(([field, label]) => {
+    const before = valueOf(planned, field);
+    const after = valueOf(current, field);
+    const same = field === 'status' ? before === after : credEq(before, after);
+    return { field, label, before, after, differs: !same };
+  });
+  const differing = positions.filter(p => p.differs);
+  const missingSame = planned.missing.length === current.missing.length && planned.missing.every((m, i) => m === current.missing[i]);
+  let change;
+  if (planned.status === 'planned' && current.status === 'unplannable') change = 'became-unplannable';
+  else if (planned.status === 'unplannable' && current.status === 'planned') change = 'became-plannable';
+  else if (planned.status === 'unplannable' && current.status === 'unplannable') change = missingSame && !differing.length ? 'unchanged' : 'still-unplannable';
+  else change = differing.length ? 'result-changed' : 'unchanged';
+  const interveningFields = PROTOCOL_PARAMETER_FIELDS.filter(k => !credEq(planned.before[k], current.before[k]));
+  const effectChanged = planned.changedFields.length !== current.changedFields.length || planned.changedFields.some((f, i) => f !== current.changedFields[i]);
+  const authorizerChanged = !credEq(planned.requiredAuthorizer, current.requiredAuthorizer);
+  return {
+    change,
+    kind: planned.kind,
+    changedFields: differing.map(p => p.label),
+    positions,
+    interveningFields,
+    parametersChanged: interveningFields.length > 0,
+    effectChanged,
+    authorizerChanged,
+    before: planned,
+    after: current,
+    unchanged: change === 'unchanged',
+    changedCount: differing.length,
+    positionCount: positions.length,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
