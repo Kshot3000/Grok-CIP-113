@@ -2533,6 +2533,104 @@ export function verifyBaseSpendRedeemer(input, claimed) {
   return { status, valid, expected, claimed: claimedNorm, verdicts, missing: [], paramsRef: plan.paramsRef, globalCredential: plan.globalCredential };
 }
 
+export const BASE_REDEEMER_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['paramsIdx', 'params_idx'],
+  ['wdrlIdx', 'wdrl_idx'],
+]);
+
+// CIP-113 BaseSpendRedeemer impact, compared locally between two modeled
+// versions of the SAME transaction — the redeemer as planned against the
+// transaction as it was, and as planned against the transaction as it
+// would be after some other change (a reference input added while
+// assembling the transaction, a withdrawal added or reordered, the
+// parameters UTxO dropped). The registry families already had this
+// temporal half (diffRegistryProofs, diffRegistryInsertion); the base
+// redeemer family had only plan → verify, so a builder whose transaction
+// changed after they planned its redeemer could not ask which of its two
+// hints the change invalidates — and a stale hint does not fail loudly
+// here, it resolves to a different input or a different credential and
+// the spend fails at the validator.
+//
+// Both versions are planned through planBaseSpendRedeemer itself
+// (validate-once, twenty-third application), so comparison and planning
+// can never disagree about either hint in either version, and a version
+// that cannot be read (a duplicated reference input, a duplicated
+// withdrawal credential, a hash that is not 28 bytes) is refused on
+// either side with the planner's reason, never compared around.
+//
+// The comparison tracks ONE redeemer: the two versions must name the
+// same protocol parameters reference and the same
+// programmableLogicGlobal credential (compared in the planner's
+// canonical form, so hex case alone is the same credential). Different
+// targets are different redeemers, and comparing them is refused rather
+// than scored — which hint moved is meaningless when the hint's target
+// itself changed.
+//
+// Three positions are compared, in redeemer order: the status and the
+// two hints the redeemer actually carries. THE SUBSTANCE is what is NOT
+// compared: the plan's givenWithdrawalIndex — the global credential's
+// position in INSERTION order — is not carried by the redeemer, and a
+// pure reordering of the withdrawal insertions changes it while the
+// ledger order, and therefore wdrl_idx, stands exactly still (pinned:
+// the reordering compares as unchanged). The ordered withdrawal list is
+// likewise derived from the withdrawal set, and the list sizes are
+// carried inside the two plans; the lists' own change is reported
+// separately as the added/removed reference inputs and withdrawal
+// credentials, never counted as positions. The missing set needs no
+// position of its own either: which pieces are missing is exactly which
+// hints are null, so two unplannable versions with different missing
+// pieces differ on the hints alone, never on a phantom fourth field.
+//
+// The change is classified by its plannability story first — BECAME
+// UNPLANNABLE and BECAME PLANNABLE take precedence, because the spend
+// gaining or losing its redeemer entirely is the headline even when a
+// computable hint also moved — then STILL UNPLANNABLE (unplannable on
+// both sides, but not the same unplannable) and HINTS CHANGED (planned
+// on both sides, a hint moved).
+//
+// Boundary honesty carries over from the planner: the comparison is
+// between the two modeled versions entered — PRISM read no transaction
+// and no chain state, and comparing plans applies neither plan and
+// builds no transaction.
+export function diffBaseSpendRedeemer(beforeInput, afterInput) {
+  const before = planBaseSpendRedeemer(beforeInput);
+  const after = planBaseSpendRedeemer(afterInput);
+  if (before.paramsRef !== after.paramsRef) throw new Error(`The two modeled transactions name different protocol parameters references — ${JSON.stringify(before.paramsRef)} before and ${JSON.stringify(after.paramsRef)} after. A comparison tracks one redeemer: the parameters reference its params_idx resolves must be the same on both sides.`);
+  if (before.globalCredential.kind !== after.globalCredential.kind || before.globalCredential.hash !== after.globalCredential.hash) throw new Error('The two modeled transactions name different programmableLogicGlobal credentials. A comparison tracks one redeemer: the global credential its wdrl_idx resolves must be the same on both sides.');
+  const positionOf = plan => ({ status: plan.status, paramsIdx: plan.paramsIndex, wdrlIdx: plan.wdrlIndex });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of BASE_REDEEMER_COMPARE_FIELDS) {
+    if (beforePos[field] !== afterPos[field]) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.status === 'planned' && after.status === 'unplannable') change = 'became-unplannable';
+  else if (before.status === 'unplannable' && after.status === 'planned') change = 'became-plannable';
+  else if (before.status === 'unplannable') change = 'still-unplannable';
+  else change = 'hints-changed';
+  const beforeRefs = baseReferenceInputs(beforeInput.referenceInputs), afterRefs = baseReferenceInputs(afterInput.referenceInputs);
+  const beforeRefSet = new Set(beforeRefs), afterRefSet = new Set(afterRefs);
+  const credKey = c => `${c.kind}|${c.hash}`;
+  const beforeWds = baseWithdrawals(beforeInput.withdrawals), afterWds = baseWithdrawals(afterInput.withdrawals);
+  const beforeWdSet = new Set(beforeWds.map(credKey)), afterWdSet = new Set(afterWds.map(credKey));
+  return {
+    paramsRef: before.paramsRef,
+    globalCredential: before.globalCredential,
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    addedRefs: afterRefs.filter(r => !beforeRefSet.has(r)),
+    removedRefs: beforeRefs.filter(r => !afterRefSet.has(r)),
+    addedWithdrawals: afterWds.filter(c => !beforeWdSet.has(credKey(c))),
+    removedWithdrawals: beforeWds.filter(c => !afterWdSet.has(credKey(c))),
+    before,
+    after,
+    unchanged: differences.length === 0,
+  };
+}
+
 // CIP-113 action-delegate pairing planning, modeled locally from the
 // spec's ThirdPartyAct and UnfrackingAct sections.
 //
