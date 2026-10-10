@@ -1,4 +1,5 @@
 import { CONFIG, TEMPLATES, NETWORKS } from './config.js';
+import { blake2b, hexToBytes, bytesToHex } from './cardano.js';
 
 export const MAX_ASSET = 9223372036854775807n;
 export const PARTICIPANTS = Object.freeze({
@@ -1990,6 +1991,161 @@ export function diffRegistryInsertion(beforeKeys, afterKeys, newPolicy) {
     before,
     after,
     unchanged: differences.length === 0,
+  };
+}
+
+// CIP-113 RegistryInsert binding, modeled locally from the spec's
+// "Registry redeemer and the binding of policy to logic" and the
+// Foundation reference implementation's registry validator and its
+// derivation helper (lib/utils.ak: expect_programmable_token_id_valid /
+// apply_hashed_parameter, re-read 2026-10-10).
+//
+// The insertion planner and verifier above judge a registration's LIST
+// mechanics and state plainly what they do not: the RegistryInsert
+// redeemer's minting logic credential, its cryptographic binding to the
+// key, and the registry NFT. This section models the first two — the
+// binding is a computation, and a modeled claim can carry every input
+// it needs. (The NFT stays unjudged: whether a real UTxO holds it is a
+// fact about a transaction PRISM does not read.)
+//
+// The registry minting policy takes the redeemer
+//
+//   RegistryInsert { key: ByteArray, minting_logic_script: Credential }
+//
+// and on insertion the registry enforces three things, each judged
+// here as its own position because they fail separately:
+//
+// 1. DATUM EQUALS REDEEMER. The new node's `minting_logic_script` datum
+//    field MUST equal the credential named in the redeemer, so a
+//    registrar cannot declare one credential and write another into
+//    the datum (the reference's is_inserted_registry_node is handed
+//    the redeemer's credential, never the datum's own claim).
+// 2. POLICY BINDING. The official issuance script, parameterised with
+//    that credential, MUST hash to `key`. The parameter's hash is
+//    derived inside the validator and is not a redeemer field, so
+//    collision resistance of the hash — not a runtime equality check
+//    between two supplied values — is what forces the policy and its
+//    minting logic to agree. The derivation, exactly as the reference
+//    performs it (apply_hashed_parameter): the credential MUST be a
+//    Script credential (a VerificationKey credential aborts the
+//    derivation — there is no policy to compare, and this model
+//    reports the binding failed with no expected policy derived,
+//    never a hash of a public key invented for the purpose); its
+//    inner 28-byte hash is the parameter; the reconstructed script is
+//    the Plutus V3 version byte 0x03, then the issuance template's
+//    prefix_cbor_hex, then the parameter hash, then postfix_cbor_hex
+//    (any CBOR framing for the parameter lives inside the prefix and
+//    postfix, which are the template's own bytes, carried by the
+//    IssuanceCborHex datum on a reference input the validator finds
+//    by its one-shot policy); the policy is Blake2b-224 of those
+//    bytes — the ledger's own Plutus V3 script hash of the
+//    reconstructed script.
+// 3. PROOF OF INSTANCE. The substandard's minting logic MUST be
+//    invoked in the registering transaction — its credential appears
+//    in the transaction's withdrawals — required explicitly because a
+//    registration MAY carry no first mint, in which case the issuance
+//    minting policy is never invoked to check it. Whether a first
+//    mint rides along is NOT judged: both shapes are valid, and a
+//    strict register-then-mint lifecycle is the substandard's own
+//    minting logic's business, not the registry's.
+//
+// Refusal vs verdict, as in PRISM's other checkers: a claim that
+// cannot be read — a key that is not a 28-byte policy ID, a credential
+// of an unknown kind or with a hash of any other length, template
+// bytes that are not even-length hexadecimal, a withdrawals list that
+// is not a list, names a credential twice (a transaction's withdrawal
+// map cannot), or carries an unknown or missing field — is REFUSED
+// with the reason, never scored in part.
+//
+// Boundary honesty: a bound verdict proves only that the three
+// modeled positions agree for the claim as entered, against the
+// template bytes as entered. PRISM read no reference input and no
+// transaction, verified no registry NFT, and registered nothing; the
+// template bytes here are the claim's own, so a verdict is only as
+// deployment-true as the template the builder pasted in.
+function registryCredential(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be a credential naming a kind (pubkey or script) and a hash.`);
+  for (const k of Object.keys(value)) if (k !== 'kind' && k !== 'hash') throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a credential names only a kind and a hash.`);
+  if (value.kind === undefined || value.hash === undefined) throw new Error(`${label} must name both a kind (pubkey or script) and a hash.`);
+  if (value.kind !== 'pubkey' && value.kind !== 'script') throw new Error(`${label}'s kind must be pubkey or script — ${JSON.stringify(value.kind)} given.`);
+  const hash = registryBytesHex(value.hash, `${label}'s hash`);
+  if (hash.length !== 56) throw new Error(`${label}'s hash must be 28 bytes (56 hexadecimal characters) — ${hash.length / 2} bytes given.`);
+  return { kind: value.kind, hash };
+}
+
+function issuanceTemplateBytes(value, label) {
+  const v = registryBytesHex(value, label);
+  return { hex: v, bytes: v === '' ? new Uint8Array(0) : hexToBytes(v) };
+}
+
+// The derivation half of the binding: the policy ID the official
+// issuance template, parameterised by a minting logic credential,
+// hashes to. The return is pinned by test, key for key: the derived
+// policy, the parameter hash it was derived from (the credential's own
+// inner hash — the derivation's only secret-shaped input, and it is
+// the credential itself, which a redeemer states in the open), the
+// canonical template bytes, and the reconstructed script's length.
+// No script bytes are returned: the reconstruction exists to be
+// hashed, and handing the bytes back would invite reading them as a
+// script PRISM derived — it derived a hash, from a template a builder
+// supplied, of a script that lives in the deployment's reference
+// input, not here.
+export function deriveIssuancePolicyId(prefixHex, postfixHex, mintingLogic) {
+  const credential = registryCredential(mintingLogic, 'The minting logic credential');
+  if (credential.kind !== 'script') throw new Error(`The issuance derivation requires a script minting logic credential — the reference aborts on a public-key credential, because the parameter it hashes is the credential's inner script hash. A ${credential.kind} credential has no policy to derive.`);
+  const prefix = issuanceTemplateBytes(prefixHex, 'The issuance template prefix_cbor_hex');
+  const postfix = issuanceTemplateBytes(postfixHex, 'The issuance template postfix_cbor_hex');
+  const script = new Uint8Array(1 + prefix.bytes.length + 28 + postfix.bytes.length);
+  script[0] = 0x03;
+  script.set(prefix.bytes, 1);
+  script.set(hexToBytes(credential.hash), 1 + prefix.bytes.length);
+  script.set(postfix.bytes, 1 + prefix.bytes.length + 28);
+  return {
+    policyId: bytesToHex(blake2b(script, 28)),
+    mintingLogic: credential,
+    paramHash: credential.hash,
+    prefix: prefix.hex,
+    postfix: postfix.hex,
+    scriptByteLength: script.length,
+  };
+}
+
+export function checkRegistryInsertBinding(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The binding claim must be an object naming the redeemer’s key and minting logic credential, the new node’s datum minting logic credential, the transaction’s withdrawals, and the issuance template’s prefix and postfix.');
+  const inputFields = ['key', 'mintingLogic', 'datumMintingLogic', 'withdrawals', 'issuancePrefix', 'issuancePostfix'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The binding claim carries an unknown field ${JSON.stringify(k)} — it names only the redeemer’s key and minting logic credential, the datum’s minting logic credential, the withdrawals, and the issuance template’s prefix and postfix.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The binding claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  const key = registryPolicyId(claim.key, 'The RegistryInsert redeemer’s key');
+  const mintingLogic = registryCredential(claim.mintingLogic, 'The RegistryInsert redeemer’s minting_logic_script');
+  const datumMintingLogic = registryCredential(claim.datumMintingLogic, 'The new node’s datum minting_logic_script');
+  if (!Array.isArray(claim.withdrawals)) throw new Error('The binding claim’s withdrawals must be a list of the credentials the registering transaction invokes — a withdrawal map’s keys, in any order.');
+  const withdrawals = claim.withdrawals.map((w, i) => registryCredential(w, `Withdrawal ${i + 1}`));
+  const seen = new Set();
+  for (const w of withdrawals) {
+    const id = `${w.kind}:${w.hash}`;
+    if (seen.has(id)) throw new Error(`The withdrawals name the ${w.kind} credential ${w.hash} twice — a transaction’s withdrawal map holds each credential once, so the claim cannot be read as one.`);
+    seen.add(id);
+  }
+  const prefix = issuanceTemplateBytes(claim.issuancePrefix, 'The issuance template prefix_cbor_hex');
+  const postfix = issuanceTemplateBytes(claim.issuancePostfix, 'The issuance template postfix_cbor_hex');
+  const datumMatchesRedeemer = datumMintingLogic.kind === mintingLogic.kind && datumMintingLogic.hash === mintingLogic.hash;
+  let expectedPolicyId = null;
+  if (mintingLogic.kind === 'script') {
+    expectedPolicyId = deriveIssuancePolicyId(prefix.hex, postfix.hex, mintingLogic).policyId;
+  }
+  const policyBinding = expectedPolicyId !== null && expectedPolicyId === key;
+  const mintingLogicInvoked = withdrawals.some(w => w.kind === mintingLogic.kind && w.hash === mintingLogic.hash);
+  const verdicts = { datumMatchesRedeemer, policyBinding, mintingLogicInvoked };
+  const valid = datumMatchesRedeemer && policyBinding && mintingLogicInvoked;
+  return {
+    status: valid ? 'bound' : 'not-bound',
+    valid,
+    key,
+    mintingLogic,
+    datumMintingLogic,
+    expectedPolicyId,
+    withdrawals,
+    verdicts,
   };
 }
 
