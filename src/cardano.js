@@ -790,6 +790,70 @@ export function verifyCip68Pair(sourceHex, claimedHex) {
     expectedPairs: source.pairs,
   };
 }
+// CIP-68 asset-pair verification — the unit-level checking half the name
+// pair verifier (verifyCip68Pair) deliberately stops short of. Names
+// carry no policy ID, and CIP-68 pairing holds only under ONE policy, so
+// the name verifier can prove two NAMES pair and explicitly cannot prove
+// two ASSETS pair. Assets are identified by their UNIT — policy ID plus
+// asset name — so this verifier splits BOTH units with parseAssetUnit and
+// judges three positions separately, because they fail separately and
+// each failure means something different: the policy IDs must be byte-
+// identical, the name bytes after the prefix must be identical, and the
+// claimed label must be one of the labels the source's kind pairs with.
+// The name positions are judged by verifyCip68Pair itself and the
+// expected units are built by buildAssetUnit itself (validate-once), so
+// this verifier can never disagree with the name verifier about pairing
+// or with the unit builder about composition. The policy verdict carries
+// the trap the name verifier warned about: the very same paired names
+// under a DIFFERENT policy pass both name verdicts exactly and fail the
+// policy verdict alone — they are different assets entirely, and a
+// builder told only 'the names pair' would accept a partner token from
+// the wrong policy. A token handed back its own unit passes policy and
+// content and fails the label verdict alone — it is not its own pair. An
+// unlabeled source unit is scored as having no pair (expected units
+// empty, label verdict fails by construction) rather than refused, while
+// a unit that cannot be split at all (non-hex, shorter than a policy ID,
+// a name part over the 32-byte limit, or a Bech32 fingerprint — a hash, a
+// different identifier) is refused, never scored. A match is byte
+// equality of the claimed unit with one of the expected units, in
+// canonical lowercase; each side's CIP-14 fingerprint is returned as a
+// cross-check. A match proves only that the two UNITS form a CIP-68
+// pair — not that either asset was minted, exists on chain, holds
+// metadata in a datum, is authentic or backed, or sits in a CIP-113
+// registry; existence is a lookup question, answered on chain.
+export function verifyUnitPair(sourceUnitHex, claimedUnitHex) {
+  const source = parseAssetUnit(typeof sourceUnitHex === 'string' ? sourceUnitHex.trim() : sourceUnitHex);
+  const claimed = parseAssetUnit(typeof claimedUnitHex === 'string' ? claimedUnitHex.trim() : claimedUnitHex);
+  const pair = verifyCip68Pair(source.assetNameHex, claimed.assetNameHex);
+  const policyMatch = source.policyId === claimed.policyId;
+  const expectedUnits = pair.expectedPairs.map(p => {
+    const built = buildAssetUnit(source.policyId, p.nameHex);
+    return { label: p.label, role: p.role, nameHex: p.nameHex, unitHex: built.unitHex, fingerprint: built.fingerprint };
+  });
+  const match = policyMatch && pair.match && expectedUnits.some(u => u.unitHex === claimed.unitHex);
+  return {
+    match, policyMatch, contentMatch: pair.contentMatch, labelMatch: pair.labelMatch,
+    sourceUnitHex: source.unitHex,
+    sourcePolicyId: source.policyId,
+    sourceNameHex: source.assetNameHex,
+    sourceKind: pair.sourceKind,
+    sourceLabel: pair.sourceLabel,
+    sourceText: pair.sourceText,
+    sourceFingerprint: source.fingerprint,
+    sourceDecoded: source.decoded,
+    claimedUnitHex: claimed.unitHex,
+    claimedPolicyId: claimed.policyId,
+    claimedNameHex: claimed.assetNameHex,
+    claimedLabel: pair.claimedLabel,
+    claimedLabelRole: pair.claimedLabelRole,
+    claimedText: pair.claimedText,
+    claimedTextDecodable: pair.claimedTextDecodable,
+    claimedFingerprint: claimed.fingerprint,
+    claimedDecoded: claimed.decoded,
+    expectedUnits,
+    expectedPairs: pair.expectedPairs,
+  };
+}
 // CIP-68 name construction — the inverse of decodeAssetName: build the
 // exact asset-name hex for a chosen label and a human-readable name, so a
 // builder designing a token pair works from the same bytes explorers will
