@@ -1,4 +1,5 @@
 import { NETWORKS, PREVIEW_REFERENCE } from './config.js';
+import { SUBSTANDARDS } from './domain.js';
 import { normalizeWalletAddress, decodeAddress, inspectAddress, inspectRewardAddress, blake2b, hexToBytes, bytesToHex } from './cardano.js';
 
 export async function fetchJson(url,options={}) {
@@ -410,6 +411,68 @@ export function modulesCheck(modules) {
   const ok=list.length>0&&idsUnique&&titlesUniqueWithinModules&&hashesVerify;
   return {moduleCount:list.length,validatorCount:all.length,uniqueScriptCount,idsUnique,titlesUniqueWithinModules,hashesVerify,verifiedCount:all.filter(v=>v.computedHash===v.scriptHash).length,ok};
 }
+// The correspondence between the indexer's module catalogue and the
+// substandards PRISM models locally in the studio (SUBSTANDARDS in
+// domain.js). The two lists do NOT line up one for one, and this table is
+// the whole claim — nothing outside it is ever implied:
+//   freeze-and-seize (indexer) is the one exact correspondence: the
+//     studio models it locally as freeze-seize (the studio shortens the
+//     module's name in design files; it is the same Foundation module,
+//     whose source lives at src/modules/freeze-and-seize in the platform
+//     repo — the same tree the local model's source link names).
+//   dummy is the platform's test module: catalogued, with no local model,
+//     by design — there is no design behaviour to model.
+//   rwa-token is a PROFILE (German & Swiss RWA profiles), not one of the
+//     studio's modules: it has no single local model. Its own indexer
+//     description names KYC-gated transfers, denylisting, and forced
+//     transfers/seizures — behaviour PRISM models separately in its
+//     freeze-seize, KYC, and KYC-extended models — so those models are
+//     recorded as RELATED to the profile. Modeling parts of a profile is
+//     not modeling the profile, and relatedLocalIds never counts as a
+//     model of it.
+// The local side is derived, never restated: a local model is
+// 'catalogued' only when a live module maps to it exactly, 'related-only'
+// when it appears only in a present profile's related list, and
+// 'no-live-counterpart' otherwise (KYC and KYC extended are documented
+// platform modules — src/modules and docs/modules in the platform repo —
+// that this indexer does not catalogue as their own entries; PRISM's
+// generic rules are its own design aid, with no platform counterpart).
+export const MODULE_MODEL_MAP = Object.freeze([
+  Object.freeze({liveId:'dummy',localId:null,kind:'test',relatedLocalIds:Object.freeze([])}),
+  Object.freeze({liveId:'freeze-and-seize',localId:'freeze-seize',kind:'modeled',relatedLocalIds:Object.freeze([])}),
+  Object.freeze({liveId:'rwa-token',localId:null,kind:'profile',relatedLocalIds:Object.freeze(['freeze-seize','kyc','kyc-extended'])}),
+]);
+
+// Account for one parsed modules list against the studio's local models.
+// The verdict is completeness of ACCOUNTING, not of modeling: it passes
+// when every catalogued module is classified by the table above and the
+// table itself is consistent with SUBSTANDARDS. A catalogued module the
+// table does not name is UNKNOWN — the check fails and names it, because
+// its relationship to the local models has not been established and must
+// never be guessed. Whether a classified module is modeled is reported
+// beside the verdict (modeledLiveIds / unmodeledLiveIds), never folded
+// into it: dummy and rwa-token being unmodeled is a stated fact, not a
+// failure of the catalogue. An empty catalogue accounts for nothing:
+// ok is false, never a vacuous pass.
+export function moduleCoverageCheck(modules) {
+  const list=modules??[];
+  const localIds=SUBSTANDARDS.map(s=>s.id);
+  const byLive=new Map(MODULE_MODEL_MAP.map(e=>[e.liveId,e]));
+  const tableValid=MODULE_MODEL_MAP.length>0&&byLive.size===MODULE_MODEL_MAP.length&&MODULE_MODEL_MAP.every(e=>(e.localId===null||localIds.includes(e.localId))&&e.relatedLocalIds.every(id=>localIds.includes(id)));
+  const live=list.map(m=>{const e=byLive.get(m.id);return e?{id:m.id,kind:e.kind,localId:e.localId,relatedLocalIds:[...e.relatedLocalIds]}:{id:m.id,kind:'unknown',localId:null,relatedLocalIds:[]};});
+  const unknownLiveIds=live.filter(x=>x.kind==='unknown').map(x=>x.id);
+  const modeledLiveIds=live.filter(x=>x.localId).map(x=>x.id);
+  const unmodeledLiveIds=live.filter(x=>!x.localId).map(x=>x.id);
+  const local=SUBSTANDARDS.map(s=>{
+    const exact=live.find(x=>x.localId===s.id);
+    if(exact)return {id:s.id,status:'catalogued',liveId:exact.id};
+    const rel=live.find(x=>x.relatedLocalIds.includes(s.id));
+    if(rel)return {id:s.id,status:'related-only',liveId:rel.id};
+    return {id:s.id,status:'no-live-counterpart',liveId:null};
+  });
+  const ok=list.length>0&&tableValid&&unknownLiveIds.length===0;
+  return {ok,tableValid,live,local,unknownLiveIds,modeledLiveIds,unmodeledLiveIds,modeledCount:modeledLiveIds.length,liveCount:list.length,localCount:local.length,relatedOnlyLocalIds:local.filter(x=>x.status==='related-only').map(x=>x.id),localWithoutLiveIds:local.filter(x=>x.status==='no-live-counterpart').map(x=>x.id)};
+}
 // Live read of one network's substandard module catalogue from the same
 // Foundation indexer the registry reads use. Read-only; strictly parsed;
 // every stated hash recomputed locally before anything is shown as
@@ -424,7 +487,7 @@ export async function getModules(network) {
   if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
   const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/modules`);
   const modules=parseModules(rows);
-  return {network,indexer:origin.origin,modules,check:modulesCheck(modules),fetchedAt:Date.now()};
+  return {network,indexer:origin.origin,modules,check:modulesCheck(modules),coverage:moduleCoverageCheck(modules),fetchedAt:Date.now()};
 }
 export function cardanoWallets(root=globalThis) {
   return Object.entries(root.cardano??{}).filter(([,w])=>w&&typeof w.enable==='function'&&typeof w.name==='string').map(([id,w])=>({id,name:w.name,provider:w}));
