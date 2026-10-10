@@ -737,6 +737,57 @@ export function verifyAssetFingerprint(policyHex, assetNameHex, claimed) {
     assetNameHex:(assetNameHex??'').toLowerCase(),
   };
 }
+// CIP-14 fingerprint verification from the asset unit — the unit-level
+// form of verifyAssetFingerprint, and the last verifier in this module
+// whose natural source it did not accept: an asset in the wild is
+// identified by its UNIT, the one concatenated string explorers, Koios
+// asset lists, and wallet APIs report, but the verifier above takes the
+// policy ID and asset name as separate components, so checking a
+// fingerprint claim against a unit meant splitting the unit by hand at
+// the 28-byte boundary first — and a hand split is exactly where a
+// copied policy ends and its name begins can silently shift. Here the
+// unit is split by parseAssetUnit itself and the claim is judged by
+// verifyAssetFingerprint itself (validate-once, eighteenth application),
+// so the splitter, the component verifier, and this verifier can never
+// disagree about what a unit's fingerprint is. The verdict is SINGLE and
+// exact, deliberately carrying no policy/name positions: a fingerprint
+// is a hash, so a mismatch cannot say which half of the unit differs —
+// a builder who needs the differing position verifies the unit itself
+// (verifyAssetUnit), and the UI says so rather than pretending the hash
+// localises the error. The fingerprint covers the FULL name bytes,
+// CIP-68 label prefix included, so a reference token and its user token
+// — same policy, same bytes after the prefix — have different
+// fingerprints and neither verifies against the other's unit (pinned).
+// A unit that cannot be split at all (non-hex, shorter than a policy
+// ID, a name part over 32 bytes, or a fingerprint handed over AS the
+// unit — a hash, which cannot be split back) is REFUSED by the
+// splitter, never scored, and a claimed fingerprint that cannot be
+// decoded is refused by the component verifier on the same terms. Hex
+// case is not identity: an all-uppercase unit is the same asset and is
+// reported in canonical lowercase, and an all-uppercase fingerprint is
+// the same fingerprint (the decoder normalises it; mixed case is
+// refused there). A unit that is a policy ID alone is an empty-name
+// asset and verifies against the fingerprint of the policy bytes alone.
+// A match proves only that the claimed string is the CIP-14 fingerprint
+// of this unit's asset — not that the asset was minted, exists on
+// chain, is authentic or backed, or sits in a CIP-113 registry.
+export function verifyUnitFingerprint(unitHex, claimed) {
+  const parsed=parseAssetUnit(typeof unitHex==='string'?unitHex.trim():unitHex);
+  const verdict=verifyAssetFingerprint(parsed.policyId, parsed.assetNameHex, claimed);
+  return {
+    match: verdict.match,
+    unitHex: parsed.unitHex,
+    byteLength: parsed.byteLength,
+    policyId: parsed.policyId,
+    assetNameHex: parsed.assetNameHex,
+    nameByteLength: parsed.nameByteLength,
+    decoded: parsed.decoded,
+    computedFingerprint: verdict.computedFingerprint,
+    claimedFingerprint: verdict.claimedFingerprint,
+    computedDigestHex: verdict.computedDigestHex,
+    claimedDigestHex: verdict.claimedDigestHex,
+  };
+}
 // CIP-67 asset-name labels as registered for CIP-68: the first four bytes
 // of the asset name declare the token's role, and the remaining bytes are
 // the shared token name both the reference and the user token carry.
