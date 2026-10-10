@@ -181,12 +181,12 @@ test('getRegistryNodesAll refuses an unusable id before any fetch, and surfaces 
   finally { http.restore(); }
 });
 
-test('app wires the full walk: origin row, walk verdict, honest partial failure, v1.97', async () => {
+test('app wires the full walk: origin row, walk verdict, honest partial failure, v1.98', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /getRegistryNodesAll\(state\.network,p\.protocolParamsId/);
   assert.match(app, /Walk check passed/);
   assert.match(app, /Walk check FAILED/);
   assert.match(app, /Registry walk unavailable\.<\/strong>/);
   assert.match(app, /origin \(empty key\)/);
-  assert.match(app, /WORKSPACE <span>v1\.97<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.98<\/span>/);
 });

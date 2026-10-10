@@ -13,7 +13,7 @@ export const PROCESS_URL = 'https://github.com/cardano-foundation/CIPs/tree/mast
 // the spec, never by assumption.
 export const CIP113_STATUS = Object.freeze({
   status: 'Proposed',
-  checked: '2026-10-09',
+  checked: '2026-10-10',
   merged: '2026-09-29',
   specVersion: '3.0',
   category: 'Tokens',
@@ -65,7 +65,7 @@ export const IMPLEMENTATION_PLAN = Object.freeze([
     id: 'offchain',
     label: 'Implement the off-chain code to query balances and construct transfer transactions',
     state: 'Reference exists upstream',
-    note: 'The Foundation platform provides a self-hosted backend and indexer. There is no publicly hosted registry endpoint — which is why PRISM’s registry panel shows an honest “not connected” state instead of invented data.',
+    note: 'The Foundation platform provides the off-chain code, and its hosted indexers — one per network at programmabletokens.xyz — are publicly reachable: PRISM’s registry browser reads deployments, registered tokens, the full registry walk, protocol parameter versions, and the substandard module catalogue from them live. Building and submitting transactions still runs on a self-hosted backend; PRISM reads only, and constructs, signs, and submits nothing.',
   },
 ]);
 
@@ -118,7 +118,7 @@ export const LEARNING_PATH = Object.freeze([
     id: 'upgradability',
     title: 'Upgrading the rules without moving anyone’s tokens',
     plain: 'A deployment is not frozen at launch. The credentials that wire it together — the global logic, the protocol-level issuance logic, and the three action delegates — are held as data in a protocol parameters record and read live every time a transaction is validated, so the upgrade authority can re-point any of them and the new wiring applies to every programmable token at once, from the very next transaction.',
-    detail: 'Two things can never move. The base credential is the payment credential of every smart-wallet address, so changing it would relocate every holder’s funds — a different base is a different deployment, identified by its own bootstrap transaction. And each token’s own minting policy is permanent, which is what lets a token’s identity survive an upgrade of the logic governing it. Changing the upgrade authority itself is deliberately two-phase: first a nomination, then a separate promotion that the nominee must authorise — the evidence the incoming authority exists, can act, and consents. A wiring change may not smuggle in an authority change, and every upgrade must declare which kind it is. The standard does not say what the authority is — a single key, a multisig, or a governance script all satisfy it — so judging a deployment means reading who its authority is in the protocol parameters, not assuming. PRISM’s Network explorer models this upgrade planner and checker locally; no protocol parameters record is read.',
+    detail: 'Two things can never move. The base credential is the payment credential of every smart-wallet address, so changing it would relocate every holder’s funds — a different base is a different deployment, identified by its own bootstrap transaction. And each token’s own minting policy is permanent, which is what lets a token’s identity survive an upgrade of the logic governing it. Changing the upgrade authority itself is deliberately two-phase: first a nomination, then a separate promotion that the nominee must authorise — the evidence the incoming authority exists, can act, and consents. A wiring change may not smuggle in an authority change, and every upgrade must declare which kind it is. The standard does not say what the authority is — a single key, a multisig, or a governance script all satisfy it — so judging a deployment means reading who its authority is in the protocol parameters, not assuming. PRISM’s Network explorer reads a deployment’s protocol parameter version history live from the Foundation indexer — which version stands, and the transaction and slot that deployed it — while its upgrade planner, checker, and comparison model a parameters record locally: no record’s wiring credentials are read, and no upgrade is constructed or applied.',
     specSection: 'Protocol upgradability',
   },
   {

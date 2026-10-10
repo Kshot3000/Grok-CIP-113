@@ -128,5 +128,5 @@ test('the app wires the insertion comparison into the registry panel at the curr
   assert.match(app, /registryInsertDiffPreview/);
   assert.match(app, /registry-insert-diff-result/);
   assert.match(app, /registry-insert-diff-after/);
-  assert.match(app, /v1\.97/);
+  assert.match(app, /v1\.98/);
 });

@@ -166,7 +166,7 @@ test('app wires the live registry browser: network-aware read, cross-check copy,
   assert.match(app, /Cross-check failed/);
   assert.match(app, /Registry unavailable\.<\/strong>/);
   assert.match(app, /id="registry-results" aria-live="polite"/);
-  assert.match(app, /WORKSPACE <span>v1\.97<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.98<\/span>/);
   assert.doesNotMatch(app, /INDEXER NOT CONNECTED/);
   assert.doesNotMatch(app, /Read configured registry/);
 });

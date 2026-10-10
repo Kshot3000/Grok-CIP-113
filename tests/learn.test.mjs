@@ -5,9 +5,9 @@ import { CIP113_STATUS, ACCEPTANCE_CRITERIA, IMPLEMENTATION_PLAN, LEARNING_PATH,
 test('status snapshot is honest: Proposed, dated, and attributed to the spec authors', () => {
   assert.equal(CIP113_STATUS.status, 'Proposed');
   assert.match(CIP113_STATUS.checked, /^\d{4}-\d{2}-\d{2}$/);
-  // Re-verified against the raw upstream frontmatter on 2026-10-09:
+  // Re-verified against the raw upstream frontmatter on 2026-10-10:
   // Status: Proposed, spec version 3.0, every Path to Active box unchecked.
-  assert.equal(CIP113_STATUS.checked, '2026-10-09');
+  assert.equal(CIP113_STATUS.checked, '2026-10-10');
   assert.equal(CIP113_STATUS.specVersion, '3.0');
   assert.equal(CIP113_STATUS.authors.length, 4);
   assert.ok(SPEC_URL.includes('CIP-0113'));
@@ -68,8 +68,10 @@ test('upgradability lesson teaches the spec rules: re-pointable wiring, immovabl
   // The standard leaves the authority's nature open — the lesson must too.
   assert.match(text, /does not say what the authority is/);
   // Local-model honesty: PRISM models the planner, reads no parameters record.
-  assert.match(text, /models this upgrade planner and checker locally/);
-  assert.match(text, /no protocol parameters record is read/);
+  assert.match(text, /reads a deployment’s protocol parameter version history live/);
+  assert.match(text, /model a parameters record locally/);
+  assert.match(text, /no record’s wiring credentials are read/);
+  assert.match(text, /no upgrade is constructed or applied/);
 });
 
 test('DeFi lesson teaches the integration duties and the substandard collateral caution', () => {
@@ -91,6 +93,27 @@ test('DeFi lesson teaches the integration duties and the substandard collateral 
   // Local-model honesty: the RealFi lab is maths only, nothing integrated.
   assert.match(text, /models the lending maths locally/);
   assert.match(text, /no integration is deployed/);
+});
+
+test('learn copy never describes the live registry as not connected (stale since the indexer wiring)', () => {
+  // Regression guard: before v1.92 the registry panel was an honest stub,
+  // and the Learn copy said so. The panel has read the Foundation's hosted
+  // indexers live since v1.92, so that claim — and the upgradability
+  // lesson's "no protocol parameters record is read" (the version history
+  // is read live since v1.95) — must never return.
+  const text = [
+    ...IMPLEMENTATION_PLAN.map(i => `${i.state} ${i.note}`),
+    ...ACCEPTANCE_CRITERIA.map(c => `${c.label} ${c.note}`),
+    ...LEARNING_PATH.map(l => `${l.plain} ${l.detail}`),
+  ].join(' ');
+  assert.doesNotMatch(text, /no publicly hosted registry endpoint/i);
+  assert.doesNotMatch(text, /registry panel shows an honest .not connected./i);
+  assert.doesNotMatch(text, /no protocol parameters record is read/i);
+  const offchain = IMPLEMENTATION_PLAN.find(i => i.id === 'offchain');
+  assert.match(offchain.note, /programmabletokens\.xyz/);
+  assert.match(offchain.note, /publicly reachable/);
+  assert.match(offchain.note, /reads deployments, registered tokens, the full registry walk, protocol parameter versions, and the substandard module catalogue from them live/);
+  assert.match(offchain.note, /PRISM reads only, and constructs, signs, and submits nothing/);
 });
 
 test('learning path never overclaims: no minting, signing, or live-registry promises', () => {

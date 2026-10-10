@@ -143,12 +143,12 @@ test('getProtocolParamVersions refuses an unknown network before any fetch', asy
   await assert.rejects(() => getProtocolParamVersions('devnet', []), /Unknown network/);
 });
 
-test('app wires the versions read: verdict, honest partial failure, v1.97', async () => {
+test('app wires the versions read: verdict, honest partial failure, v1.98', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /getProtocolParamVersions\(state\.network,reg\.protocols\)/);
   assert.match(app, /Version check passed/);
   assert.match(app, /Version check FAILED/);
   assert.match(app, /Protocol versions unavailable\.<\/strong>/);
   assert.match(app, /Protocol parameter versions/);
-  assert.match(app, /WORKSPACE <span>v1\.97<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.98<\/span>/);
 });
