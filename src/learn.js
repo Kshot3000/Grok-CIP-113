@@ -108,6 +108,13 @@ export const LEARNING_PATH = Object.freeze([
     specSection: 'Layer 3: Substandard Components',
   },
   {
+    id: 'creation',
+    title: 'How a new token is created, end to end',
+    plain: 'Creating a programmable token starts from infrastructure that is already there. The registry, the base and global scripts, the action delegates, and the protocol parameters are shared deployment pieces — a creator deploys none of them and does not even need to know their hashes, because the wiring is read from the protocol parameters when a transaction is validated. What the creator writes is their own token’s logic: a transfer script defining the transfer rules (for example allowlist checks or transfer limits), optionally a third-party script defining who may run third-party actions and what those actions are, and an issuance script defining who may mint and burn.',
+    detail: 'The creator then deploys an issuance minting policy instance parameterised by the credential of their own minting logic script and by the protocol parameters policy, and adds a registry node carrying the hashes of all those scripts. Registration is refused if the policy is already registered or the issuance minting policy is wrong. During or after registration the creator can mint, and newly minted programmable tokens are enforced to go to the shared base address. From there, third parties may run the actions the third-party script defines, and issuers may mint more or burn tokens they hold, at any moment. PRISM walks this flow as a design exercise only: its studio models a token’s rules locally, and it deploys no scripts, registers no token, and mints nothing.',
+    specSection: 'High level flow',
+  },
+  {
     id: 'actions',
     title: 'More than transfers: third-party actions and unfracking',
     plain: 'Two other actions complete the model. Third-party actions let someone other than the holder act on a token — seizure by an authorised issuer, forced transfers, or auto-compounding — but only as the token’s substandard allows. “Unfracking” is the holder reorganising their own UTxOs without changing ownership, for example separating programmable tokens from ordinary ones; the default is least-permission — an empty credential in the registry entry forbids it.',

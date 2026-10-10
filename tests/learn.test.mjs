@@ -37,10 +37,10 @@ test('implementation plan mirrors the spec and never claims production readiness
 });
 
 test('learning path covers the core CIP-113 concepts in order, each tied to a spec section', () => {
-  assert.equal(LEARNING_PATH.length, 9);
-  assert.deepEqual(LEARNING_PATH.map(l => l.id), ['why', 'smart-wallet', 'withdraw-zero', 'registry', 'substandards', 'actions', 'upgradability', 'defi', 'wallets']);
+  assert.equal(LEARNING_PATH.length, 10);
+  assert.deepEqual(LEARNING_PATH.map(l => l.id), ['why', 'smart-wallet', 'withdraw-zero', 'registry', 'substandards', 'creation', 'actions', 'upgradability', 'defi', 'wallets']);
   const text = LEARNING_PATH.map(l => `${l.title} ${l.plain} ${l.detail}`).join(' ').toLowerCase();
-  for (const concept of ['stake credential', 'withdraw-zero', 'registry', 'linked list', 'substandard', 'third-party', 'unfracking', 'hard fork', 'nominee', 'bootstrap transaction', 'collateral', 'transaction history', 'admin']) {
+  for (const concept of ['stake credential', 'withdraw-zero', 'registry', 'linked list', 'substandard', 'third-party', 'unfracking', 'hard fork', 'nominee', 'bootstrap transaction', 'collateral', 'transaction history', 'admin', 'issuance minting policy', 'already registered']) {
     assert.ok(text.includes(concept), `learning path must explain: ${concept}`);
   }
   for (const lesson of LEARNING_PATH) {
@@ -123,6 +123,40 @@ test('wallets lesson teaches the spec duties: balances and history at the smart 
   // Read-only honesty for PRISM's own wallet tools.
   assert.match(text, /PRISM’s own wallet tools stay read-only/);
   assert.match(text, /they build, sign, and submit nothing/);
+});
+
+test('creation lesson teaches the high-level flow: shared infrastructure, the creator’s own scripts, refused registrations', () => {
+  const lesson = LEARNING_PATH.find(l => l.id === 'creation');
+  assert.ok(lesson, 'creation lesson exists');
+  assert.equal(lesson.specSection, 'High level flow');
+  const text = `${lesson.plain} ${lesson.detail}`;
+  // The shared Layers 1–2 infrastructure is already deployed: the creator
+  // deploys none of it and need not know its hashes, because the wiring is
+  // read from the protocol parameters at validation time.
+  assert.match(text, /shared deployment pieces/);
+  assert.match(text, /deploys none of them/);
+  assert.match(text, /does not even need to know their hashes/);
+  assert.match(text, /read from the protocol parameters when a transaction is validated/);
+  // What the creator writes is their own token's three logic scripts.
+  assert.match(text, /transfer script defining the transfer rules/);
+  assert.match(text, /allowlist checks or transfer limits/);
+  assert.match(text, /optionally a third-party script/);
+  assert.match(text, /issuance script defining who may mint and burn/);
+  // The issuance minting policy is parameterised by the minting logic
+  // credential and the protocol parameters policy, and the registry node
+  // carries the hashes of all the creator's scripts.
+  assert.match(text, /issuance minting policy instance parameterised by the credential of their own minting logic script and by the protocol parameters policy/);
+  assert.match(text, /adds a registry node carrying the hashes of all those scripts/);
+  // Registration refusals and the enforced destination of new tokens.
+  assert.match(text, /Registration is refused if the policy is already registered or the issuance minting policy is wrong/);
+  assert.match(text, /enforced to go to the shared base address/);
+  // After registration the powers continue: third-party actions and
+  // issuer mint/burn are available at any moment.
+  assert.match(text, /at any moment/);
+  assert.match(text, /issuers may mint more or burn tokens they hold/);
+  // Design-exercise honesty: PRISM deploys, registers, and mints nothing.
+  assert.match(text, /design exercise only/);
+  assert.match(text, /deploys no scripts, registers no token, and mints nothing/);
 });
 
 test('learn copy never describes the live registry as not connected (stale since the indexer wiring)', () => {
