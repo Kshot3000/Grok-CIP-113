@@ -2067,6 +2067,53 @@ export function checkRegistryNodeDatum(datum) {
   return { valid, kind, fields, chainOrdered, unfrackingMode, globalState, fieldOrder: REGISTRY_NODE_FIELD_ORDER, key, next };
 }
 
+// The producing half of the registry node datum checker above. Every
+// other artifact PRISM can check it can also produce — a design file can
+// be exported, a registry preview can be exported, an address can be
+// built — but a RegistryNode datum could only be JUDGED: the checker
+// reported field verdicts and never handed back the datum itself, in the
+// spec's field names and load-bearing order, for a builder to carry into
+// their own registration tooling. This builder closes that pair. It
+// judges its input by calling checkRegistryNodeDatum itself (the
+// validate-once discipline), so builder and checker can never disagree
+// about what a datum may say: a readable datum that breaks any field
+// rule — or the chain order — is REFUSED with the failing fields named
+// in the checker's own words, never built in part, and an unreadable
+// datum is refused on the checker's terms. The return carries the
+// canonical datum twice: in the checker's own input shape (lowercase
+// hex, whitespace trimmed — feeding it back to the checker reproduces
+// the same verdict), and serialized under the spec's field names in
+// the spec's order (REGISTRY_NODE_FIELD_ORDER), credentials as
+// { kind, hash } pairs. The return's exact keys are pinned by test:
+// there is no CBOR, no Plutus Data encoding, and no registry NFT in it,
+// because building a datum assembles the seven fields as supplied —
+// the registry validator's cryptographic binding of the minting logic
+// credential to the key, the NFT the node must hold, and the insertion
+// itself are registration, and none of them happens here.
+export function buildRegistryNodeDatum(datum) {
+  const checked = checkRegistryNodeDatum(datum);
+  if (!checked.valid) {
+    const labels = { key: 'key', next: 'next', minting: 'minting_logic_script', transfer: 'transfer_logic_script', thirdParty: 'third_party_logic_script', unfracking: 'unfracking_logic_script', globalStateCs: 'global_state_cs' };
+    const failing = Object.entries(checked.fields).filter(([, f]) => !f.ok).map(([k, f]) => `${labels[k]} — ${f.detail}`);
+    if (!checked.chainOrdered) failing.push('chain order — next does not sort strictly after key');
+    throw new Error(`The registry node datum is not built — a datum that does not meet the spec is refused, never built in part: ${failing.join('; ')}.`);
+  }
+  const f = checked.fields;
+  const cred = c => ({ kind: c.kind, hash: c.hash });
+  const canonical = {
+    key: f.key.value, next: f.next.value,
+    minting: cred(f.minting), transfer: cred(f.transfer), thirdParty: cred(f.thirdParty), unfracking: cred(f.unfracking),
+    globalStateCs: f.globalStateCs.value,
+  };
+  const serialized = {
+    key: canonical.key, next: canonical.next,
+    minting_logic_script: cred(f.minting), transfer_logic_script: cred(f.transfer),
+    third_party_logic_script: cred(f.thirdParty), unfracking_logic_script: cred(f.unfracking),
+    global_state_cs: canonical.globalStateCs,
+  };
+  return { datum: canonical, serialized, fieldOrder: REGISTRY_NODE_FIELD_ORDER, kind: checked.kind, unfrackingMode: checked.unfrackingMode, globalState: checked.globalState };
+}
+
 // CIP-113 BaseSpendRedeemer hint planning, modeled locally from the
 // spec's delegation architecture ("Architecture: Delegation Pattern" and
 // "Transaction Construction").
