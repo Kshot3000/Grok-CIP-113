@@ -37,10 +37,10 @@ test('implementation plan mirrors the spec and never claims production readiness
 });
 
 test('learning path covers the core CIP-113 concepts in order, each tied to a spec section', () => {
-  assert.equal(LEARNING_PATH.length, 8);
-  assert.deepEqual(LEARNING_PATH.map(l => l.id), ['why', 'smart-wallet', 'withdraw-zero', 'registry', 'substandards', 'actions', 'upgradability', 'defi']);
+  assert.equal(LEARNING_PATH.length, 9);
+  assert.deepEqual(LEARNING_PATH.map(l => l.id), ['why', 'smart-wallet', 'withdraw-zero', 'registry', 'substandards', 'actions', 'upgradability', 'defi', 'wallets']);
   const text = LEARNING_PATH.map(l => `${l.title} ${l.plain} ${l.detail}`).join(' ').toLowerCase();
-  for (const concept of ['stake credential', 'withdraw-zero', 'registry', 'linked list', 'substandard', 'third-party', 'unfracking', 'hard fork', 'nominee', 'bootstrap transaction', 'collateral']) {
+  for (const concept of ['stake credential', 'withdraw-zero', 'registry', 'linked list', 'substandard', 'third-party', 'unfracking', 'hard fork', 'nominee', 'bootstrap transaction', 'collateral', 'transaction history', 'admin']) {
     assert.ok(text.includes(concept), `learning path must explain: ${concept}`);
   }
   for (const lesson of LEARNING_PATH) {
@@ -93,6 +93,36 @@ test('DeFi lesson teaches the integration duties and the substandard collateral 
   // Local-model honesty: the RealFi lab is maths only, nothing integrated.
   assert.match(text, /models the lending maths locally/);
   assert.match(text, /no integration is deployed/);
+});
+
+test('wallets lesson teaches the spec duties: balances and history at the smart wallet, optional transfers, dApps for issuance', () => {
+  const lesson = LEARNING_PATH.find(l => l.id === 'wallets');
+  assert.ok(lesson, 'wallets lesson exists');
+  assert.equal(lesson.specSection, 'Implementing programmable tokens in wallets and dApps');
+  const text = `${lesson.plain} ${lesson.detail}`;
+  // The two MUSTs are reads at the smart-wallet address, not the ordinary one.
+  assert.match(text, /querying the UTxOs at the user’s smart-wallet address/);
+  assert.match(text, /track the transfers in and out of that address as the transaction history/);
+  // Native transfers are the optional third item — never stated as required.
+  assert.match(text, /Building native TransferAct transfers is the third item/);
+  assert.match(text, /optional: nice-to-have, not a requirement/);
+  // Issuance and third-party operations belong to token-specific dApps.
+  assert.match(text, /not the wallet’s job at all — token-specific dApps handle them/);
+  // Identification is a registry-key check; no entry means ordinary token.
+  assert.match(text, /policy ID appears as a key in the registry/);
+  assert.match(text, /a policy with no registry entry is an ordinary native token/);
+  // Substandards manage user state three ways, including the NFT-queried forms.
+  assert.match(text, /no state at all, one state per user involved in the spending/);
+  assert.match(text, /one state per user involved in the transfer itself/);
+  assert.match(text, /reference inputs proving KYC status/);
+  // The load-bearing caution: a third-party key set is the substandard's
+  // admin, a property of the substandard — never of CIP-113 conformance.
+  assert.match(text, /that key set is the substandard’s admin — a property of that substandard, not of CIP-113/);
+  assert.match(text, /may instead be permissionless, or restricted to actions that cannot reduce a holder’s balance/);
+  assert.match(text, /from its substandard — never from CIP-113 conformance alone/);
+  // Read-only honesty for PRISM's own wallet tools.
+  assert.match(text, /PRISM’s own wallet tools stay read-only/);
+  assert.match(text, /they build, sign, and submit nothing/);
 });
 
 test('learn copy never describes the live registry as not connected (stale since the indexer wiring)', () => {

@@ -128,6 +128,13 @@ export const LEARNING_PATH = Object.freeze([
     detail: 'The step protocols most easily miss is checking the substandard before accepting a token: a freeze-and-seize token lets an authorised third party move it without the holder’s consent, which changes what it is worth as collateral. Wallets face the mirror-image task — deriving each user’s smart-wallet address and reading balances there, because that is where the tokens live. PRISM’s RealFi lab models the lending maths locally; it is not connected to any DEX, lending protocol, or wallet, and no integration is deployed.',
     specSection: 'Implementing programmable tokens in DeFi protocols',
   },
+  {
+    id: 'wallets',
+    title: 'What a wallet must do differently',
+    plain: 'A wallet that supports programmable tokens has three duties in the spec. It must display the holder’s programmable-token balances — which means querying the UTxOs at the user’s smart-wallet address, not their ordinary address — and it must track the transfers in and out of that address as the transaction history. Building native TransferAct transfers is the third item, and the spec marks it optional: nice-to-have, not a requirement. Issuance and third-party operations such as minting, burning, freezing, and seizing are not the wallet’s job at all — token-specific dApps handle them. And before treating any token as programmable, the wallet checks whether its policy ID appears as a key in the registry, decoding the registry entries’ datums to see which policies are registered; a policy with no registry entry is an ordinary native token.',
+    detail: 'Each substandard may manage user state differently — no state at all, one state per user involved in the spending (queried by an NFT, as when a sender must provide a reference input carrying their allowlist NFT), or one state per user involved in the transfer itself (sender and receiver both providing reference inputs proving KYC status). Where a substandard’s third-party logic requires signatures from a designated key set, that key set is the substandard’s admin — a property of that substandard, not of CIP-113: third-party logic may instead be permissionless, or restricted to actions that cannot reduce a holder’s balance. So an integrator must determine a token’s third-party capabilities, and who can trigger them, from its substandard — never from CIP-113 conformance alone. PRISM’s own wallet tools stay read-only within this picture: they derive the smart-wallet address and summarise a connected wallet’s addresses, and they build, sign, and submit nothing.',
+    specSection: 'Implementing programmable tokens in wallets and dApps',
+  },
 ]);
 
 export function criteriaProgress(criteria = ACCEPTANCE_CRITERIA) {

@@ -223,6 +223,6 @@ test('app and README carry the comparison at the current version', () => {
   assert.match(app, /transfer-value-diff-after-inputs/);
   assert.match(app, /transfer-value-diff-after-mint/);
   assert.match(app, /transfer-value-diff-result/);
-  assert.match(app, /v1\.98/);
+  assert.match(app, /v1\.99/);
   assert.match(readme, /Transfer output-value comparison/);
 });

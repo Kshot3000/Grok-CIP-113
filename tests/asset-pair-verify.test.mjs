@@ -126,5 +126,5 @@ test('app wires the pair verifier into the network explorer, labeled honestly', 
   assert.match(app, /asset-pair-verify-claimed/);
   assert.match(app, /asset-pair-verify-result/);
   assert.match(app, /pairing holds only under one policy/);
-  assert.match(app, /v1.98/);
+  assert.match(app, /v1.99/);
 });
