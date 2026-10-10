@@ -140,7 +140,7 @@ test('getModules refuses an unknown network before any fetch', async () => {
   await assert.rejects(() => getModules('devnet'), /Unknown network/);
 });
 
-test('app wires the coverage check: verdict, per-module model line, honest failure, v1.102', async () => {
+test('app wires the coverage check: verdict, per-module model line, honest failure, v1.103', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   const services = await readFile(new URL('../src/services.js', import.meta.url), 'utf8');
   assert.match(services, /coverage:moduleCoverageCheck\(modules\)/);
@@ -150,5 +150,5 @@ test('app wires the coverage check: verdict, per-module model line, honest failu
   assert.match(app, /No studio model — platform test module/);
   assert.match(app, /No single studio model/);
   assert.match(app, /coverage check against the studio/);
-  assert.match(app, /WORKSPACE <span>v1\.102<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.103<\/span>/);
 });

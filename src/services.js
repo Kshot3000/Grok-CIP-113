@@ -1,4 +1,4 @@
-import { NETWORKS, PREVIEW_REFERENCE } from './config.js';
+import { NETWORKS, PREVIEW_REFERENCE, CIP113_SPEC_VERSION } from './config.js';
 import { SUBSTANDARDS } from './domain.js';
 import { normalizeWalletAddress, decodeAddress, inspectAddress, inspectRewardAddress, blake2b, hexToBytes, bytesToHex } from './cardano.js';
 
@@ -41,6 +41,39 @@ export function parseDeploymentTx(rows, expectedHash) {
   return {txHash:v.tx_hash,blockHeight:v.block_height,epoch:v.epoch_no,timestamp:Number(v.tx_timestamp)*1000,validContract:true};
 }
 
+// Classify a bootstrap transaction hash against the two Preview records
+// PRISM pins, which are DIFFERENT transactions and must not be conflated:
+// the bootstrap hash the CIP-113 specification's own version table lists
+// for Preview (the spec defines a CIP-113 version as the hash of the
+// bootstrap transaction that initialised a deployment), and the platform
+// reference deployment pinned from the Foundation platform's configuration
+// (the deployment the hosted indexers index). A hash can be either, or
+// neither pinned record — a 'neither' verdict says only that PRISM pins no
+// record for it, never that the transaction is not a real bootstrap. The
+// spec table lists a version for Preview only, so no network other than
+// Preview can classify as spec-listed, whatever hash is claimed.
+export function classifyBootstrapTx(network, txHash) {
+  if(!Object.hasOwn(NETWORKS, network))throw new Error('Unknown network.');
+  if(typeof txHash!=='string'||!(/^[a-f0-9]{64}$/i).test(txHash))throw new Error('Bootstrap transaction hash must be 64 hexadecimal characters.');
+  const hash=txHash.toLowerCase();
+  const specListed=network===CIP113_SPEC_VERSION.network&&hash===CIP113_SPEC_VERSION.txHash;
+  const platformReference=network===PREVIEW_REFERENCE.network&&hash===PREVIEW_REFERENCE.txHash;
+  const kind=specListed?'spec-listed-version':platformReference?'platform-reference-deployment':'neither-pinned-record';
+  return {network, txHash:hash, specListed, platformReference, kind};
+}
+
+// Live verification of the spec-listed CIP-113 version: Koios Preview must
+// confirm the exact bootstrap transaction the specification's version table
+// lists, judged by the same deployment parser as the platform reference
+// check (validate-once — one parser judges both records). This proves the
+// listed transaction is on chain; it does not make it the platform
+// deployment, and the platform deployment check above does not make that
+// deployment the spec-listed version.
+export async function getSpecVersionDeployment() {
+  const rows=await fetchJson(`${NETWORKS.preview.koios}/tx_info`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({_tx_hashes:[CIP113_SPEC_VERSION.txHash]})});
+  const deployment=parseDeploymentTx(rows, CIP113_SPEC_VERSION.txHash);
+  return {...deployment, classification: classifyBootstrapTx('preview', deployment.txHash), platformTxHash: PREVIEW_REFERENCE.txHash, source: CIP113_SPEC_VERSION.source, observed: CIP113_SPEC_VERSION.observed, fetchedAt: Date.now()};
+}
 // Live verification of the Foundation's pinned Preview reference deployment:
 // the platform repository's configuration (fetched fresh) must still match
 // the values pinned in src/config.js field by field, AND Koios Preview must

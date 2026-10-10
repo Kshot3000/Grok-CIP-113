@@ -31,6 +31,12 @@ export const PREVIEW_REFERENCE = Object.freeze({
   protocolPolicy: '1d2026310c70f07ac25e39d591055723f5f8a84ac0de229eb0525720',
 });
 
+export const CIP113_SPEC_VERSION = Object.freeze({
+  observed: '2026-10-10', network: 'preview', section: 'CIP-113 Version',
+  source: `${CONFIG.cip}`,
+  txHash: '61fae36e28a62a65496907c9660da9cf5d27fa0e9054a04581e1d8a087fbd93e',
+});
+
 export const TEMPLATES = [
   { id:'rwa', name:'Real-world asset', short:'RWA', icon:'building', description:'Ownership with clear boundaries', tokenName:'Prism Real Asset', ticker:'PRA', decimals:6, supply:'1000000', limit:'10000', allowlist:true, limitEnabled:true, pausable:true, identity:true, substandard:'kyc-extended', accent:'mint' },
   { id:'credit', name:'Private credit', short:'CREDIT', icon:'chart', description:'Rules for a lending lifecycle', tokenName:'Prism Credit', ticker:'PCR', decimals:6, supply:'500000', limit:'25000', allowlist:true, limitEnabled:true, pausable:true, identity:true, substandard:'kyc', accent:'blue' },
