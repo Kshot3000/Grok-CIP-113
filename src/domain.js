@@ -2114,6 +2114,69 @@ export function buildRegistryNodeDatum(datum) {
   return { datum: canonical, serialized, fieldOrder: REGISTRY_NODE_FIELD_ORDER, kind: checked.kind, unfrackingMode: checked.unfrackingMode, globalState: checked.globalState };
 }
 
+// The reading-back half of the registry node datum builder above. The
+// builder's serialized form is a handoff: it travels — into a builder's
+// own registration tooling, a reviewer's message, a saved file — without
+// the panel it was built in, and until now PRISM could not read its own
+// output back at all. A one-way artifact is a trust surface (the v1.75
+// lesson): a handed copy edited after building — a logic credential
+// quietly swapped, the successor re-pointed behind the key, a `cbor` or
+// registry-NFT field smuggled in beside the seven fields — could not be
+// checked in PRISM, only trusted. This parser is that check.
+//
+// It reads ONLY the serialized form: the seven fields under the spec's
+// field names, no other names accepted — the checker's internal input
+// shape (minting / transfer / thirdParty / unfracking / globalStateCs)
+// is refused here as the unknown-and-missing fields it is, because a
+// serialization that renames its fields is a different serialization.
+// The field ORDER is part of the reading, for the same reason it is
+// part of the writing: the builder's claim is "field names AND order",
+// and the order is load-bearing (it fixes the datum's Plutus Data
+// layout), so a copy whose fields arrive reordered is refused naming
+// the expected order, never silently re-sorted — re-sorting would hide
+// exactly the edit a reader pasted the datum in to catch. Each logic
+// credential likewise names exactly kind then hash, in that order.
+//
+// Beyond the serialization's own shape, every judgment is the builder's
+// (which is the checker's): the converted datum is built by
+// buildRegistryNodeDatum itself, so parse, build, and check can never
+// disagree about what a datum may say (validate-once, twentieth
+// application). A readable datum breaking any field rule — or the chain
+// order — is refused with the failing fields named in the checker's own
+// words, never read back in part. The return is the builder's own
+// return, key for key: parse(build(x)) is build(x) exactly, pinned by
+// test. Boundary honesty carries over: reading a datum back proves
+// only that its seven fields meet the spec and round-trip — the JSON
+// here is PRISM's serialization, not Plutus Data or CBOR; nothing was
+// decoded from a UTxO, no registry NFT was seen, and reading back is
+// not registering.
+export function parseRegistryNodeDatum(raw) {
+  if (typeof raw !== 'string' || raw.length > 100000) throw new Error('Paste a built registry node datum as JSON text under 100 KB — the serialized form the builder above writes.');
+  let p;
+  try { p = JSON.parse(raw); } catch { throw new Error('This built datum is not valid JSON — a built datum is refused here rather than repaired. Re-copy it from the builder.'); }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error('A built registry node datum must be a JSON object naming its seven fields in the spec\u2019s order — key, next, minting_logic_script, transfer_logic_script, third_party_logic_script, unfracking_logic_script, global_state_cs.');
+  const keys = Object.keys(p);
+  for (const k of keys) if (!REGISTRY_NODE_FIELD_ORDER.includes(k)) throw new Error(`The built datum carries an unknown field ${JSON.stringify(k)} — a built RegistryNode datum has exactly seven fields, and PRISM never writes one named that: no CBOR, no datum hash, no registry NFT. Remove it and read the datum again.`);
+  for (const k of REGISTRY_NODE_FIELD_ORDER) if (p[k] === undefined) throw new Error(`The built datum is missing its ${JSON.stringify(k)} field — a datum that cannot be read in full is refused, never read back in part.`);
+  if (keys.some((k, i) => k !== REGISTRY_NODE_FIELD_ORDER[i])) throw new Error(`The built datum\u2019s fields are out of order — the serialized order is load-bearing (it fixes the datum\u2019s Plutus Data layout) and a reordered copy is refused, never silently re-sorted. Expected order: ${REGISTRY_NODE_FIELD_ORDER.join(', ')}.`);
+  const cred = (value, label) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`The built datum\u2019s ${label} must be a credential naming a kind and a hash.`);
+    const ck = Object.keys(value);
+    for (const k of ck) if (k !== 'kind' && k !== 'hash') throw new Error(`The built datum\u2019s ${label} carries an unknown field ${JSON.stringify(k)} — a credential names only a kind and a hash.`);
+    if (value.kind === undefined || value.hash === undefined) throw new Error(`The built datum\u2019s ${label} must name both a kind (pubkey or script) and a hash.`);
+    if (ck[0] !== 'kind' || ck[1] !== 'hash') throw new Error(`The built datum\u2019s ${label} names its fields out of order — a serialized credential names kind then hash, in that order.`);
+    return { kind: value.kind, hash: value.hash };
+  };
+  return buildRegistryNodeDatum({
+    key: p.key, next: p.next,
+    minting: cred(p.minting_logic_script, 'minting_logic_script'),
+    transfer: cred(p.transfer_logic_script, 'transfer_logic_script'),
+    thirdParty: cred(p.third_party_logic_script, 'third_party_logic_script'),
+    unfracking: cred(p.unfracking_logic_script, 'unfracking_logic_script'),
+    globalStateCs: p.global_state_cs,
+  });
+}
+
 // CIP-113 BaseSpendRedeemer hint planning, modeled locally from the
 // spec's delegation architecture ("Architecture: Delegation Pattern" and
 // "Transaction Construction").
