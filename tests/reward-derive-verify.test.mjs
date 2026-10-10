@@ -143,5 +143,5 @@ test('app wires the derived reward verifier into the network explorer, labeled h
   assert.match(app, /reward-derive-verify-claimed/);
   assert.match(app, /reward-derive-verify-result/);
   assert.match(app, /payment credential plays no part/);
-  assert.match(app, /v1.88/);
+  assert.match(app, /v1.89/);
 });

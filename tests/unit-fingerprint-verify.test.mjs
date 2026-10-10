@@ -146,5 +146,5 @@ test('app wires the unit fingerprint verifier into the network explorer, labeled
   assert.match(app, /asset-unit-fingerprint-verify-claimed/);
   assert.match(app, /asset-unit-fingerprint-verify-result/);
   assert.match(app, /cannot say which half of the unit differs/);
-  assert.match(app, /v1.88/);
+  assert.match(app, /v1.89/);
 });

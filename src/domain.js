@@ -2787,6 +2787,107 @@ export function verifyDelegatePairing(input, claimed) {
   return { status, valid, expected, claimed: claimedNorm, verdicts, missing: [], shortfall: 0, action: plan.action, registryNodeRef: plan.registryNodeRef, pairs: plan.pairs };
 }
 
+export const DELEGATE_PAIRING_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['registryNodeIdx', 'registry_node_idx'],
+  ['outputsStartIdx', 'outputs_start_idx'],
+]);
+
+// CIP-113 delegate pairing impact, compared locally between two modeled
+// versions of the SAME action — the pairing as planned against the
+// transaction as it was, and as planned against the transaction as it
+// would be after some other change (a reference input added while
+// assembling the transaction, an input or output joining, the start
+// index adjusted, the acted-on policy's RegistryNode dropped). The
+// registry and base redeemer families already had this temporal half
+// (diffRegistryProofs, diffRegistryInsertion, diffBaseSpendRedeemer);
+// the delegate pairing family had only plan → verify, so a builder
+// whose transaction changed after they planned its delegate redeemer
+// could not ask which of its two hints the change invalidates — and a
+// stale hint does not fail loudly here, it makes the delegate read a
+// different node's configuration or compare every continuing output
+// against the wrong input.
+//
+// Both versions are planned through planDelegatePairing itself
+// (validate-once, twenty-fourth application), so comparison and
+// planning can never disagree about either hint in either version, and
+// a version that cannot be read (an unknown action, a duplicated
+// reference input, an entry that does not say whether it sits at a
+// base address, a fractional start index) is refused on either side
+// with the planner's reason, never compared around.
+//
+// The comparison tracks ONE redeemer: the two versions must name the
+// same action and the same acted-on policy's RegistryNode. A
+// third-party redeemer and an unfracking redeemer share a shape but
+// are not the same redeemer, and a node reference that changed is a
+// different target — both are refused, never scored.
+//
+// Three positions are compared, in redeemer order: the status and the
+// two hints the redeemer actually carries. THE SUBSTANCE is what is
+// NOT compared: the pairs themselves. A pair list is derived — the
+// delegate walks the inputs in order and pairs each base input with
+// the next output from outputs_start_idx — so it is not carried by
+// the redeemer, and a change that adds a base input (with the outputs
+// to pair it) or inserts a non-base input ahead of the base ones
+// changes the pairs while both hints stand exactly still: the new
+// base input pairs automatically, and the shifted input positions
+// move no output index (pinned). That pairing change is reported
+// separately as pairsChanged, never counted as a position. The early
+// and trailing output counts and the shortfall are likewise derived
+// summaries carried inside the two plans; which pieces are missing
+// needs no position of its own either — a missing registry node is
+// exactly a null registry_node_idx, and a shortfall of outputs
+// differs on the status alone, because neither hint is invented for
+// an unplannable pairing. The reference list's own change is reported
+// as the added/removed reference inputs, never counted.
+//
+// The change is classified by its plannability story first — BECAME
+// UNPLANNABLE and BECAME PLANNABLE take precedence, because the
+// action gaining or losing its pairing entirely is the headline even
+// when a computable hint also moved — then STILL UNPLANNABLE
+// (unplannable on both sides, but not the same unplannable) and HINTS
+// CHANGED (planned on both sides, a hint moved).
+//
+// Boundary honesty carries over from the planner: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction, no registry, and no chain state, and comparing plans
+// applies neither plan and builds no transaction.
+export function diffDelegatePairing(beforeInput, afterInput) {
+  const before = planDelegatePairing(beforeInput);
+  const after = planDelegatePairing(afterInput);
+  if (before.action !== after.action) throw new Error(`The two modeled transactions name different delegate actions — ${JSON.stringify(before.action)} before and ${JSON.stringify(after.action)} after. A comparison tracks one redeemer: a third-party redeemer and an unfracking redeemer share a shape, but they are not the same redeemer.`);
+  if (before.registryNodeRef !== after.registryNodeRef) throw new Error(`The two modeled transactions name different registry node references — ${JSON.stringify(before.registryNodeRef)} before and ${JSON.stringify(after.registryNodeRef)} after. A comparison tracks one redeemer: the RegistryNode its registry_node_idx resolves must be the same on both sides.`);
+  const positionOf = plan => ({ status: plan.status, registryNodeIdx: plan.registryNodeIndex, outputsStartIdx: plan.outputsStartIdx });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of DELEGATE_PAIRING_COMPARE_FIELDS) {
+    if (beforePos[field] !== afterPos[field]) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.status === 'planned' && after.status === 'unplannable') change = 'became-unplannable';
+  else if (before.status === 'unplannable' && after.status === 'planned') change = 'became-plannable';
+  else if (before.status === 'unplannable') change = 'still-unplannable';
+  else change = 'hints-changed';
+  const beforeRefs = baseReferenceInputs(beforeInput.referenceInputs), afterRefs = baseReferenceInputs(afterInput.referenceInputs);
+  const beforeRefSet = new Set(beforeRefs), afterRefSet = new Set(afterRefs);
+  const pairKey = p => `${p.inputIndex}->${p.outputIndex}`;
+  const pairsChanged = before.pairs.length !== after.pairs.length || before.pairs.some((p, i) => pairKey(p) !== pairKey(after.pairs[i]));
+  return {
+    action: before.action,
+    registryNodeRef: before.registryNodeRef,
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    addedRefs: afterRefs.filter(r => !beforeRefSet.has(r)),
+    removedRefs: beforeRefs.filter(r => !afterRefSet.has(r)),
+    pairsChanged,
+    before,
+    after,
+    unchanged: differences.length === 0,
+  };
+}
+
 // CIP-113 TransferAct output-value calculation, modeled locally from
 // the spec's "Output Value Calculation" and "Output Validation"
 // sections (TransferAct constructor).
