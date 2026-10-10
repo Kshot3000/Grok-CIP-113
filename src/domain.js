@@ -2177,6 +2177,90 @@ export function parseRegistryNodeDatum(raw) {
   });
 }
 
+// The fields a registry node datum comparison judges, in the order
+// differences are reported — the datum's own seven fields, under the
+// spec's serialized names. Each logic credential is ONE field: its
+// kind and its hash are one credential, so counting them separately
+// would double-count a single credential change. The builder's
+// derived summaries are NOT fields here: kind is read from the key
+// and the node's shape, unfrackingMode from the unfracking field
+// alone, and globalState from the global_state_cs field alone, so
+// each is identical on both sides exactly when its field is — they
+// are what a field MEANS, not how two datums differ. The field order
+// likewise cannot differ: the parser refuses a reordered copy and the
+// builder writes the spec order, so by comparison time both sides
+// carry it by construction.
+export const REGISTRY_NODE_COMPARE_FIELDS = Object.freeze([
+  ['key', 'Key'],
+  ['next', 'Next'],
+  ['minting_logic_script', 'Minting logic'],
+  ['transfer_logic_script', 'Transfer logic'],
+  ['third_party_logic_script', 'Third-party logic'],
+  ['unfracking_logic_script', 'Unfracking logic'],
+  ['global_state_cs', 'Global state policy'],
+]);
+
+// Compare a handed built registry node datum against the node datum
+// entered as current, WITHOUT registering or applying anything — the
+// comparison counterpart to parseRegistryNodeDatum, as
+// diffRegistryDatumPreview is to its verifier and diffDesignFile is
+// to verifyManifest. Reading a datum back (v1.85) says whether the
+// handed copy is a genuine built datum; this says how the node it
+// carries differs from yours, which is the question a reviewer
+// returning a built datum actually raises: did the successor move,
+// or a logic credential too? The handed side runs exactly the
+// reader's checks first — this calls parseRegistryNodeDatum itself,
+// so a datum that would fail reading back fails comparison with the
+// same reason, refused whole and never partially compared
+// (validate-once, twenty-first application). The current side is
+// built by buildRegistryNodeDatum itself, and the reader's return
+// IS the builder's return, so both sides are the same shape from the
+// same builder and comparison can never disagree with reading back,
+// building, or checking about what a datum says. Values compare in
+// the canonical form both builders write (lowercase hex, whitespace
+// trimmed), so a handed copy differing only in hex case compares as
+// identical — it says the same datum. The current datum must itself
+// build, or there is nothing sound to compare against: its refusal
+// is reported as the node's own, wrapped so the failing side is
+// named. The return carries the two builder returns and the
+// differences only — comparing registers nothing, and neither side's
+// datum is applied anywhere by comparing.
+export function diffRegistryNodeDatum(raw, currentDatum) {
+  if (!currentDatum || typeof currentDatum !== 'object' || Array.isArray(currentDatum)) throw new Error('There is no current node datum to compare against.');
+  let current;
+  try { current = buildRegistryNodeDatum(currentDatum); }
+  catch (e) { throw new Error(`The node entered as current cannot be compared yet — ${e.message}`); }
+  const file = parseRegistryNodeDatum(raw);
+  const valueOf = (built, field) => {
+    switch (field) {
+      case 'key': return built.datum.key;
+      case 'next': return built.datum.next;
+      case 'minting_logic_script': return { ...built.datum.minting };
+      case 'transfer_logic_script': return { ...built.datum.transfer };
+      case 'third_party_logic_script': return { ...built.datum.thirdParty };
+      case 'unfracking_logic_script': return { ...built.datum.unfracking };
+      case 'global_state_cs': return built.datum.globalStateCs;
+      default: return undefined;
+    }
+  };
+  const sameValue = (a, b) => (a && b && typeof a === 'object' && typeof b === 'object')
+    ? a.kind === b.kind && a.hash === b.hash
+    : a === b;
+  const differences = [];
+  for (const [field, label] of REGISTRY_NODE_COMPARE_FIELDS) {
+    const fileValue = valueOf(file, field);
+    const currentValue = valueOf(current, field);
+    if (!sameValue(fileValue, currentValue)) differences.push({ field, label, file: fileValue, current: currentValue });
+  }
+  return {
+    same: differences.length === 0,
+    compared: REGISTRY_NODE_COMPARE_FIELDS.length,
+    differences,
+    fileDatum: file,
+    currentDatum: current,
+  };
+}
+
 // CIP-113 BaseSpendRedeemer hint planning, modeled locally from the
 // spec's delegation architecture ("Architecture: Delegation Pattern" and
 // "Transaction Construction").
