@@ -735,6 +735,61 @@ export function cip68Pair(nameHex) {
   });
   return { nameHex: hex, kind: isReference ? 'reference' : 'user', decoded, pairs };
 }
+// CIP-68 pair verification — the checking half of cip68Pair, the one
+// derivation in this file that lacked one. A claimed pair (the name an
+// explorer, a counterparty, or a listing says is the CIP-68 partner of a
+// token you hold) is judged against the pairing function's OWN output, so
+// the expectation IS the derivation and the two can never disagree about
+// what a pair is (validate-once). The position is judged in two parts,
+// because the parts fail separately and each failure means something
+// different: the name bytes after the prefix must be identical (the pair
+// shares one name), and the claimed label must be one of the labels the
+// source's kind pairs WITH. The second verdict carries the traps. A token
+// handed back its OWN name has the content exactly right and is still not
+// its own pair — the label verdict alone fails. The relation is also
+// asymmetric: a reference token (100) pairs with any of the three user
+// labels (222 / 333 / 444 — from its name alone it cannot be known which
+// was minted), while a user token pairs with the label-100 reference
+// alone, so the very same claimed user name that verifies against the
+// reference fails against a user-token source. An unlabeled source has no
+// pair at all: the claim is readable, so it is scored — the label verdict
+// fails by construction, no pair is invented — rather than refused, while
+// either name failing to decode at all (non-hex, odd length, over the
+// 32-byte limit, or a Bech32 fingerprint, which is a hash and a different
+// identifier) is refused, never scored. A match is byte equality with one
+// of the derived pair names, in canonical lowercase. Names carry no
+// policy ID, and CIP-68 pairing holds only UNDER ONE POLICY: a match
+// proves the two NAMES pair, not that two ASSETS pair — the same paired
+// names under a different policy are different assets entirely — and it
+// proves nothing about either token being minted, existing on chain,
+// holding metadata in a datum, being authentic or backed, or sitting in
+// a CIP-113 registry; existence is a lookup question, answered on chain.
+export function verifyCip68Pair(sourceHex, claimedHex) {
+  const source = cip68Pair(typeof sourceHex === 'string' ? sourceHex.trim() : sourceHex);
+  const claimed = decodeAssetName(typeof claimedHex === 'string' ? claimedHex.trim() : claimedHex);
+  const claimedNameHex = (claimed.label ? claimed.label.prefixHex : '') + claimed.contentHex;
+  const claimedLabel = claimed.label?.label ?? null;
+  const contentMatch = !source.decoded.empty && claimed.contentHex === source.decoded.contentHex;
+  const labelMatch = source.pairs.some(p => p.label === claimedLabel);
+  const match = contentMatch && labelMatch && source.pairs.some(p => p.nameHex === claimedNameHex);
+  return {
+    match, contentMatch, labelMatch,
+    sourceKind: source.kind,
+    sourceNameHex: source.nameHex,
+    sourceLabel: source.decoded.label,
+    sourceContentHex: source.decoded.contentHex,
+    sourceText: source.decoded.text,
+    sourceTextDecodable: source.decoded.textDecodable,
+    claimedNameHex,
+    claimedLabel,
+    claimedLabelRole: claimed.label?.role ?? null,
+    claimedContentHex: claimed.contentHex,
+    claimedText: claimed.text,
+    claimedTextDecodable: claimed.textDecodable,
+    claimedDecoded: claimed,
+    expectedPairs: source.pairs,
+  };
+}
 // CIP-68 name construction — the inverse of decodeAssetName: build the
 // exact asset-name hex for a chosen label and a human-readable name, so a
 // builder designing a token pair works from the same bytes explorers will
