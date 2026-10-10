@@ -102,6 +102,84 @@ export async function getRegistry(network) {
   const protocols=parseRegistryProtocols(rows);
   return {network,indexer:origin.origin,protocols,reference:registryReferenceCheck(network,protocols),fetchedAt:Date.now()};
 }
+// The registry's terminal value: thirty bytes of 0xff — the same sentinel
+// the registry node datum model uses (domain.js REGISTRY_SENTINEL_NEXT).
+// Deliberately 30 bytes, not 28, so it sorts after every 28-byte policy ID.
+export const REGISTRY_TERMINAL_NEXT = 'ff'.repeat(30);
+const HEX28 = /^[a-f0-9]{56}$/i;
+const hex28OrEmpty = v => v === '' || HEX28.test(v ?? '');
+
+// Pure parser for the Foundation registry indexer's tokens response
+// (GET /api/v1/registry/tokens on the same per-network indexers). Each
+// group names its protocol deployment (registry node policy + programmable
+// logic base hash) and carries that deployment's registered token nodes in
+// chain order — the origin node is NOT part of this response; the nodes
+// listed are exactly the registered tokens. Every field is validated and
+// hex canonicalised; a node's key must be a 28-byte policy ID and its next
+// either the following 28-byte key or the 30-byte terminal sentinel. The
+// four logic scripts and the global-state policy are each either a 28-byte
+// hash or empty — empty is a meaning, not a defect (an empty unfracking
+// script forbids unfracking for that policy; an empty global-state policy
+// expects no global-state reference input). A malformed group or node
+// refuses the whole response, never a partial chain.
+export function parseRegistryTokens(rows) {
+  if(!Array.isArray(rows))throw new Error('Unexpected registry tokens response.');
+  return rows.map(g=>{
+    if(!g||typeof g!=='object'||Array.isArray(g))throw new Error('Invalid registry token group.');
+    const pp=g.protocolParams;
+    if(!pp||typeof pp!=='object'||Array.isArray(pp))throw new Error('Invalid registry token group: protocol parameters.');
+    if(!(HEX28).test(pp.registryNodePolicyId??''))throw new Error('Invalid registry token group: registry node policy ID.');
+    if(!(HEX28).test(pp.programmableLogicBaseScriptHash??''))throw new Error('Invalid registry token group: programmable logic base script hash.');
+    if(!Array.isArray(g.registryNodes))throw new Error('Invalid registry token group: registry nodes.');
+    const registryNodes=g.registryNodes.map(n=>{
+      if(!n||typeof n!=='object'||Array.isArray(n))throw new Error('Invalid registry node record.');
+      if(!(HEX28).test(n.key??''))throw new Error('Invalid registry node record: key.');
+      const next=String(n.next??'').toLowerCase();
+      if(!((HEX28).test(next)||next===REGISTRY_TERMINAL_NEXT))throw new Error('Invalid registry node record: next.');
+      for(const [field,label] of [['mintingLogicScript','minting logic script'],['transferLogicScript','transfer logic script'],['thirdPartyTransferLogicScript','third-party logic script'],['unfrackingLogicScript','unfracking logic script'],['globalStatePolicyId','global state policy ID']]) {
+        if(!hex28OrEmpty(n[field]))throw new Error(`Invalid registry node record: ${label}.`);
+      }
+      return {key:n.key.toLowerCase(),next,mintingLogicScript:String(n.mintingLogicScript).toLowerCase(),transferLogicScript:String(n.transferLogicScript).toLowerCase(),thirdPartyTransferLogicScript:String(n.thirdPartyTransferLogicScript).toLowerCase(),unfrackingLogicScript:String(n.unfrackingLogicScript).toLowerCase(),globalStatePolicyId:String(n.globalStatePolicyId).toLowerCase()};
+    });
+    return {protocolParams:{registryNodePolicyId:pp.registryNodePolicyId.toLowerCase(),programmableLogicBaseScriptHash:pp.programmableLogicBaseScriptHash.toLowerCase()},registryNodes};
+  });
+}
+
+// Verify one parsed token group as a registry CHAIN, and cross-check it
+// against the deployments list from the protocols endpoint — two indexer
+// endpoints that must agree before PRISM calls a list verified. The chain
+// itself: keys strictly ascending (bytewise, which is lexicographic on
+// canonical lowercase hex — duplicates fail this too), every node's next
+// naming the following node's key, and the last node terminating at the
+// 30-byte sentinel. The cross-check: a protocols record with the group's
+// registry node policy must exist, its programmable-logic hash must equal
+// the group's base hash, and its indexed token count must equal the number
+// of nodes listed. An empty group is a chain that verifies nothing: every
+// chain verdict is false, never a vacuous pass.
+export function registryChainCheck(group, protocols) {
+  const nodes=group?.registryNodes??[];
+  const protocol=(protocols??[]).find(v=>v.registryNodePolicyId===group?.protocolParams?.registryNodePolicyId)??null;
+  const sorted=nodes.length>0&&nodes.every((n,i)=>i===0||nodes[i-1].key<n.key);
+  const linked=nodes.length>0&&nodes.every((n,i)=>i===nodes.length-1||n.next===nodes[i+1].key);
+  const terminatesAtSentinel=nodes.length>0&&nodes[nodes.length-1].next===REGISTRY_TERMINAL_NEXT;
+  const protocolFound=protocol!==null;
+  const logicMatches=protocolFound&&protocol.progLogicScriptHash===group.protocolParams.programmableLogicBaseScriptHash;
+  const countMatches=protocolFound&&protocol.tokenCount===nodes.length;
+  return {registryNodePolicyId:group?.protocolParams?.registryNodePolicyId??null,nodeCount:nodes.length,sorted,linked,terminatesAtSentinel,protocolFound,logicMatches,countMatches,ok:sorted&&linked&&terminatesAtSentinel&&protocolFound&&logicMatches&&countMatches};
+}
+
+// Live read of one network's registered token nodes from the same
+// Foundation indexer getRegistry reads, cross-checked against that
+// endpoint's deployments list. Read-only; strictly parsed.
+export async function getRegistryTokens(network, protocols) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before reading its registry.');
+  const origin=new URL(net.registryApi);
+  if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
+  const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/registry/tokens`);
+  const groups=parseRegistryTokens(rows);
+  return {network,indexer:origin.origin,groups,chains:groups.map(g=>registryChainCheck(g,protocols)),fetchedAt:Date.now()};
+}
 export function cardanoWallets(root=globalThis) {
   return Object.entries(root.cardano??{}).filter(([,w])=>w&&typeof w.enable==='function'&&typeof w.name==='string').map(([id,w])=>({id,name:w.name,provider:w}));
 }
