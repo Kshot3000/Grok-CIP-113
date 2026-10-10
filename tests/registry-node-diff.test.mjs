@@ -147,5 +147,5 @@ test('app wires the datum comparison into the registry node panel, labeled hones
   assert.match(app, /IDENTICAL TO THE NODE ABOVE/);
   assert.match(app, /NOT COMPARED/);
   assert.match(app, /Comparing is not registering/);
-  assert.match(app, /v1\.86/);
+  assert.match(app, /v1.87/);
 });

@@ -1899,6 +1899,100 @@ export function verifyRegistryInsertion(registryKeys, newPolicy, claimed) {
   };
 }
 
+export const REGISTRY_INSERT_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['insertionIndex', 'Insertion index'],
+  ['prevNode', 'Prev node'],
+  ['nodeNext', 'Node next'],
+]);
+
+// CIP-113 registry insertion impact, compared locally between two modeled
+// registry lists for the SAME policy being registered — the insertion as
+// planned against the registry as it was, and as planned against the
+// registry as it would be after some other change (another policy
+// registering first, a key inserted, a key removed). The proofs diff
+// (diffRegistryProofs) answers what a registry change does to proofs
+// already planned; this answers what it does to a registration still
+// being planned: an insertion ahead of the policy's position shifts its
+// index, an insertion between its prev_node and the policy replaces the
+// node the registering transaction must spend, a removal of its successor
+// leaves the new node inheriting the terminal next instead, and the
+// change may BE this policy's own registration — in which case there is
+// no longer an insertion to plan at all.
+//
+// Both lists are planned through planRegistryInsertion itself, so the
+// comparison inherits the planner's disciplines for free: each list is
+// validated as the on-chain list is built (28-byte keys, each once,
+// strictly increasing) and refused if it breaks those invariants, and
+// planning and comparing can never disagree about where the policy
+// belongs in either list (validate-once, twenty-second application).
+//
+// Four positions are compared, in plan order: the status, the insertion
+// index, the prev node, and the node next. THE SUBSTANCE is what is NOT
+// compared: the plan's successorKey is the new node's next restated —
+// the two are equal in every insertable plan by construction — so
+// counting both would double-count a single successor change (a removed
+// successor is ONE difference, not two; pinned). The shifted-keys list
+// is likewise derived from the insertion index and the list itself, and
+// the resulting list is the two lists with the policy placed, so neither
+// is a position of its own. For an already-registered policy the four
+// positions read off its existing node (its index; no prev node — a
+// registered policy has no insertion pending; its node's next, with the
+// last node's uncarried terminal next normalised to 'terminal' exactly
+// as an insertable plan states it), so a registration story and a
+// position story compare in the same four positions.
+//
+// The change is classified by its registration story first — NEWLY
+// REGISTERED and NO LONGER REGISTERED take precedence, because a policy
+// that gained or lost registration is the headline even when its
+// position also moved — then NODE CHANGED (registered on both sides,
+// its node moved or its next changed) and POSITION CHANGED (insertable
+// on both sides, the planned insertion moved).
+//
+// Boundary honesty carries over: 'origin' and 'terminal' name real
+// on-chain values neither modeled list carries — the origin node the
+// registering transaction spends when the policy sorts first, and the
+// terminal next a last node inherits. The comparison is between the two
+// lists supplied; PRISM read no live registry, and neither list is one.
+// Comparing plans registers nothing and applies neither plan.
+export function diffRegistryInsertion(beforeKeys, afterKeys, newPolicy) {
+  const before = planRegistryInsertion(beforeKeys, newPolicy);
+  const after = planRegistryInsertion(afterKeys, newPolicy);
+  const positionOf = plan => ({
+    status: plan.status,
+    insertionIndex: plan.insertionIndex,
+    prevNode: plan.status === 'already-registered' ? null : plan.prevKind === 'origin' ? 'origin' : plan.prevNode.key,
+    nodeNext: plan.status === 'already-registered'
+      ? (plan.existingNode.nextKey ?? 'terminal')
+      : (plan.newNode.nextKind === 'terminal' ? 'terminal' : plan.newNode.nextKey),
+  });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of REGISTRY_INSERT_COMPARE_FIELDS) {
+    if (beforePos[field] !== afterPos[field]) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.status !== 'already-registered' && after.status === 'already-registered') change = 'newly-registered';
+  else if (before.status === 'already-registered' && after.status !== 'already-registered') change = 'no-longer-registered';
+  else if (before.status === 'already-registered') change = 'node-changed';
+  else change = 'position-changed';
+  const beforeSet = new Set(before.keys), afterSet = new Set(after.keys);
+  return {
+    policy: before.policy,
+    beforeSize: before.registrySize,
+    afterSize: after.registrySize,
+    addedKeys: after.keys.filter(k => !beforeSet.has(k)),
+    removedKeys: before.keys.filter(k => !afterSet.has(k)),
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    before,
+    after,
+    unchanged: differences.length === 0,
+  };
+}
+
 // CIP-113 RegistryNode datum checking, modeled locally from the spec's
 // datum definition ("RegistryNode datum") and the Foundation reference
 // implementation's registry_node module, which pins the two values the
