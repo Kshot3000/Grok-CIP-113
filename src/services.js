@@ -1,4 +1,4 @@
-import { CONFIG, NETWORKS, PREVIEW_REFERENCE } from './config.js';
+import { NETWORKS, PREVIEW_REFERENCE } from './config.js';
 import { normalizeWalletAddress, decodeAddress, inspectAddress, inspectRewardAddress } from './cardano.js';
 
 export async function fetchJson(url,options={}) {
@@ -52,13 +52,55 @@ export async function getPreviewDeployment() {
   const deployment=parseDeploymentTx(rows,PREVIEW_REFERENCE.txHash);
   return {...deployment,scriptHash:reference.scriptHash,protocolPolicy:reference.protocolPolicy,source:PREVIEW_REFERENCE.source,observed:PREVIEW_REFERENCE.observed,fetchedAt:Date.now()};
 }
-export async function getRegistry() {
-  if(!CONFIG.registryApi)throw new Error('No registry indexer is configured. Connect a Foundation-compatible backend in src/config.js.');
-  const origin=new URL(CONFIG.registryApi);
+// Pure parser for the Foundation registry indexer's protocols response
+// (GET /api/v1/registry/protocols on the per-network programmabletokens.xyz
+// indexers). Every field a record must carry is validated and hex is
+// canonicalised to lowercase; a record missing a field, or carrying one in
+// a shape the indexer never sends, is refused whole — PRISM shows no
+// deployment it could not read in full, and never repairs a record into a
+// plausible-looking one.
+export function parseRegistryProtocols(rows) {
+  if(!Array.isArray(rows))throw new Error('Unexpected registry response.');
+  return rows.map(v=>{
+    if(!v||typeof v!=='object'||Array.isArray(v))throw new Error('Invalid registry deployment record.');
+    if(!Number.isSafeInteger(v.protocolParamsId)||v.protocolParamsId<0)throw new Error('Invalid registry deployment record: protocol parameters ID.');
+    if(!Number.isSafeInteger(v.tokenCount)||v.tokenCount<0)throw new Error('Invalid registry deployment record: token count.');
+    if(!Number.isSafeInteger(v.slot)||v.slot<0)throw new Error('Invalid registry deployment record: slot.');
+    if(!(/^[a-f0-9]{56}$/i).test(v.registryNodePolicyId??''))throw new Error('Invalid registry deployment record: registry node policy ID.');
+    if(!(/^[a-f0-9]{56}$/i).test(v.progLogicScriptHash??''))throw new Error('Invalid registry deployment record: programmable logic script hash.');
+    if(!(/^[a-f0-9]{64}$/i).test(v.txHash??''))throw new Error('Invalid registry deployment record: deployment transaction.');
+    return {protocolParamsId:v.protocolParamsId,registryNodePolicyId:v.registryNodePolicyId.toLowerCase(),progLogicScriptHash:v.progLogicScriptHash.toLowerCase(),tokenCount:v.tokenCount,slot:v.slot,txHash:v.txHash.toLowerCase()};
+  });
+}
+
+// Cross-check the indexer's Preview view against the deployment pinned in
+// src/config.js from the Foundation platform's own configuration: the
+// pinned bootstrap transaction must be in the list, and the programmable
+// logic hash the indexer reports for it must equal the pinned script hash.
+// The indexer is a source, not an authority — on Preview PRISM can prove
+// the record it shows is the pinned reference deployment, and says so only
+// when both halves match. Other networks have no pin to check against and
+// report null: no check was run, which is not the same as a check passing.
+export function registryReferenceCheck(network, protocols) {
+  if(network!=='preview')return null;
+  const record=(protocols??[]).find(v=>v.txHash===PREVIEW_REFERENCE.txHash);
+  if(!record)return {present:false,scriptHashMatches:false,txHash:PREVIEW_REFERENCE.txHash};
+  return {present:true,scriptHashMatches:record.progLogicScriptHash===PREVIEW_REFERENCE.scriptHash,txHash:PREVIEW_REFERENCE.txHash};
+}
+
+// Live read of one network's CIP-113 registry deployments from the
+// Foundation's hosted indexer for that network (NETWORKS[network]
+// .registryApi — the same indexer family the platform's own frontend
+// reads). Read-only; the response is parsed strictly and, on Preview,
+// cross-checked against the pinned reference before anything is shown.
+export async function getRegistry(network) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before reading its registry.');
+  const origin=new URL(net.registryApi);
   if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
-  const result=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/registry/protocols`);
-  if(!Array.isArray(result))throw new Error('Unexpected registry response.');
-  return result.map(v=>{if(!Number.isInteger(v.protocolParamsId)||!Number.isInteger(v.tokenCount)||!(/^[a-f0-9]{56}$/).test(v.registryNodePolicyId))throw new Error('Invalid registry deployment record.');return v;});
+  const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/registry/protocols`);
+  const protocols=parseRegistryProtocols(rows);
+  return {network,indexer:origin.origin,protocols,reference:registryReferenceCheck(network,protocols),fetchedAt:Date.now()};
 }
 export function cardanoWallets(root=globalThis) {
   return Object.entries(root.cardano??{}).filter(([,w])=>w&&typeof w.enable==='function'&&typeof w.name==='string').map(([id,w])=>({id,name:w.name,provider:w}));

@@ -41,9 +41,9 @@ The sandbox evaluates fictional numeric and Boolean inputs locally. It creates n
 
 As of 2026-10-03, the official Midnight network documentation says mainnet node/indexer access moved to Blockfrost and needs a project token; Preview and Preprod remain separate networks. This frontend avoids embedding such credentials and relies on the wallet for its own connection. Consult the current docs before adding a backend.
 
-## Optional registry indexer
+## Registry indexers
 
-Set `CONFIG.registryApi` to an HTTPS origin implementing the Foundation platform’s `GET /api/v1/registry/protocols` endpoint. CORS must permit the deployed frontend. It returns indexed deployment records, not a universal token census. The optional adapter rejects obviously malformed records and does not silently turn errors into zero tokens. Full linked-list integrity and on-chain registry verification require additional work before transaction use.
+The registry browser reads the Cardano Foundation’s hosted programmable-tokens indexers — one HTTPS origin per network in `NETWORKS` (`preview-`, `preprod-`, and `mainnet-indexer.programmabletokens.xyz`, the indexer family the platform’s own frontend uses; verified publicly reachable, with CORS open to the deployed frontend, on 2026-10-10). Each implements the platform’s `GET /api/v1/registry/protocols` endpoint. Responses are parsed strictly in `parseRegistryProtocols` — every field validated, hex canonicalised, a malformed record refusing the whole response — and on Preview the listed deployment is cross-checked against the pinned reference (`registryReferenceCheck`): the pinned bootstrap transaction must be present with a programmable-logic hash equal to the pinned script hash. The indexers return indexed deployment records for their own deployments, not a universal token census, and errors render as an explicit unavailable state, never as zero tokens. Full linked-list integrity and on-chain registry verification require additional work before transaction use.
 
 ## Launch limits
 

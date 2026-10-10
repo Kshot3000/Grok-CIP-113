@@ -12,14 +12,14 @@ export const CONFIG = Object.freeze({
   midnight: 'https://docs.midnight.network/',
   realfi: 'https://realfi.co/',
   realfiApp: 'https://app.realfi.co/',
-  // Optional read-only Foundation-compatible API origin. No credentials in this file.
-  registryApi: '',
+  // Registry browsing uses the per-network Foundation indexers in NETWORKS
+  // below (read-only, no credentials — this file never carries any).
 });
 
 export const NETWORKS = Object.freeze({
-  preview: { name: 'Preview', id: 0, koios: 'https://preview.koios.rest/api/v1', explorer: 'https://preview.cardanoscan.io', midnight: 'preview' },
-  preprod: { name: 'Preprod', id: 0, koios: 'https://preprod.koios.rest/api/v1', explorer: 'https://preprod.cardanoscan.io', midnight: 'preprod' },
-  mainnet: { name: 'Mainnet', id: 1, koios: 'https://api.koios.rest/api/v1', explorer: 'https://cardanoscan.io', midnight: 'mainnet' },
+  preview: { name: 'Preview', id: 0, koios: 'https://preview.koios.rest/api/v1', explorer: 'https://preview.cardanoscan.io', midnight: 'preview', registryApi: 'https://preview-indexer.programmabletokens.xyz' },
+  preprod: { name: 'Preprod', id: 0, koios: 'https://preprod.koios.rest/api/v1', explorer: 'https://preprod.cardanoscan.io', midnight: 'preprod', registryApi: 'https://preprod-indexer.programmabletokens.xyz' },
+  mainnet: { name: 'Mainnet', id: 1, koios: 'https://api.koios.rest/api/v1', explorer: 'https://cardanoscan.io', midnight: 'mainnet', registryApi: 'https://mainnet-indexer.programmabletokens.xyz' },
 });
 
 export const PREVIEW_REFERENCE = Object.freeze({
@@ -50,4 +50,5 @@ export const SOURCES = [
   { name:'CIP-19 address format', label:'CARDANO STANDARD', description:'Binary headers, credentials, and Bech32 encoding behind the smart-wallet derivation utility.', href:'https://github.com/cardano-foundation/CIPs/tree/master/CIP-0019', icon:'fingerprint' },
   { name:'CIP-14 asset fingerprint', label:'CARDANO STANDARD', description:'The user-facing asset identifier: a Blake2b-160 digest of policy ID and asset name, Bech32-encoded. PRISM computes it locally in the Network explorer and cross-checks the live Koios response against it.', href:'https://github.com/cardano-foundation/CIPs/tree/master/CIP-0014', icon:'fingerprint' },
   { name:'Koios public API', label:'NETWORK DATA', description:'Read-only chain tip and asset information, with explicit failure and freshness states.', href:'https://api.koios.rest/', icon:'globe' },
+  { name:'CIP-113 registry indexers', label:'CARDANO FOUNDATION', description:'The Foundation’s hosted programmable-tokens indexers (programmabletokens.xyz — one per network) behind the registry browser: read-only deployment records, cross-checked on Preview against the pinned reference deployment. An indexer’s view of its own deployment, not a universal token census. Reference implementation is R&D, not production-ready, audit pending.', href:CONFIG.platform, icon:'layers' },
 ];
