@@ -1,5 +1,5 @@
 import { NETWORKS, PREVIEW_REFERENCE } from './config.js';
-import { normalizeWalletAddress, decodeAddress, inspectAddress, inspectRewardAddress } from './cardano.js';
+import { normalizeWalletAddress, decodeAddress, inspectAddress, inspectRewardAddress, blake2b, hexToBytes, bytesToHex } from './cardano.js';
 
 export async function fetchJson(url,options={}) {
   const response=await fetch(url,{...options,signal:AbortSignal.timeout(12000),credentials:'omit',referrerPolicy:'no-referrer'});
@@ -342,6 +342,89 @@ export async function getProtocolParamVersions(network, protocols) {
   const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/protocol-params/versions`);
   const versions=parseProtocolParamVersions(rows);
   return {network,indexer:origin.origin,versions,check:protocolVersionsCheck(versions,protocols),fetchedAt:Date.now()};
+}
+// A Cardano script hash for a Plutus V3 script is the Blake2b-224 digest
+// of the one-byte language tag 0x03 followed by the script's bytes (the
+// ledger's script-hash construction). Computing it locally is what turns
+// the modules endpoint's stated hashes from claims into verifiable facts.
+export function plutusV3ScriptHash(scriptBytesHex) {
+  const bytes=hexToBytes(String(scriptBytesHex).toLowerCase());
+  const tagged=new Uint8Array(bytes.length+1);
+  tagged[0]=3; tagged.set(bytes,1);
+  return bytesToHex(blake2b(tagged,28));
+}
+
+// Pure parser for the Foundation indexer's modules response
+// (GET /api/v1/modules on the same per-network indexers — the platform's
+// catalogue of its Layer-3 substandard modules: dummy, freeze-and-seize,
+// and the RWA token profile today). Each module names its validators,
+// and every validator entry carries its compiled script bytes and the
+// script hash the indexer states for them. Every field is validated and
+// hex canonicalised, and the hash is RECOMPUTED here from the bytes
+// themselves (plutusV3ScriptHash) — but the raw script bytes are never
+// retained: a parsed validator carries only its title, the stated hash,
+// the recomputed hash, and the script's byte length. PRISM displays
+// module identities and verified hashes, not 238 KB of compiled Plutus
+// code, and nothing in the parsed result can be mistaken for a script
+// PRISM could run. A malformed module or validator refuses the whole
+// response, exactly as the other indexer parsers refuse.
+export function parseModules(rows) {
+  if(!Array.isArray(rows))throw new Error('Unexpected modules response.');
+  return rows.map(m=>{
+    if(!m||typeof m!=='object'||Array.isArray(m))throw new Error('Invalid module record.');
+    if(typeof m.id!=='string'||!(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).test(m.id))throw new Error('Invalid module record: module ID.');
+    if(typeof m.name!=='string'||!m.name.trim())throw new Error('Invalid module record: module name.');
+    if(typeof m.description!=='string')throw new Error('Invalid module record: module description.');
+    if(!Array.isArray(m.validators)||m.validators.length===0)throw new Error('Invalid module record: validators.');
+    const validators=m.validators.map(v=>{
+      if(!v||typeof v!=='object'||Array.isArray(v))throw new Error('Invalid module validator record.');
+      if(typeof v.title!=='string'||!v.title.trim())throw new Error('Invalid module validator record: validator title.');
+      if(typeof v.script_bytes!=='string'||!(/^(?:[a-f0-9]{2})+$/i).test(v.script_bytes))throw new Error('Invalid module validator record: script bytes.');
+      if(!(HEX28).test(v.script_hash??''))throw new Error('Invalid module validator record: script hash.');
+      const scriptBytes=v.script_bytes.toLowerCase();
+      return {title:v.title,scriptHash:v.script_hash.toLowerCase(),computedHash:plutusV3ScriptHash(scriptBytes),scriptByteLength:scriptBytes.length/2};
+    });
+    return {id:m.id,name:m.name,description:m.description,validators};
+  });
+}
+
+// Verify one parsed modules list AS A CATALOGUE. The load-bearing
+// verdict is cryptographic, not structural: every validator's stated
+// script hash must equal the hash PRISM recomputed from that entry's own
+// script bytes — an indexer record whose bytes and hash disagree is a
+// record that does not describe the validator it names, however tidy it
+// looks. Around it: module IDs must be unique (an ID is how a design
+// names its substandard), and validator titles must be unique WITHIN a
+// module (titles are handler names in that module's namespace — the
+// handlers of one compiled validator share a script, so entries sharing
+// a computed hash are that validator's handlers, counted once in
+// uniqueScriptCount). An empty catalogue verifies nothing: every
+// verdict is false, never a vacuous pass.
+export function modulesCheck(modules) {
+  const list=modules??[];
+  const all=list.flatMap(m=>m.validators??[]);
+  const idsUnique=list.length>0&&new Set(list.map(m=>m.id)).size===list.length;
+  const titlesUniqueWithinModules=list.length>0&&list.every(m=>new Set((m.validators??[]).map(v=>v.title)).size===(m.validators??[]).length);
+  const hashesVerify=all.length>0&&all.every(v=>v.computedHash===v.scriptHash);
+  const uniqueScriptCount=new Set(all.map(v=>v.computedHash)).size;
+  const ok=list.length>0&&idsUnique&&titlesUniqueWithinModules&&hashesVerify;
+  return {moduleCount:list.length,validatorCount:all.length,uniqueScriptCount,idsUnique,titlesUniqueWithinModules,hashesVerify,verifiedCount:all.filter(v=>v.computedHash===v.scriptHash).length,ok};
+}
+// Live read of one network's substandard module catalogue from the same
+// Foundation indexer the registry reads use. Read-only; strictly parsed;
+// every stated hash recomputed locally before anything is shown as
+// verified. The catalogue is the indexer's own list of the platform's
+// modules for that network — it is not a census of substandards other
+// issuers may run, and a module's presence here is not an endorsement,
+// a compliance claim, or a deployment by PRISM.
+export async function getModules(network) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before reading its modules.');
+  const origin=new URL(net.registryApi);
+  if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
+  const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/modules`);
+  const modules=parseModules(rows);
+  return {network,indexer:origin.origin,modules,check:modulesCheck(modules),fetchedAt:Date.now()};
 }
 export function cardanoWallets(root=globalThis) {
   return Object.entries(root.cardano??{}).filter(([,w])=>w&&typeof w.enable==='function'&&typeof w.name==='string').map(([id,w])=>({id,name:w.name,provider:w}));

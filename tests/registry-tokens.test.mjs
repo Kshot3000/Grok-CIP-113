@@ -185,12 +185,12 @@ test('getRegistryTokens refuses an unknown network before any fetch, and surface
   finally { malformed.restore(); }
 });
 
-test('app wires the registered-tokens read: chain verdict, honest partial failure, v1.95', async () => {
+test('app wires the registered-tokens read: chain verdict, honest partial failure, v1.96', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /getRegistryTokens\(state\.network,reg\.protocols\)/);
   assert.match(app, /Chain check passed/);
   assert.match(app, /Chain check FAILED/);
   assert.match(app, /Registered tokens unavailable\.<\/strong>/);
   assert.match(app, /Unfracking forbidden \(empty script\)/);
-  assert.match(app, /WORKSPACE <span>v1\.95<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.96<\/span>/);
 });
