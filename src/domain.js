@@ -3131,6 +3131,146 @@ export function verifyTransferOutputs(input, outputs) {
   };
 }
 
+export const TRANSFER_VALUE_COMPARE_FIELDS = Object.freeze([
+  ['expectedQuantity', 'expected quantity'],
+]);
+
+// CIP-113 TransferAct output-value impact, compared locally between two
+// modeled versions of the SAME transfer — the expected value as planned
+// against the transfer as it was, and as planned against the transfer as
+// it would be after some other change (a spent UTxO joining, a mint or
+// burn adjusted, a policy's registry proof arriving or being withdrawn).
+// The registry, base redeemer, and delegate pairing families already had
+// this temporal half (diffRegistryProofs, diffRegistryInsertion,
+// diffBaseSpendRedeemer, diffDelegatePairing); the transfer output-value
+// family had only plan → verify, so a builder whose transfer changed
+// during assembly could not ask which assets' expected value at base the
+// change moves — and outputs already built against the earlier
+// expectation then fail the delegate's floor, or leave programmable
+// value at base that no longer belongs there, for reasons the earlier
+// plan cannot explain.
+//
+// Both versions are planned through planTransferOutputValue itself
+// (validate-once, twenty-fifth application), so comparison and planning
+// can never disagree about any asset's expected value in either version,
+// and a version that cannot be read (a duplicated validated policy, a
+// mint listing one asset twice, a fractional quantity, a numeric
+// quantity) is refused on either side with the planner's reason, never
+// compared around.
+//
+// One position is compared per validated asset, in the planner's sorted
+// order: its expected quantity — the one number the delegate checks the
+// transaction's outputs at base addresses against. THE SUBSTANCE is
+// what is NOT compared as positions. The input and mint quantities are
+// the expectation's COMPONENTS, not positions of their own: the expected
+// quantity is their sum, so counting them would double- and
+// triple-count a single move (an input rising by 10 with the mint
+// unchanged moves the expectation once, not twice — pinned), and a
+// change whose components cancel — input up 10, mint down 10 — leaves
+// the expectation, and therefore every output built against it, exactly
+// where it stood, so it compares as unchanged for that asset with the
+// composition change reported separately as compositionChanged, never
+// counted. An asset's presence in the expectation is likewise not a
+// second position: a newly expected, newly validated, no-longer
+// expected, or no-longer validated asset differs on its expected
+// quantity alone — from no expectation to one, or back — and is
+// classified by which of those stories it is. The excluded assets (the
+// unvalidated policies' ordinary native tokens) carry no expectation at
+// all, so their own change — an excluded asset joining, leaving, or
+// moving in amount — is reported separately as added/removed/changed
+// excluded assets, never counted: an ordinary token moving ordinarily
+// does not stale any output the delegate will check. The validated
+// policy list's own change is reported as added/removed policies, never
+// counted either: a policy validated while holding no spent or minted
+// value in the model moves no expectation by itself.
+//
+// Each asset's change is classified by its plannability story first —
+// BECAME UNPLANNABLE (its expectation crossed below zero: a burn now
+// exceeds its validated input) and BECAME PLANNABLE take precedence —
+// then STILL UNPLANNABLE (negative on both sides, but not the same
+// negative), EXPECTED CHANGED (plannable on both sides, the expectation
+// moved), and the four presence stories above. The overall change puts
+// the transfer's plannability story first the same way, then
+// EXPECTATIONS CHANGED. Expected quantities are the planner's canonical
+// BigInt decimal strings, so equality here is exact past 2^53.
+//
+// Boundary honesty carries over from the planner: the comparison is
+// between the two modeled versions entered — PRISM read no transaction,
+// no UTxO, and no chain state, and comparing expectations applies
+// neither version and builds no transaction.
+export function diffTransferOutputValue(beforeInput, afterInput) {
+  const before = planTransferOutputValue(beforeInput);
+  const after = planTransferOutputValue(afterInput);
+  const keyOf = e => `${e.policy}|${e.assetName}`;
+  const beforeEntries = new Map(before.entries.map(e => [keyOf(e), e]));
+  const afterEntries = new Map(after.entries.map(e => [keyOf(e), e]));
+  const beforeExcluded = new Map(before.excluded.map(e => [keyOf(e), e]));
+  const afterExcluded = new Map(after.excluded.map(e => [keyOf(e), e]));
+  const keys = [...new Set([...beforeEntries.keys(), ...afterEntries.keys()])].sort((x, y) => {
+    const [xp, xn] = x.split('|'), [yp, yn] = y.split('|');
+    return xp < yp ? -1 : xp > yp ? 1 : xn < yn ? -1 : xn > yn ? 1 : 0;
+  });
+  const perAsset = keys.map(key => {
+    const b = beforeEntries.get(key) ?? null;
+    const a = afterEntries.get(key) ?? null;
+    const [policy, assetName] = key.split('|');
+    let change, changedFields = [];
+    if (b && a) {
+      if (b.expectedQuantity !== a.expectedQuantity) {
+        changedFields = TRANSFER_VALUE_COMPARE_FIELDS.map(([, label]) => label);
+        if (BigInt(b.expectedQuantity) >= 0n && BigInt(a.expectedQuantity) < 0n) change = 'became-unplannable';
+        else if (BigInt(b.expectedQuantity) < 0n && BigInt(a.expectedQuantity) >= 0n) change = 'became-plannable';
+        else if (BigInt(b.expectedQuantity) < 0n) change = 'still-unplannable';
+        else change = 'expected-changed';
+      } else change = 'unchanged';
+    } else if (a) {
+      change = beforeExcluded.has(key) ? 'newly-validated' : 'newly-expected';
+      changedFields = TRANSFER_VALUE_COMPARE_FIELDS.map(([, label]) => label);
+    } else {
+      change = afterExcluded.has(key) ? 'no-longer-validated' : 'no-longer-expected';
+      changedFields = TRANSFER_VALUE_COMPARE_FIELDS.map(([, label]) => label);
+    }
+    const compositionChanged = !!(b && a && (b.inputQuantity !== a.inputQuantity || b.mintQuantity !== a.mintQuantity));
+    return { policy, assetName, change, changedFields, compositionChanged, before: b, after: a };
+  });
+  const changed = perAsset.filter(p => p.change !== 'unchanged');
+  let change;
+  if (!changed.length) change = 'unchanged';
+  else if (before.status === 'planned' && after.status === 'unplannable') change = 'became-unplannable';
+  else if (before.status === 'unplannable' && after.status === 'planned') change = 'became-plannable';
+  else if (before.status === 'unplannable') change = 'still-unplannable';
+  else change = 'expectations-changed';
+  const beforeValidated = new Set(before.validatedPolicies), afterValidated = new Set(after.validatedPolicies);
+  const addedExcluded = after.excluded.filter(e => !beforeExcluded.has(keyOf(e)));
+  const removedExcluded = before.excluded.filter(e => !afterExcluded.has(keyOf(e)));
+  const changedExcluded = before.excluded.filter(e => {
+    const a = afterExcluded.get(keyOf(e));
+    return a && (a.inputQuantity !== e.inputQuantity || a.mintQuantity !== e.mintQuantity);
+  }).map(e => ({ policy: e.policy, assetName: e.assetName, before: e, after: afterExcluded.get(keyOf(e)) }));
+  const count = c => perAsset.filter(p => p.change === c).length;
+  return {
+    change,
+    changedFields: changed.length ? TRANSFER_VALUE_COMPARE_FIELDS.map(([, label]) => label) : [],
+    perAsset,
+    addedValidatedPolicies: after.validatedPolicies.filter(p => !beforeValidated.has(p)),
+    removedValidatedPolicies: before.validatedPolicies.filter(p => !afterValidated.has(p)),
+    addedExcluded,
+    removedExcluded,
+    changedExcluded,
+    excludedChanged: addedExcluded.length > 0 || removedExcluded.length > 0 || changedExcluded.length > 0,
+    compositionChanged: perAsset.some(p => p.compositionChanged),
+    before,
+    after,
+    unchanged: changed.length === 0,
+    changedCount: changed.length,
+    unchangedCount: perAsset.length - changed.length,
+    newlyExpectedCount: count('newly-expected'),
+    noLongerExpectedCount: count('no-longer-expected'),
+    newlyValidatedCount: count('newly-validated'),
+    noLongerValidatedCount: count('no-longer-validated'),
+  };
+}
+
 // CIP-113 protocol upgradability (spec section "Protocol
 // upgradability", re-read from the raw upstream spec): the credentials
 // that make up a deployment live in the protocol parameters datum as
