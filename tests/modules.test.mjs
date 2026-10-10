@@ -143,7 +143,7 @@ test('getModules refuses an unknown network before any fetch', async () => {
   await assert.rejects(() => getModules('devnet'), /Unknown network/);
 });
 
-test('app wires the modules read: verdict, honest partial failure, v1.101', async () => {
+test('app wires the modules read: verdict, honest partial failure, v1.102', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /getModules\(state\.network\)/);
   assert.match(app, /Module check passed/);
@@ -151,5 +151,5 @@ test('app wires the modules read: verdict, honest partial failure, v1.101', asyn
   assert.match(app, /Substandard modules unavailable\.<\/strong>/);
   assert.match(app, /Substandard modules/);
   assert.match(app, /substandard module catalogue/);
-  assert.match(app, /WORKSPACE <span>v1\.101<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.102<\/span>/);
 });

@@ -1839,9 +1839,10 @@ export function planRegistryInsertion(registryKeys, newPolicy) {
 // has no position — so any claim for it is reported NOT INSERTABLE, not
 // scored. And a correct verdict proves only the list mechanics against
 // this modeled list: the RegistryInsert redeemer's minting logic
-// credential, its cryptographic binding to the key, and the registry NFT
-// are issuer/deployment data no modeled list carries, so this verifier
-// does not judge them and does not pretend to.
+// credential and its cryptographic binding to the key are judged in
+// the binding checker below, and the registry NFT in the outputs
+// checker below that — this verifier judges neither and does not
+// pretend to.
 export function verifyRegistryInsertion(registryKeys, newPolicy, claimed) {
   const plan = planRegistryInsertion(registryKeys, newPolicy);
   if (!claimed || typeof claimed !== 'object' || Array.isArray(claimed)) throw new Error('The claimed insertion must be an object naming a prev node, its rewritten next, the new node\u2019s next, and an insertion index.');
@@ -2005,8 +2006,9 @@ export function diffRegistryInsertion(beforeKeys, afterKeys, newPolicy) {
 // redeemer's minting logic credential, its cryptographic binding to the
 // key, and the registry NFT. This section models the first two — the
 // binding is a computation, and a modeled claim can carry every input
-// it needs. (The NFT stays unjudged: whether a real UTxO holds it is a
-// fact about a transaction PRISM does not read.)
+// it needs. (The registry NFT is not judged here — it is judged in
+// the outputs checker below, against the modeled mint and the two
+// modeled node outputs a claim carries there.)
 //
 // The registry minting policy takes the redeemer
 //
@@ -2060,7 +2062,8 @@ export function diffRegistryInsertion(beforeKeys, afterKeys, newPolicy) {
 // Boundary honesty: a bound verdict proves only that the three
 // modeled positions agree for the claim as entered, against the
 // template bytes as entered. PRISM read no reference input and no
-// transaction, verified no registry NFT, and registered nothing; the
+// transaction and registered nothing — the registry NFT is judged
+// in the outputs checker below, not here; the
 // template bytes here are the claim's own, so a verdict is only as
 // deployment-true as the template the builder pasted in.
 function registryCredential(value, label) {
@@ -2145,6 +2148,166 @@ export function checkRegistryInsertBinding(claim) {
     datumMintingLogic,
     expectedPolicyId,
     withdrawals,
+    verdicts,
+  };
+}
+
+// CIP-113 RegistryInsert outputs, modeled locally from the spec's
+// registration requirements (points 5–7) and the Foundation reference
+// implementation's output validation (lib/linked_list.ak
+// validate_registry_node_output / validate_mint, registry.ak
+// RegistryInsert — re-read 2026-10-10).
+//
+// The checkers above judge a registration's list mechanics, its datum
+// contents, and its cryptographic binding — and state what they do
+// not: the registry NFT. This section models the transaction side
+// they cannot reach: what the registering transaction MINTS and what
+// its two registry-node OUTPUTS carry and where they sit. The spec's
+// requirements, each judged here as its own position because they
+// fail separately:
+//
+// 1. MINTED NFT. The transaction MUST mint exactly one registry NFT
+//    under the registryMintingPolicy, with the programmable token
+//    policy as its name (point 5) — the reference's validate_mint
+//    requires the mint under that policy to be a single asset at
+//    quantity 1, and RegistryInsert requires its name to be the key.
+// 2. NODE NFTS. Each of the two node outputs MUST hold exactly that
+//    policy's NFT, at quantity 1, named by ITS OWN node's key — the
+//    new node's by the key being registered, the returned covering
+//    (prev) node's by the key it already carried (for the origin
+//    node, the empty name). An output holding the other node's NFT,
+//    two of its own, or none is a different failure in a different
+//    output, so the two are judged separately.
+// 3. NO OTHER VALUE. A node output's value carries exactly two
+//    policies — lovelace and the registry policy. Any further asset
+//    fails that output: a registry node is a directory entry, not a
+//    wallet, and value parked in one is value the registry's own
+//    spend rules never accounted for.
+// 4. NO REFERENCE SCRIPT. Neither output may carry one (point 6).
+// 5. PAYMENT-ONLY ADDRESS. Both outputs' addresses MUST only have
+//    payment credentials (point 7). In the reference the registry
+//    script's mint and spend handlers share one hash, so a node
+//    output's payment credential IS the registry policy itself and
+//    its stake credential is absent — enforced there as equality
+//    with the covering node's address, judged here in its two parts:
+//    the payment hash equals the registry policy, and no stake
+//    credential is present.
+//
+// The covering node's own datum contents, the new node's datum
+// contents, and the list mechanics are judged by the datum checker,
+// the binding checker, and the insertion planner/verifier — not
+// repeated here. The new node's lovelace amount is NOT judged: the
+// spec says it SHOULD be the protocol minimum (point 5), a
+// recommendation this model reports no verdict on rather than
+// failing a registration the registry itself would accept.
+//
+// Refusal vs verdict, as in PRISM's other checkers: a claim that
+// cannot be read — a key that is not a 28-byte policy ID, an asset
+// named twice in one value (a value map holds each asset once), a
+// quantity that is not a positive decimal string (a JavaScript
+// number cannot name every int64 quantity, so one is refused rather
+// than rounded), a flag that is not a boolean, an unknown or missing
+// field — is REFUSED with the reason, never scored in part.
+//
+// Boundary honesty: a conforming verdict proves only that the
+// modeled mint and the two modeled outputs satisfy the five
+// requirements above. PRISM read no transaction and no UTxO and
+// registered nothing; whether a real transaction's outputs are the
+// ones modeled here is the builder's evidence to supply, not a
+// fact this checker can see.
+function registryInsertQuantity(value, label) {
+  if (typeof value !== 'string') throw new Error(`${label} must be a decimal string — a JavaScript number cannot name every int64 quantity exactly, so a numeric quantity is refused rather than rounded.`);
+  const v = value.trim();
+  if (!/^[0-9]+$/.test(v)) throw new Error(`${label} must be a positive whole quantity as a decimal string — ${JSON.stringify(value)} given.`);
+  const q = BigInt(v);
+  if (q === 0n) throw new Error(`${label} must be positive — a value entry holding zero of an asset is not an entry.`);
+  if (q > MAX_ASSET) throw new Error(`${label} exceeds the modeled int64 asset ceiling.`);
+  return q;
+}
+
+function registryInsertAssetName(value, label) {
+  const v = registryBytesHex(value, label);
+  if (v.length > 64) throw new Error(`${label} is ${v.length / 2} bytes — an asset name is at most 32 bytes.`);
+  return v;
+}
+
+function registryInsertMinted(minted) {
+  if (!Array.isArray(minted)) throw new Error('The claimed mint under the registry policy must be a list of the assets it mints — name and quantity each.');
+  const seen = new Set();
+  return minted.map((a, i) => {
+    const label = `Minted asset ${i + 1}`;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error(`${label} must be an object naming an asset name and a quantity.`);
+    for (const k of Object.keys(a)) if (k !== 'name' && k !== 'quantity') throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a minted asset names only its name and quantity.`);
+    if (a.name === undefined || a.quantity === undefined) throw new Error(`${label} must name both an asset name and a quantity.`);
+    const name = registryInsertAssetName(a.name, `${label}'s name`);
+    if (seen.has(name)) throw new Error(`The claimed mint names the asset ${name === '' ? '(empty name)' : name} twice — a mint value holds each asset once, so the claim cannot be read as one.`);
+    seen.add(name);
+    return { name, quantity: registryInsertQuantity(a.quantity, `${label}'s quantity`) };
+  });
+}
+
+function registryInsertOutput(output, label) {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error(`${label} must be an object naming its payment credential hash, whether a stake credential is present, whether it carries a reference script, and the assets it holds.`);
+  const fields = ['paymentHash', 'stakeCredential', 'referenceScript', 'assets'];
+  for (const k of Object.keys(output)) if (!fields.includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled node output names only its payment credential hash, its stake and reference-script flags, and its assets.`);
+  for (const k of fields) if (output[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  const paymentHash = registryPolicyId(output.paymentHash, `${label}'s payment credential hash`);
+  if (typeof output.stakeCredential !== 'boolean') throw new Error(`${label} must say, as a boolean, whether its address carries a stake credential — the payment-only rule turns on exactly that fact.`);
+  if (typeof output.referenceScript !== 'boolean') throw new Error(`${label} must say, as a boolean, whether it carries a reference script — the no-reference-script rule turns on exactly that fact.`);
+  if (!Array.isArray(output.assets)) throw new Error(`${label}'s assets must be a list of the non-lovelace assets it holds — policy, name, and quantity each.`);
+  const seen = new Set();
+  const assets = output.assets.map((a, i) => {
+    const alabel = `${label} asset ${i + 1}`;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error(`${alabel} must be an object naming a policy, an asset name, and a quantity.`);
+    for (const k of Object.keys(a)) if (k !== 'policy' && k !== 'name' && k !== 'quantity') throw new Error(`${alabel} carries an unknown field ${JSON.stringify(k)} — an asset names only its policy, name, and quantity.`);
+    if (a.policy === undefined || a.name === undefined || a.quantity === undefined) throw new Error(`${alabel} must name a policy, an asset name, and a quantity.`);
+    const policy = registryPolicyId(a.policy, `${alabel}'s policy`);
+    const name = registryInsertAssetName(a.name, `${alabel}'s name`);
+    const id = `${policy}:${name}`;
+    if (seen.has(id)) throw new Error(`${label} lists the asset ${policy}:${name === '' ? '(empty name)' : name} twice — a value holds each asset once, so the claim cannot be read as one.`);
+    seen.add(id);
+    return { policy, name, quantity: registryInsertQuantity(a.quantity, `${alabel}'s quantity`) };
+  });
+  return { paymentHash, stakeCredential: output.stakeCredential, referenceScript: output.referenceScript, assets };
+}
+
+export function checkRegistryInsertOutputs(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The outputs claim must be an object naming the key being registered, the covering node’s key, the registry policy, the assets minted under it, and the two registry-node outputs.');
+  const inputFields = ['key', 'prevKey', 'registryPolicy', 'minted', 'prevOutput', 'newOutput'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The outputs claim carries an unknown field ${JSON.stringify(k)} — it names only the key, the covering node’s key, the registry policy, the mint under it, and the two node outputs.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The outputs claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  const key = registryPolicyId(claim.key, 'The key being registered');
+  const prevKeyRaw = typeof claim.prevKey === 'string' ? claim.prevKey.trim().toLowerCase() : claim.prevKey;
+  const prevKey = prevKeyRaw === '' ? '' : registryPolicyId(claim.prevKey, 'The covering node’s key');
+  const registryPolicy = registryPolicyId(claim.registryPolicy, 'The registry policy');
+  const minted = registryInsertMinted(claim.minted);
+  const prevOutput = registryInsertOutput(claim.prevOutput, 'The covering node output');
+  const newOutput = registryInsertOutput(claim.newOutput, 'The new node output');
+  const holdsOwnNft = (output, nodeKey) => {
+    const own = output.assets.filter(a => a.policy === registryPolicy);
+    return own.length === 1 && own[0].name === nodeKey && own[0].quantity === 1n;
+  };
+  const verdicts = {
+    mintedNft: minted.length === 1 && minted[0].name === key && minted[0].quantity === 1n,
+    prevNft: holdsOwnNft(prevOutput, prevKey),
+    newNft: holdsOwnNft(newOutput, key),
+    prevExtraValue: prevOutput.assets.every(a => a.policy === registryPolicy),
+    newExtraValue: newOutput.assets.every(a => a.policy === registryPolicy),
+    prevNoReferenceScript: prevOutput.referenceScript === false,
+    newNoReferenceScript: newOutput.referenceScript === false,
+    prevAddress: prevOutput.paymentHash === registryPolicy && prevOutput.stakeCredential === false,
+    newAddress: newOutput.paymentHash === registryPolicy && newOutput.stakeCredential === false,
+  };
+  const valid = Object.values(verdicts).every(Boolean);
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    key,
+    prevKey,
+    registryPolicy,
+    minted: minted.map(a => ({ name: a.name, quantity: a.quantity.toString() })),
+    prevOutput: { ...prevOutput, assets: prevOutput.assets.map(a => ({ ...a, quantity: a.quantity.toString() })) },
+    newOutput: { ...newOutput, assets: newOutput.assets.map(a => ({ ...a, quantity: a.quantity.toString() })) },
     verdicts,
   };
 }
