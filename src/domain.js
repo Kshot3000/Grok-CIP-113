@@ -3263,9 +3263,9 @@ export function diffDelegatePairing(beforeInput, afterInput) {
 // modeled lists entered — PRISM read no transaction, no UTxO, and no
 // chain state, and the "validated" policies here are the ones the
 // model is TOLD were proven registered; whether a real transaction's
-// proofs actually validate them, whether each token's transfer logic
-// executed via withdraw-zero, and whether the holder authorized the
-// spend are the delegate's other checks, not judged here.
+// proofs actually validate them is not judged here, and whether each
+// token's transfer logic executed via withdraw-zero and the holder
+// authorized the spend are judged by checkTransferAuthorization.
 function transferAssetName(value, label) {
   if (typeof value !== 'string') throw new Error(`${label} must be the asset name as a hexadecimal string (empty for the unnamed asset).`);
   const v = value.trim().toLowerCase();
@@ -3394,9 +3394,10 @@ export function planTransferOutputValue(input) {
 // Boundary honesty carries over: a correct verdict proves only the
 // two output requirements against the modeled lists entered — PRISM
 // read no transaction and no chain state, value preservation across
-// the whole transaction, the registry proofs themselves, each
-// token's transfer-logic withdraw-zero, and holder authorization are
-// separate requirements this tool does not judge.
+// the whole transaction and the registry proofs themselves are
+// separate requirements this tool does not judge; each token's
+// transfer-logic withdraw-zero and holder authorization are judged
+// by checkTransferAuthorization.
 export function verifyTransferOutputs(input, outputs) {
   const plan = planTransferOutputValue(input);
   const outs = transferValueEntries(outputs, 'outputs', 'outputs');
@@ -4092,6 +4093,124 @@ export function checkDelegateRegistryNode(claim) {
     globalStatePolicies,
     referenceCount: nodes.length,
     verdicts,
+  };
+}
+
+// CIP-113 TransferAct authorization and logic execution, modeled
+// locally from the spec's delegate validation steps 1 and 3 and its
+// TransferAct constructor (re-read from the raw upstream spec this
+// run). A TransferAct is the one action the holder initiates, and the
+// transfer delegate's two non-value requirements are the two the
+// transfer output-value family states it does not judge:
+//
+// - Authorization (step 1, TransferAct only): for EACH UTxO spent
+//   from programmableLogicBase, the spend is authorised by the UTxO's
+//   stake credential — a signature where that credential is a public
+//   key (its hash among the modeled signers), or execution of the
+//   script where it is a script (its credential among the modeled
+//   withdrawals). This is the same rule the unfracking holder check
+//   applies to one holder, applied here per spent input, because a
+//   transfer can spend UTxOs of more than one stake credential and
+//   each spend must be authorised by its own. One unauthorised input
+//   fails the position; the per-input results name which.
+// - Logic execution (step 3): for each policy proven REGISTERED (a
+//   TokenExists proof), the token's transfer_logic_script MUST be
+//   executed in the transaction via withdraw-zero — its credential
+//   among the modeled withdrawals, kind and hash both. A credential
+//   naming nothing (an empty hash) can appear in no withdrawal map,
+//   so that token's position fails outright; the spec gives the
+//   transfer field no forbidden-by-default reading (that reading
+//   belongs to unfracking alone), and none is invented here.
+//
+// A policy proven NOT registered (a TokenDoesNotExist proof) is
+// treated as an ordinary native token and can be transferred without
+// additional validation (spec, TransferAct constructor point 3): its
+// position is reported with NO verdict (null), whether or not a
+// transfer credential was entered for it — judging it would invent a
+// requirement the delegate does not impose. The aggregate logic
+// verdict is likewise NO verdict when no registered policy is
+// modeled at all: there is nothing the delegate requires executed,
+// and a vacuous pass would claim a check ran that did not.
+//
+// Refusal discipline, as in PRISM's other checkers: a claim that
+// cannot be READ — an unknown or missing field, an empty spent list
+// (a TransferAct spend with no base UTxO names nothing to
+// authorise), a stake or transfer credential of an unknown kind or
+// with a hash that is not 28 bytes (the transfer credential's hash
+// may be empty — the shape that names no script), a token entry
+// whose registered flag is not a boolean, a registered token naming
+// no transfer credential, the same policy listed twice, a duplicated
+// withdrawal credential, a duplicated signer — is refused, never
+// scored in part. Hex case is canonicalised before comparison.
+//
+// Boundary honesty: these verdicts judge the modeled stake
+// credentials, tokens, withdrawals, and signers entered. PRISM read
+// no transaction, no registry, and no UTxO: whether the registry
+// proofs that mark a policy registered actually validate is the
+// proof verifier's position; whether a policy's RegistryNode
+// actually carries the transfer credential entered here is a fact
+// about a node this checker is told, not one it resolves; whether a
+// listed withdrawal really executed and a listed signer really
+// signed are facts about a real transaction this model does not
+// read. The expected output value and its verification are the
+// transfer output-value family's, above.
+function transferTokenEntry(value, index) {
+  const label = `Token ${index + 1}`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming its policy, whether a registry proof proved it registered, and its transfer_logic_script credential.`);
+  for (const k of Object.keys(value)) if (!['policy', 'registered', 'transferCredential'].includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled token names only its policy, its registered flag, and its transfer credential.`);
+  for (const k of ['policy', 'registered', 'transferCredential']) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — a token that cannot be read in full is refused, never scored in part. The transfer credential may be null for an unregistered token, but the field must be stated.`);
+  const policy = registryPolicyId(value.policy, `${label}'s policy`);
+  if (typeof value.registered !== 'boolean') throw new Error(`${label}'s registered flag must be a boolean — it states whether a TokenExists proof proved this policy registered, and the logic verdict turns on exactly that fact.`);
+  if (value.registered && value.transferCredential === null) throw new Error(`${label} is proven registered but names no transfer credential — a registered token's transfer_logic_script is the credential whose execution this checker judges, so the claim cannot be read without it.`);
+  const transferCredential = value.transferCredential === null ? null : delegateLogicCredential(value.transferCredential, `${label}'s transfer_logic_script`);
+  return { policy, registered: value.registered, transferCredential };
+}
+
+export function checkTransferAuthorization(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The transfer claim must be an object naming the stake credential of each UTxO spent from programmableLogicBase, the tokens proven registered or not, the transaction\u2019s withdrawals, and the transaction\u2019s signers.');
+  const inputFields = ['spentStakeCredentials', 'tokens', 'withdrawals', 'signers'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The transfer claim carries an unknown field ${JSON.stringify(k)} — it names only the spent stake credentials, the tokens, the withdrawals, and the signers.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The transfer claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  if (!Array.isArray(claim.spentStakeCredentials) || !claim.spentStakeCredentials.length) throw new Error('The spent stake credentials must be a non-empty list, one per UTxO spent from programmableLogicBase — a TransferAct spend with no base UTxO names nothing to authorise.');
+  const spentInputs = claim.spentStakeCredentials.map((c, i) => baseCredential(c, `Spent UTxO ${i + 1}'s stake credential`));
+  if (!Array.isArray(claim.tokens)) throw new Error('The tokens must be a list, one entry per distinct policy the modeled transfer carries a registry proof for.');
+  const seenPolicies = new Set();
+  const tokens = claim.tokens.map((t, i) => {
+    const entry = transferTokenEntry(t, i);
+    if (seenPolicies.has(entry.policy)) throw new Error(`Policy ${entry.policy} is listed more than once — a policy is proven registered once, or not at all, so a duplicated list names nothing twice over.`);
+    seenPolicies.add(entry.policy);
+    return entry;
+  });
+  const withdrawals = baseWithdrawals(claim.withdrawals);
+  const signers = delegateSigners(claim.signers);
+  const inWithdrawals = c => withdrawals.some(w => w.kind === c.kind && w.hash === c.hash);
+  const inputResults = spentInputs.map((credential, i) => {
+    const mode = credential.kind === 'pubkey' ? 'signature' : 'script-execution';
+    const authorized = credential.kind === 'pubkey' ? signers.includes(credential.hash) : inWithdrawals(credential);
+    return { index: i, credential, mode, authorized };
+  });
+  const tokenResults = tokens.map(t => {
+    if (!t.registered) return { policy: t.policy, registered: false, transferCredential: t.transferCredential, mode: 'not-required', inWithdrawals: t.transferCredential === null ? null : inWithdrawals(t.transferCredential), executed: null };
+    const mode = t.transferCredential.hash === '' ? 'none' : t.transferCredential.kind;
+    const executed = mode !== 'none' && inWithdrawals(t.transferCredential);
+    return { policy: t.policy, registered: true, transferCredential: t.transferCredential, mode, inWithdrawals: executed, executed };
+  });
+  const registeredResults = tokenResults.filter(t => t.registered);
+  const verdicts = {
+    holderAuthorization: inputResults.every(r => r.authorized),
+    logicExecution: registeredResults.length ? registeredResults.every(r => r.executed) : null,
+  };
+  const valid = verdicts.holderAuthorization === true && (verdicts.logicExecution === null || verdicts.logicExecution === true);
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    spentInputs: inputResults,
+    tokens: tokenResults,
+    withdrawals,
+    signers,
+    verdicts,
+    registeredCount: registeredResults.length,
+    unregisteredCount: tokenResults.length - registeredResults.length,
   };
 }
 
