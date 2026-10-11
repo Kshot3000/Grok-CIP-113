@@ -5200,6 +5200,182 @@ export function checkTransferRegistryProofs(claim) {
   };
 }
 
+export const TRANSFER_REGISTRY_PROOFS_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['resolvedRequirements', 'Resolved node requirements'],
+  ['nodesResolve', 'Node resolution'],
+  ['proofsMatchNodes', 'Proofs match nodes'],
+  ['transferCredentialMatches', 'Transfer credential agreement'],
+  ['globalStateReference', 'Global-state reference'],
+]);
+
+// CIP-113 TransferAct registry-proof impact, compared locally between
+// two modeled versions of the SAME transfer — the transfer’s proofs
+// as resolved against the reference inputs as they stood, and as
+// they would stand after some later change. The registry, base
+// redeemer, delegate pairing, transfer output-value, protocol
+// upgrade, global dispatch, transfer proof-list, delegate
+// logic-execution, delegate paired-outputs, delegate registry-node,
+// and transfer authorization families already had this temporal
+// half; the transfer registry-proof family, shipped as a single
+// checker in v1.108, had only the check, so a builder whose proof
+// resolution conformed when they modeled it could not ask what a
+// later change did to it — and the changes that stale it need never
+// touch the proofs themselves (spec: delegate validation step 2,
+// the TransferAct constructor, and Reference Inputs): transaction
+// assembly adding a reference input ahead of a node moves the index
+// every hint names, a registry update re-pointing a node’s
+// transfer_logic_script or its global_state_cs changes the
+// configuration a proof must agree with, a registry insertion
+// changing a covering node’s next changes which policies it covers,
+// and a global-state NFT joining or leaving the reference inputs
+// changes whether a matched node’s global state is referenced.
+//
+// Both versions are checked through checkTransferRegistryProofs
+// itself (validate-once, thirty-third application), so comparison
+// and checking can never disagree about either version, and a
+// version that cannot be read (an unknown or missing field, an
+// empty proofs list, an unknown proof type, a fractional or
+// negative node index, a TokenExists proof naming no transfer
+// credential, the same policy proven twice, a node entry with an
+// unknown or missing field, a key or next or global-state policy
+// that is neither empty nor 28 bytes, a duplicated global-state
+// policy) is refused on either side with the checker’s reason,
+// never compared around. Hex case is canonicalised by the checker
+// before comparison, so a policy, a node key, or a credential
+// listed in uppercase still names the same record on either side.
+//
+// The comparison tracks ONE transfer claim, but the claim has no
+// action or policy identity field of its own — like the
+// authorization and proof-list comparisons, any two readable
+// versions compare: the proofs, the reference inputs, and the NFT
+// policies ARE the claim, and there is no separate identity a
+// version could drift from.
+//
+// Six positions are compared, in the checker’s own order: the
+// status, the resolved node requirements (for every proof, sorted
+// by policy, what the node it resolves to demands of it — the
+// requirement itself, as the dispatch comparison’s delegate
+// position is: for a TokenExists proof, the resolved node’s key,
+// its transfer_logic_script, and its global_state_cs; for a
+// TokenDoesNotExist proof, the resolved node’s key and next, the
+// bounds that make it the covering node, because a covering node’s
+// transfer field and global_state_cs are a different token’s
+// configuration, given no verdict by the checker and no place in
+// this proof’s requirement; null fields when no node resolves),
+// the node resolution verdict, the proofs-match-nodes verdict, the
+// transfer credential agreement verdict, and the global-state
+// reference verdict (no verdict — null — on a side where no proof
+// reaches that position, and null compares equal with null while
+// null against true or false differs, so a proof becoming judged
+// moves this position alongside the requirement’s own move while
+// both sides conform). THE SUBSTANCE is what is NOT compared as a
+// position. A proof’s node_idx is a HINT — the same node at a new
+// index, with the reference list adjusted, resolves identically —
+// so index changes are reported per policy, never counted: the
+// hint is only how the checker finds what it scores. A claimed
+// transfer credential’s own change is reported per policy, never
+// counted: for a TokenExists proof its only scored consequence is
+// the agreement verdict’s move, so counting it would count one fact
+// twice, and for a TokenDoesNotExist proof the checker gives the
+// entered credential no verdict at all, so its change is report
+// material and nothing more (pinned). The reference-input list’s
+// own change is reported as the indices whose modeled node differs
+// and the counts before and after, never counted, and the proof
+// list’s and the global-state policy list’s own changes are
+// reported as the policies added and removed, never counted: they
+// are the causes; the verdict positions are the consequence.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because
+// the resolution gaining or losing a node, a match, an agreement,
+// or a global-state reference is the headline even when the
+// requirement also moved — then STILL NOT CONFORMING (not
+// conforming on both sides, but not the same failure: a position
+// changed underneath it) and REQUIREMENT CHANGED (conforming on
+// both sides, but a position moved — and every such move passes
+// through the resolved-requirements position: a node’s transfer
+// credential re-pointed with the claim following it, a covering
+// node’s next widened while it still covers, a matched node
+// gaining a global-state policy whose NFT is referenced, each
+// changes what the modeled registry demands while every verdict
+// that stands, stands on both sides; a verdict moving null to true
+// or back alongside it does so only because a proof’s requirement
+// entry itself changed shape).
+//
+// Boundary honesty carries over from the checker: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction, no registry, and no UTxO, and comparing checks
+// neither version and builds no transaction. Whether the proof list
+// is complete and in lexicographic order is the proof-list
+// checker’s position, on both sides alike; whether a matched
+// node’s credential was actually executed, and each spend
+// authorised, is the authorization checker’s; the expected output
+// value is the output-value family’s.
+export function diffTransferRegistryProofs(beforeClaim, afterClaim) {
+  const before = checkTransferRegistryProofs(beforeClaim);
+  const after = checkTransferRegistryProofs(afterClaim);
+  const requirementOf = v => v.proofs.map(r => r.proofType === 'TokenExists'
+    ? { policy: r.policy, proofType: r.proofType, key: r.resolvedNode ? r.resolvedNode.key : null, transfer: r.resolvedNode ? { kind: r.resolvedNode.transfer.kind, hash: r.resolvedNode.transfer.hash } : null, globalStateCs: r.resolvedNode ? r.resolvedNode.globalStateCs : null }
+    : { policy: r.policy, proofType: r.proofType, key: r.resolvedNode ? r.resolvedNode.key : null, next: r.resolvedNode ? r.resolvedNode.next : null }
+  ).sort((a, b) => (a.policy < b.policy ? -1 : a.policy > b.policy ? 1 : 0));
+  const positionOf = v => ({ status: v.status, resolvedRequirements: requirementOf(v), nodesResolve: v.verdicts.nodesResolve, proofsMatchNodes: v.verdicts.proofsMatchNodes, transferCredentialMatches: v.verdicts.transferCredentialMatches, globalStateReference: v.verdicts.globalStateReference });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of TRANSFER_REGISTRY_PROOFS_COMPARE_FIELDS) {
+    const differs = field === 'resolvedRequirements' ? JSON.stringify(beforePos[field]) !== JSON.stringify(afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const credKey = c => (c === null ? null : `${c.kind}:${c.hash}`);
+  const beforeProofByPolicy = new Map(before.proofs.map(r => [r.policy, r]));
+  const afterProofByPolicy = new Map(after.proofs.map(r => [r.policy, r]));
+  const nodeIdxChanges = [];
+  const claimedCredentialChanges = [];
+  for (const [policy, b] of beforeProofByPolicy) {
+    const a = afterProofByPolicy.get(policy);
+    if (!a) continue;
+    if (b.nodeIdx !== a.nodeIdx) nodeIdxChanges.push({ policy, before: b.nodeIdx, after: a.nodeIdx });
+    if (credKey(b.transferCredential) !== credKey(a.transferCredential)) claimedCredentialChanges.push(policy);
+  }
+  const changedNodeIndices = [];
+  const nodeCount = Math.max(before.nodes.length, after.nodes.length);
+  for (let i = 0; i < nodeCount; i++) {
+    const b = i < before.nodes.length ? JSON.stringify(before.nodes[i]) : '<absent>';
+    const a = i < after.nodes.length ? JSON.stringify(after.nodes[i]) : '<absent>';
+    if (b !== a) changedNodeIndices.push(i);
+  }
+  const beforeGlobalSet = new Set(before.globalStatePolicies), afterGlobalSet = new Set(after.globalStatePolicies);
+  return {
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    proofsAdded: [...afterProofByPolicy.keys()].filter(p => !beforeProofByPolicy.has(p)),
+    proofsRemoved: [...beforeProofByPolicy.keys()].filter(p => !afterProofByPolicy.has(p)),
+    existsCountBefore: before.existsCount,
+    existsCountAfter: after.existsCount,
+    notExistsCountBefore: before.notExistsCount,
+    notExistsCountAfter: after.notExistsCount,
+    nodeIdxChanges,
+    claimedCredentialChanges,
+    changedNodeIndices,
+    referenceCountBefore: before.referenceCount,
+    referenceCountAfter: after.referenceCount,
+    globalStatePoliciesAdded: [...afterGlobalSet].filter(p => !beforeGlobalSet.has(p)),
+    globalStatePoliciesRemoved: [...beforeGlobalSet].filter(p => !afterGlobalSet.has(p)),
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: TRANSFER_REGISTRY_PROOFS_COMPARE_FIELDS.length,
+  };
+}
+
 // CIP-113 TransferAct proof-list completeness and ordering, modeled
 // locally from the spec's RegistryProof Requirements (re-read from
 // the raw upstream spec this run): the proofs list in a TransferAct
