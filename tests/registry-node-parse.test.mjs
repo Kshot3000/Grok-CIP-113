@@ -125,5 +125,5 @@ test('app wires the datum reader into the registry node panel, labeled honestly'
   assert.match(app, /READ BACK/);
   assert.match(app, /NOT READ BACK/);
   assert.match(app, /Reading back is not registering/);
-  assert.match(app, /v1\.107/);
+  assert.match(app, /v1\.108/);
 });

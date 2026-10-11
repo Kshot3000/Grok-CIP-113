@@ -4146,10 +4146,10 @@ export function checkDelegateRegistryNode(claim) {
 // Boundary honesty: these verdicts judge the modeled stake
 // credentials, tokens, withdrawals, and signers entered. PRISM read
 // no transaction, no registry, and no UTxO: whether the registry
-// proofs that mark a policy registered actually validate is the
-// proof verifier's position; whether a policy's RegistryNode
-// actually carries the transfer credential entered here is a fact
-// about a node this checker is told, not one it resolves; whether a
+// proofs that mark a policy registered actually validate, and
+// whether a policy's RegistryNode actually carries the transfer
+// credential entered here, are judged by checkTransferRegistryProofs
+// below, against modeled reference inputs; whether a
 // listed withdrawal really executed and a listed signer really
 // signed are facts about a real transaction this model does not
 // read. The expected output value and its verification are the
@@ -4211,6 +4211,180 @@ export function checkTransferAuthorization(claim) {
     verdicts,
     registeredCount: registeredResults.length,
     unregisteredCount: tokenResults.length - registeredResults.length,
+  };
+}
+
+
+// CIP-113 TransferAct registry-proof resolution, modeled locally
+// from the spec's delegate validation step 2, its TransferAct
+// constructor, and its Reference Inputs section (re-read from the
+// raw upstream spec this run): a TransferAct's TransferRedeemer
+// carries one RegistryProof per distinct policy, and each proof is a
+// HINT — a node_idx into the transaction's reference inputs — that
+// the delegate resolves and then checks, rather than a fact it
+// trusts. The authorization checker above takes each token's
+// registered flag and transfer credential as told; the proof
+// verifier (verifyRegistryProofs) judges a claimed proof list
+// against a modeled registry KEY LIST. This checker closes the
+// boundary both state: whether the node a proof names, at the index
+// it names, actually proves what the proof claims, and whether that
+// node carries the transfer credential the claim names for it.
+//
+// Four verdict positions per proof, because they fail separately
+// and the fix differs:
+// - nodeResolves: the proof's node_idx is in range and the reference
+//   input there is a RegistryNode at all (modeled as null for any
+//   other reference input — the protocol parameters UTxO, a global
+//   state UTxO). An index past the end, or one landing on another
+//   input, resolves to no node, and every later position for that
+//   proof is verdictless.
+// - proofMatchesNode: for a TokenExists proof, the resolved node's
+//   key equals the policy; for a TokenDoesNotExist proof, the
+//   resolved node is the COVERING node — its key is below the policy
+//   and its next is above it (prev.key < policy < prev.next, the
+//   spec's own formula, compared bytewise; the origin node's empty
+//   key is below every policy, so an origin node can cover a policy
+//   below its next). NO verdict when no node resolves.
+// - transferCredentialMatches: judged for a TokenExists proof whose
+//   node matched ONLY — the node's transfer_logic_script equals the
+//   claimed transfer credential, kind and hash both, the credential
+//   the authorization checker judges against the withdrawals. A
+//   TokenDoesNotExist proof carries NO verdict here (an ordinary
+//   native token has no transfer logic to agree with, whether or
+//   not a credential was entered for it), and neither does an
+//   exists proof against the wrong node: agreement with a different
+//   token's field proves nothing about this one. An empty-hash node
+//   field matches an empty claim exactly here — agreement is this
+//   checker's only question; whether such a credential can execute
+//   is the authorization checker's verdict, not this one's, and no
+//   forbidden reading is invented for the transfer field.
+// - globalStateReference: judged for a TokenExists proof whose node
+//   matched ONLY, and only when that node's global_state_cs is
+//   non-empty — the spec's Reference Inputs then require a reference
+//   input carrying an NFT of that policy, judged against the
+//   modeled NFT policies. An empty global_state_cs states no
+//   requirement and carries NO verdict (the spec says so in words:
+//   no reference input is expected); a covering node's own
+//   global_state_cs is a different token's configuration and is
+//   likewise given NO verdict here.
+//
+// Refusal discipline, as in PRISM's other checkers: a claim that
+// cannot be READ — an unknown or missing field, an empty proofs
+// list (a TransferAct proof list naming no policy proves nothing),
+// an unknown proof type, a fractional or negative node index, a
+// TokenExists proof naming no transfer credential, the same policy
+// proven twice, a node entry with an unknown or missing field, a
+// key or next or global-state policy that is neither empty nor
+// 28 bytes, a duplicated global-state policy — is refused, never
+// scored in part. Hex case is canonicalised before comparison.
+//
+// Boundary honesty: these verdicts judge the modeled proofs,
+// reference inputs, and NFT policies entered. PRISM read no
+// transaction, no registry, and no UTxO: whether the reference input
+// at that index in a real transaction really holds this node,
+// whether the node holds the registry NFT, and whether it was
+// written by the registry validator are facts about a real registry
+// this model does not read. Whether the proofs list is COMPLETE
+// (one per distinct spent or minted policy) and in lexicographic
+// order is the proof verifier's position, against its modeled
+// lists; whether the credential a matched node names was actually
+// executed, and each spend authorised, is the authorization
+// checker's, above; the expected output value is the output-value
+// family's, below.
+function transferProofEntry(value, index) {
+  const label = `Proof ${index + 1}`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming its policy, its proof type, its node index, and its transfer credential.`);
+  for (const k of Object.keys(value)) if (!['policy', 'proofType', 'nodeIdx', 'transferCredential'].includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled proof names only its policy, its proof type, its node index, and its transfer credential.`);
+  for (const k of ['policy', 'proofType', 'nodeIdx', 'transferCredential']) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — a proof that cannot be read in full is refused, never scored in part. The transfer credential may be null for a TokenDoesNotExist proof, but the field must be stated.`);
+  const policy = registryPolicyId(value.policy, `${label}'s policy`);
+  if (value.proofType !== 'TokenExists' && value.proofType !== 'TokenDoesNotExist') throw new Error(`${label}'s proof type must be TokenExists or TokenDoesNotExist — ${JSON.stringify(value.proofType)} given.`);
+  if (!Number.isInteger(value.nodeIdx) || value.nodeIdx < 0) throw new Error(`${label}'s node_idx must be a non-negative integer — ${JSON.stringify(value.nodeIdx)} given, refused rather than rounded.`);
+  if (value.proofType === 'TokenExists' && value.transferCredential === null) throw new Error(`${label} proves its policy registered but names no transfer credential — a registered token's transfer_logic_script is the credential whose agreement with the resolved node this checker judges, so the claim cannot be read without it.`);
+  const transferCredential = value.transferCredential === null ? null : delegateLogicCredential(value.transferCredential, `${label}'s transfer_logic_script`);
+  return { policy, proofType: value.proofType, nodeIdx: value.nodeIdx, transferCredential };
+}
+
+function transferNodeEntry(value, index) {
+  if (value === null) return null;
+  const label = `Reference input ${index + 1}`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be null (not a RegistryNode) or a RegistryNode naming its key, its next key, its transfer credential, and its global_state_cs.`);
+  for (const k of Object.keys(value)) if (!['key', 'next', 'transfer', 'globalStateCs'].includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled RegistryNode here names only its key, its next key, its transfer credential, and its global_state_cs; the fields this resolution reads.`);
+  for (const k of ['key', 'next', 'transfer', 'globalStateCs']) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — a node that cannot be read in full is refused, never scored in part.`);
+  const key = registryBytesHex(value.key, `${label}'s key`);
+  if (key !== '' && key.length !== 56) throw new Error(`${label}'s key must be empty (the origin node's key) or a 28-byte policy ID (56 hexadecimal characters) — ${key.length / 2} bytes given, refused rather than read as a key it is not.`);
+  const next = registryBytesHex(value.next, `${label}'s next`);
+  if (next !== '' && next.length !== 56) throw new Error(`${label}'s next must be empty or a 28-byte policy ID (56 hexadecimal characters) — ${next.length / 2} bytes given, refused rather than read as a key it is not.`);
+  const transfer = delegateLogicCredential(value.transfer, `${label}'s transfer_logic_script`);
+  const globalStateCs = registryBytesHex(value.globalStateCs, `${label}'s global_state_cs`);
+  if (globalStateCs !== '' && globalStateCs.length !== 56) throw new Error(`${label}'s global_state_cs must be empty or a 28-byte policy ID (56 hexadecimal characters) — ${globalStateCs.length / 2} bytes given, refused rather than read as a policy it is not.`);
+  return { key, next, transfer, globalStateCs };
+}
+
+export function checkTransferRegistryProofs(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The transfer-proof claim must be an object naming the registry proofs, the modeled reference inputs, and the NFT policies those reference inputs carry.');
+  const inputFields = ['proofs', 'nodes', 'globalStatePolicies'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The transfer-proof claim carries an unknown field ${JSON.stringify(k)} — it names only the proofs, the reference inputs, and their NFT policies.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The transfer-proof claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  if (!Array.isArray(claim.proofs) || !claim.proofs.length) throw new Error('The proofs must be a non-empty list, one registry proof per distinct policy the modeled transfer proves — a proof list naming no policy proves nothing.');
+  const seenPolicies = new Set();
+  const proofs = claim.proofs.map((entry, i) => {
+    const proof = transferProofEntry(entry, i);
+    if (seenPolicies.has(proof.policy)) throw new Error(`Policy ${proof.policy} is proven more than once — a policy is proven registered once, or not at all, so a duplicated proof names nothing twice over.`);
+    seenPolicies.add(proof.policy);
+    return proof;
+  });
+  if (!Array.isArray(claim.nodes)) throw new Error('The reference inputs must be a list, one entry per reference input in transaction order — a RegistryNode, or null for any other reference input.');
+  const nodes = claim.nodes.map((n, i) => transferNodeEntry(n, i));
+  if (!Array.isArray(claim.globalStatePolicies)) throw new Error('The global-state policies must be a list of the NFT policies the modeled reference inputs carry.');
+  const seenGlobal = new Set();
+  const globalStatePolicies = claim.globalStatePolicies.map((g, i) => {
+    const policy = registryPolicyId(g, `Global-state policy ${i + 1}`);
+    if (seenGlobal.has(policy)) throw new Error(`Global-state policy ${policy} is listed more than once — the reference inputs carry each NFT policy once in this model, so a duplicated list names nothing twice over.`);
+    seenGlobal.add(policy);
+    return policy;
+  });
+  const proofResults = proofs.map(proof => {
+    const resolvedNode = proof.nodeIdx < nodes.length ? nodes[proof.nodeIdx] : null;
+    const nodeResolves = resolvedNode !== null;
+    let proofMatchesNode = null;
+    if (nodeResolves) {
+      proofMatchesNode = proof.proofType === 'TokenExists'
+        ? resolvedNode.key === proof.policy
+        : registryBytesCompare(resolvedNode.key, proof.policy) < 0 && resolvedNode.next !== '' && registryBytesCompare(proof.policy, resolvedNode.next) < 0;
+    }
+    const matched = proofMatchesNode === true;
+    const transferCredentialMatches = matched && proof.proofType === 'TokenExists'
+      ? resolvedNode.transfer.kind === proof.transferCredential.kind && resolvedNode.transfer.hash === proof.transferCredential.hash
+      : null;
+    const globalStateMode = matched && proof.proofType === 'TokenExists'
+      ? (resolvedNode.globalStateCs === '' ? 'none' : 'present')
+      : null;
+    const globalStateReference = globalStateMode === 'present'
+      ? globalStatePolicies.includes(resolvedNode.globalStateCs)
+      : null;
+    return { ...proof, resolvedNode, nodeResolves, proofMatchesNode, transferCredentialMatches, globalStateMode, globalStateReference };
+  });
+  const judgedTransfers = proofResults.filter(r => r.transferCredentialMatches !== null);
+  const judgedGlobals = proofResults.filter(r => r.globalStateReference !== null);
+  const verdicts = {
+    nodesResolve: proofResults.every(r => r.nodeResolves),
+    proofsMatchNodes: proofResults.every(r => r.proofMatchesNode === true),
+    transferCredentialMatches: judgedTransfers.length ? judgedTransfers.every(r => r.transferCredentialMatches) : null,
+    globalStateReference: judgedGlobals.length ? judgedGlobals.every(r => r.globalStateReference) : null,
+  };
+  const valid = verdicts.nodesResolve === true && verdicts.proofsMatchNodes === true
+    && (verdicts.transferCredentialMatches === null || verdicts.transferCredentialMatches === true)
+    && (verdicts.globalStateReference === null || verdicts.globalStateReference === true);
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    proofs: proofResults,
+    nodes,
+    globalStatePolicies,
+    verdicts,
+    referenceCount: nodes.length,
+    existsCount: proofResults.filter(r => r.proofType === 'TokenExists').length,
+    notExistsCount: proofResults.filter(r => r.proofType === 'TokenDoesNotExist').length,
   };
 }
 

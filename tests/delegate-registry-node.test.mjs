@@ -211,11 +211,11 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the registry-node checker: panel, verdicts, honest boundary, v1.107', async () => {
+test('app wires the registry-node checker: panel, verdicts, honest boundary, v1.108', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkDelegateRegistryNode/);
   assert.match(app, /registry-node-check-action/);
   assert.match(app, /REGISTRY NODE · LOCAL MODEL/);
   assert.match(app, /FORBIDDEN/);
-  assert.match(app, /v1\.107/);
+  assert.match(app, /v1\.108/);
 });

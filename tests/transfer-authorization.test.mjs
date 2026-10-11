@@ -210,11 +210,11 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the transfer authorization checker: panel, verdicts, honest boundary, v1.107', async () => {
+test('app wires the transfer authorization checker: panel, verdicts, honest boundary, v1.108', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkTransferAuthorization/);
   assert.match(app, /transfer-auth-spent/);
   assert.match(app, /TRANSFER AUTHORIZATION · LOCAL MODEL/);
   assert.match(app, /NO VERDICT/);
-  assert.match(app, /v1\.107/);
+  assert.match(app, /v1\.108/);
 });
