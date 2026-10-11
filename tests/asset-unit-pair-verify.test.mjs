@@ -149,5 +149,5 @@ test('app wires the unit-pair verifier into the network explorer, labeled honest
   assert.match(app, /asset-unit-pair-verify-claimed/);
   assert.match(app, /asset-unit-pair-verify-result/);
   assert.match(app, /different assets entirely/);
-  assert.match(app, /v1.104/);
+  assert.match(app, /v1\.105/);
 });

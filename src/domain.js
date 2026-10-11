@@ -3012,7 +3012,9 @@ export function diffBaseSpendRedeemer(beforeInput, afterInput) {
 // paired-output positions are judged locally by
 // checkDelegatePairedOutputs below, against modeled UTxO values this
 // planner does not carry. Whether the token's logic script executed
-// via withdraw-zero remains unjudged in PRISM.
+// via withdraw-zero (and, for unfracking, whether the holder
+// authorised the action) is judged by checkDelegateLogicExecution,
+// below the paired-outputs checker.
 function delegateAction(value) {
   if (value !== 'third-party' && value !== 'unfracking') throw new Error(`The delegate action must be third-party or unfracking — ${JSON.stringify(value)} given. TransferAct carries registry proofs instead (the proof planner above), not a pairing redeemer.`);
   return value;
@@ -3663,10 +3665,11 @@ export function diffTransferOutputValue(beforeInput, afterInput) {
 // entered. PRISM read no transaction, no UTxO, and no registry: that
 // the pairs are the transaction's real pairs is the pairing planner's
 // question above; that the token's third-party or unfracking logic
-// executed via withdraw-zero, that the RegistryNode named by the
-// redeemer holds this policy's configuration, and (for unfracking)
-// that the holder authorised the action are separate requirements
-// this checker does not judge.
+// executed via withdraw-zero, and (for unfracking) that the holder
+// authorised the action are judged by checkDelegateLogicExecution
+// below; that the RegistryNode named by the redeemer holds this
+// policy's configuration is a separate requirement this checker
+// does not judge.
 function pairedUtxo(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming an address, a datum (hex or null), whether it carries a reference script, and the assets it holds.`);
   const fields = ['address', 'datum', 'referenceScript', 'assets'];
@@ -3826,6 +3829,129 @@ export function checkDelegatePairedOutputs(claim) {
     impossible,
     excludedMintCount: mint.excluded,
     modeledPairs: pairs.map(p => ({ input: renderUtxo(p.input), output: renderUtxo(p.output) })),
+  };
+}
+
+// CIP-113 delegate logic execution, modeled locally from the spec's
+// delegate validation step 3 and the two action constructors
+// (ThirdPartyAct / UnfrackingAct, re-read from the raw upstream spec
+// this run): for each registered token, the delegate verifies that
+// the token's own logic script for the action was executed in the
+// transaction — that its credential appears in the transaction's
+// withdrawals, invoked via the withdraw-zero pattern. The
+// paired-outputs checker above judges what the paired outputs hold;
+// this checker judges the execution half both delegate panels stated
+// was unjudged, plus the one authorization rule the actions differ
+// on.
+//
+// Two verdict positions, because they fail separately and the fix
+// differs:
+// - logicExecution: the action's logic credential — the RegistryNode's
+//   third_party_logic_script for a third-party action, its
+//   unfracking_logic_script for unfracking — appears among the
+//   modeled withdrawals (kind and hash both). A credential that names
+//   nothing (an empty hash) can appear in no withdrawal map, so the
+//   position fails outright: for unfracking the spec names that shape
+//   itself — an empty public-key unfracking credential is least
+//   permission, unfracking is FORBIDDEN for that policy, and no
+//   transaction can satisfy the requirement (reported as
+//   logicForbidden). For a third-party action an empty logic
+//   credential likewise names no script to execute, so no claim can
+//   pass — but the spec gives the third-party field no
+//   forbidden-by-default reading, and none is invented here.
+// - holderAuthorization: judged for UNFRACKING ONLY. The holder must
+//   authorise the restructuring, by the same rule as a transfer: a
+//   signature where the holder's stake credential is a public key
+//   (its hash among the modeled signers), or execution of the script
+//   where it is a script (its credential among the modeled
+//   withdrawals). No holder named (null) authorises nothing, so the
+//   position fails. For a THIRD-PARTY action the spec bypasses the
+//   authorization check outright — third parties do not need the
+//   holder's permission — so the position is reported with NO
+//   verdict (null): a requirement the spec lifts gets no failure, and
+//   a holder credential or signer entered for a third-party claim is
+//   reported, never judged. This asymmetry is the same discipline as
+//   the paired-outputs reference script: a position's absence in the
+//   spec is itself spec information.
+//
+// Refusal discipline, as in PRISM's other checkers: a claim that
+// cannot be READ — an unknown action, an unknown or missing field, a
+// credential of an unknown kind, a hash that is neither empty nor
+// 28 bytes, a duplicated withdrawal credential, a duplicated signer,
+// a signer that is not a 28-byte hash — is refused, never scored in
+// part. Hex case is canonicalised before comparison, so a withdrawal
+// listed in uppercase still names the same credential.
+//
+// Boundary honesty: these verdicts judge the modeled credentials,
+// withdrawals, and signers entered. PRISM read no transaction, no
+// registry, and no UTxO: whether the RegistryNode the redeemer names
+// actually carries this logic credential, whether a listed withdrawal
+// really executed (a withdraw-zero amount is not modeled — presence
+// in the withdrawals is the modeled evidence, exactly as the spec
+// phrases the requirement), and whether a listed signer really signed
+// are facts about a real transaction this model does not read. The
+// per-pair output positions are the paired-outputs checker's, above.
+function delegateLogicCredential(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be a credential naming a kind (pubkey or script) and a hash — the empty hash is the one shape that names no script.`);
+  for (const k of Object.keys(value)) if (k !== 'kind' && k !== 'hash') throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a credential names only a kind and a hash.`);
+  if (value.kind === undefined || value.hash === undefined) throw new Error(`${label} must name both a kind (pubkey or script) and a hash.`);
+  if (value.kind !== 'pubkey' && value.kind !== 'script') throw new Error(`${label}'s kind must be pubkey or script — ${JSON.stringify(value.kind)} given.`);
+  const hash = registryBytesHex(value.hash, `${label}'s hash`);
+  if (hash !== '' && hash.length !== 56) throw new Error(`${label}'s hash must be empty or 28 bytes (56 hexadecimal characters) — ${hash.length / 2} bytes given, refused rather than read as a credential it is not.`);
+  return { kind: value.kind, hash };
+}
+
+function delegateSigners(value) {
+  if (!Array.isArray(value)) throw new Error('The signers must be a list of the public-key hashes that signed the modeled transaction.');
+  const seen = new Set();
+  return value.map((s, i) => {
+    const hash = registryPolicyId(s, `Signer ${i + 1}`);
+    if (seen.has(hash)) throw new Error(`Signer ${hash} is listed more than once — the required-signer set holds each key once, so a duplicated list names nothing twice over.`);
+    seen.add(hash);
+    return hash;
+  });
+}
+
+export function checkDelegateLogicExecution(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The logic-execution claim must be an object naming the action, the action logic credential from the acted-on policy\u2019s RegistryNode, the transaction\u2019s withdrawals, the holder credential, and the transaction\u2019s signers.');
+  const inputFields = ['action', 'logicCredential', 'withdrawals', 'holderCredential', 'signers'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The logic-execution claim carries an unknown field ${JSON.stringify(k)} — it names only the action, the logic credential, the withdrawals, the holder credential, and the signers.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The logic-execution claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part. The holder credential may be null, but the field must be stated.`);
+  const action = delegateAction(claim.action);
+  const logicCredential = delegateLogicCredential(claim.logicCredential, `The ${action === 'unfracking' ? 'unfracking' : 'third-party'} logic credential`);
+  const withdrawals = baseWithdrawals(claim.withdrawals);
+  const holderCredential = claim.holderCredential === null ? null : baseCredential(claim.holderCredential, 'The holder credential');
+  const signers = delegateSigners(claim.signers);
+  const inWithdrawals = c => withdrawals.some(w => w.kind === c.kind && w.hash === c.hash);
+  const logicMode = logicCredential.hash === '' ? 'none' : logicCredential.kind;
+  const logicInWithdrawals = logicMode !== 'none' && inWithdrawals(logicCredential);
+  const logicForbidden = action === 'unfracking' && logicMode === 'none';
+  let holderMode = 'bypassed';
+  let holderAuthorized = null;
+  if (action === 'unfracking') {
+    if (holderCredential === null) { holderMode = 'none'; holderAuthorized = false; }
+    else if (holderCredential.kind === 'pubkey') { holderMode = 'signature'; holderAuthorized = signers.includes(holderCredential.hash); }
+    else { holderMode = 'script-execution'; holderAuthorized = inWithdrawals(holderCredential); }
+  }
+  const verdicts = {
+    logicExecution: logicInWithdrawals,
+    holderAuthorization: action === 'unfracking' ? holderAuthorized : null,
+  };
+  const valid = verdicts.logicExecution === true && (verdicts.holderAuthorization === null || verdicts.holderAuthorization === true);
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    action,
+    logicCredential,
+    logicMode,
+    logicForbidden,
+    logicInWithdrawals,
+    withdrawals,
+    holderCredential,
+    holderMode,
+    holderAuthorized,
+    signers,
+    verdicts,
   };
 }
 
