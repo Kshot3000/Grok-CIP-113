@@ -3007,9 +3007,12 @@ export function diffBaseSpendRedeemer(beforeInput, afterInput) {
 // keeps its input's address and datum, keeps every other policy's
 // tokens byte-identical, actually changes the acted-on policy's
 // tokens (third-party) or strips that policy entirely (unfracking),
-// executes the token's logic script via withdraw-zero, and satisfies
-// the balance invariant are the delegate's checks against the real
-// values, which this model does not carry and does not judge.
+// and satisfies the balance invariant are the delegate's checks
+// against the real values, which this model does not carry — those
+// paired-output positions are judged locally by
+// checkDelegatePairedOutputs below, against modeled UTxO values this
+// planner does not carry. Whether the token's logic script executed
+// via withdraw-zero remains unjudged in PRISM.
 function delegateAction(value) {
   if (value !== 'third-party' && value !== 'unfracking') throw new Error(`The delegate action must be third-party or unfracking — ${JSON.stringify(value)} given. TransferAct carries registry proofs instead (the proof planner above), not a pairing redeemer.`);
   return value;
@@ -3587,6 +3590,242 @@ export function diffTransferOutputValue(beforeInput, afterInput) {
     noLongerExpectedCount: count('no-longer-expected'),
     newlyValidatedCount: count('newly-validated'),
     noLongerValidatedCount: count('no-longer-validated'),
+  };
+}
+
+// CIP-113 delegate paired-output checking, modeled locally from the
+// spec's ThirdPartyAct and UnfrackingAct sections and its "Validation
+// performed by the action delegates" step 4 (output validation).
+//
+// The delegate pairing family above computes WHICH output pairs with
+// which base input, and states in its boundary what it does not judge:
+// whether each paired output keeps its input's address and datum,
+// keeps every other policy's tokens identical, actually changes the
+// acted-on policy's tokens (third-party) or strips that policy
+// entirely (unfracking), and satisfies the balance invariant. This
+// checker judges exactly those positions, per pair and in aggregate,
+// because they fail separately and the fixes differ.
+//
+// Per pair, for BOTH actions:
+// - same address: the continuing output sits at the input's address.
+// - same datum: the continuing output carries the input's datum
+//   (modeled as an even-length hex string, or null for no datum).
+// - other policies identical: the aggregated assets of every policy
+//   except the acted-on one are exactly equal between input and
+//   output. Lovelace is not modeled here, as in the transfer-value
+//   family — for unfracking the spec lets ada move freely in any case.
+//
+// Per pair, by action:
+// - third-party: the acted-on policy's aggregated assets MUST change
+//   between input and output. A pair whose policy tokens stand still
+//   is a no-op action on that UTxO — the shape the change requirement
+//   exists to refuse, because batch third-party actions on many UTxOs
+//   could otherwise be used to impose validation costs while doing
+//   nothing (the spec's transfer security considerations name this
+//   DoS guard explicitly).
+// - unfracking: the acted-on policy MUST be present in the input and
+//   ENTIRELY absent from the continuing output — a partial strip is
+//   refused, because a continuing output still holding the policy
+//   would still need that policy's transfer proof on every later
+//   spend. The pair's reference script must also be identical: the
+//   unfracking section names address, datum, AND reference script as
+//   byte-identical. The third-party section does not name the
+//   reference script, so for a third-party action it is reported per
+//   pair as information and given NO verdict — a requirement the
+//   spec does not state gets no failure here.
+//
+// Aggregate, third-party only — the BALANCE INVARIANT: for each asset
+// name of the acted-on policy, the total across ALL modeled outputs
+// at base addresses (the paired continuing outputs plus any other
+// base outputs the claim lists — outputs before outputs_start_idx or
+// after the pairs, which the pairing planner notes still count) must
+// be at least the total input of that asset adjusted by the modeled
+// mint for that asset (a mint raises the floor; a burn lowers it —
+// the seize-and-burn wipe is the burn case). This is the invariant
+// that keeps seized value inside the programmable-token system: it
+// may move between base addresses, never out of them. An asset whose
+// adjusted expectation is negative (a burn larger than the modeled
+// input) can be satisfied by no output list, so it is named as
+// impossible and the invariant fails — nothing is clipped to zero.
+// Unfracking has no balance invariant and no mint adjustment in this
+// model: it restructures one holder's own UTxOs, and its verdict is
+// the per-pair strip. Mint entries under other policies are reported
+// as excluded, never judged, exactly as in the transfer-value family.
+//
+// Refusal discipline, as in PRISM's other checkers: a claim that
+// cannot be READ — an unknown or missing field, an asset listed twice
+// in one value, a numeric quantity, a non-boolean reference-script
+// flag, an empty pair list — is refused, never scored in part.
+// Quantities are BigInt-exact decimal strings under the modeled
+// int64 ceiling; an asset entry holding zero is not an entry.
+//
+// Boundary honesty: these verdicts judge the modeled pairs and lists
+// entered. PRISM read no transaction, no UTxO, and no registry: that
+// the pairs are the transaction's real pairs is the pairing planner's
+// question above; that the token's third-party or unfracking logic
+// executed via withdraw-zero, that the RegistryNode named by the
+// redeemer holds this policy's configuration, and (for unfracking)
+// that the holder authorised the action are separate requirements
+// this checker does not judge.
+function pairedUtxo(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming an address, a datum (hex or null), whether it carries a reference script, and the assets it holds.`);
+  const fields = ['address', 'datum', 'referenceScript', 'assets'];
+  for (const k of Object.keys(value)) if (!fields.includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled UTxO names only its address, its datum, its reference-script flag, and its assets.`);
+  for (const k of fields) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  if (typeof value.address !== 'string' || !value.address.trim()) throw new Error(`${label}'s address must be a non-empty string — the same-address rule turns on exactly that fact.`);
+  let datum = null;
+  if (value.datum !== null) {
+    if (typeof value.datum !== 'string') throw new Error(`${label}'s datum must be an even-length hexadecimal string, or null when the UTxO carries no datum.`);
+    datum = value.datum.trim().toLowerCase();
+    if (!/^(?:[a-f0-9]{2})+$/.test(datum)) throw new Error(`${label}'s datum is not an even number of hexadecimal characters — ${JSON.stringify(value.datum)} given.`);
+  }
+  if (typeof value.referenceScript !== 'boolean') throw new Error(`${label} must say, as a boolean, whether it carries a reference script.`);
+  if (!Array.isArray(value.assets)) throw new Error(`${label}'s assets must be a list of the non-lovelace assets it holds — policy, name, and quantity each.`);
+  const seen = new Set();
+  const assets = value.assets.map((a, i) => {
+    const alabel = `${label} asset ${i + 1}`;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error(`${alabel} must be an object naming a policy, an asset name, and a quantity.`);
+    for (const k of Object.keys(a)) if (k !== 'policy' && k !== 'name' && k !== 'quantity') throw new Error(`${alabel} carries an unknown field ${JSON.stringify(k)} — an asset names only its policy, name, and quantity.`);
+    if (a.policy === undefined || a.name === undefined || a.quantity === undefined) throw new Error(`${alabel} must name a policy, an asset name, and a quantity.`);
+    const policy = registryPolicyId(a.policy, `${alabel}'s policy`);
+    const name = registryInsertAssetName(a.name, `${alabel}'s name`);
+    const id = `${policy}:${name}`;
+    if (seen.has(id)) throw new Error(`${label} lists the asset ${policy}:${name === '' ? '(empty name)' : name} twice — a value holds each asset once, so the claim cannot be read as one.`);
+    seen.add(id);
+    return { policy, name, quantity: registryInsertQuantity(a.quantity, `${alabel}'s quantity`) };
+  });
+  return { address: value.address.trim(), datum, referenceScript: value.referenceScript, assets };
+}
+
+function pairedMintEntries(value, policy) {
+  if (!Array.isArray(value)) throw new Error('The modeled mint must be a list of the assets the transaction mints or burns for the acted-on policy — policy, name, and signed quantity each.');
+  const seen = new Set();
+  const counted = new Map();
+  let excluded = 0;
+  value.forEach((a, i) => {
+    const alabel = `Mint entry ${i + 1}`;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error(`${alabel} must be an object naming a policy, an asset name, and a signed quantity.`);
+    for (const k of Object.keys(a)) if (k !== 'policy' && k !== 'name' && k !== 'quantity') throw new Error(`${alabel} carries an unknown field ${JSON.stringify(k)} — a mint entry names only its policy, name, and quantity.`);
+    if (a.policy === undefined || a.name === undefined || a.quantity === undefined) throw new Error(`${alabel} must name a policy, an asset name, and a quantity.`);
+    const p = registryPolicyId(a.policy, `${alabel}'s policy`);
+    const name = registryInsertAssetName(a.name, `${alabel}'s name`);
+    const id = `${p}:${name}`;
+    if (seen.has(id)) throw new Error(`The mint lists the asset ${p}:${name === '' ? '(empty name)' : name} twice — tx.mint holds each asset once, so the claim cannot be read as one.`);
+    seen.add(id);
+    const quantity = transferQuantity(a.quantity, `${alabel}'s quantity`, { signed: true });
+    if (p === policy) counted.set(name, quantity); else excluded++;
+  });
+  return { counted, excluded };
+}
+
+function pairedOtherBaseAssets(value) {
+  if (!Array.isArray(value)) throw new Error('The other base outputs must be a list of the assets they hold — policy, name, and quantity each.');
+  const seen = new Set();
+  return value.map((a, i) => {
+    const alabel = `Other base output asset ${i + 1}`;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error(`${alabel} must be an object naming a policy, an asset name, and a quantity.`);
+    for (const k of Object.keys(a)) if (k !== 'policy' && k !== 'name' && k !== 'quantity') throw new Error(`${alabel} carries an unknown field ${JSON.stringify(k)} — an asset names only its policy, name, and quantity.`);
+    if (a.policy === undefined || a.name === undefined || a.quantity === undefined) throw new Error(`${alabel} must name a policy, an asset name, and a quantity.`);
+    const policy = registryPolicyId(a.policy, `${alabel}'s policy`);
+    const name = registryInsertAssetName(a.name, `${alabel}'s name`);
+    const id = `${policy}:${name}`;
+    if (seen.has(id)) throw new Error(`The other base outputs list the asset ${policy}:${name === '' ? '(empty name)' : name} twice — list each asset once, at its total across those outputs.`);
+    seen.add(id);
+    return { policy, name, quantity: registryInsertQuantity(a.quantity, `${alabel}'s quantity`) };
+  });
+}
+
+export function checkDelegatePairedOutputs(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The paired-outputs claim must be an object naming the action, the acted-on policy, the input/output pairs, the other base outputs, and the modeled mint.');
+  const inputFields = ['action', 'policy', 'pairs', 'otherBaseOutputs', 'mint'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The paired-outputs claim carries an unknown field ${JSON.stringify(k)} — it names only the action, the acted-on policy, the pairs, the other base outputs, and the mint.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The paired-outputs claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  const action = delegateAction(claim.action);
+  const policy = registryPolicyId(claim.policy, 'The acted-on policy');
+  if (!Array.isArray(claim.pairs) || !claim.pairs.length) throw new Error('The pairs must be a non-empty list — an action with no paired base input has no outputs to judge.');
+  const pairs = claim.pairs.map((p, i) => {
+    const label = `Pair ${i + 1}`;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error(`${label} must be an object naming an input UTxO and its paired output UTxO.`);
+    for (const k of Object.keys(p)) if (k !== 'input' && k !== 'output') throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a pair names only its input and its output.`);
+    if (p.input === undefined || p.output === undefined) throw new Error(`${label} must name both its input and its output — a claim that cannot be read in full is refused, never scored in part.`);
+    return { input: pairedUtxo(p.input, `${label} input`), output: pairedUtxo(p.output, `${label} output`) };
+  });
+  const otherBase = pairedOtherBaseAssets(claim.otherBaseOutputs);
+  const mint = pairedMintEntries(claim.mint, policy);
+  const aggregate = assets => {
+    const map = new Map();
+    for (const a of assets) map.set(`${a.policy}:${a.name}`, (map.get(`${a.policy}:${a.name}`) ?? 0n) + a.quantity);
+    return map;
+  };
+  const policyAssets = assets => {
+    const map = new Map();
+    for (const a of assets) if (a.policy === policy) map.set(a.name, (map.get(a.name) ?? 0n) + a.quantity);
+    return map;
+  };
+  const mapsEqual = (a, b) => a.size === b.size && [...a.entries()].every(([k, v]) => b.get(k) === v);
+  const pairResults = pairs.map((p, i) => {
+    const inOther = aggregate(p.input.assets.filter(a => a.policy !== policy));
+    const outOther = aggregate(p.output.assets.filter(a => a.policy !== policy));
+    const inPolicy = policyAssets(p.input.assets);
+    const outPolicy = policyAssets(p.output.assets);
+    const inTotal = [...inPolicy.values()].reduce((s, q) => s + q, 0n);
+    const outTotal = [...outPolicy.values()].reduce((s, q) => s + q, 0n);
+    return {
+      index: i,
+      addressSame: p.input.address === p.output.address,
+      datumSame: p.input.datum === p.output.datum,
+      referenceScriptSame: p.input.referenceScript === p.output.referenceScript,
+      otherAssetsSame: mapsEqual(inOther, outOther),
+      policyChanged: !mapsEqual(inPolicy, outPolicy),
+      policyPresentInInput: inTotal > 0n,
+      policyAbsentFromOutput: outTotal === 0n,
+      policyInputQuantity: inTotal.toString(),
+      policyOutputQuantity: outTotal.toString(),
+    };
+  });
+  const verdicts = {
+    address: pairResults.every(p => p.addressSame),
+    datum: pairResults.every(p => p.datumSame),
+    otherAssets: pairResults.every(p => p.otherAssetsSame),
+    referenceScript: action === 'unfracking' ? pairResults.every(p => p.referenceScriptSame) : null,
+    policyPosition: action === 'third-party' ? pairResults.every(p => p.policyChanged) : pairResults.every(p => p.policyPresentInInput && p.policyAbsentFromOutput),
+    balanceInvariant: null,
+  };
+  let totals = [];
+  let impossible = [];
+  if (action === 'third-party') {
+    const inByName = new Map();
+    for (const p of pairs) for (const [name, q] of policyAssets(p.input.assets)) inByName.set(name, (inByName.get(name) ?? 0n) + q);
+    const outByName = new Map();
+    for (const p of pairs) for (const [name, q] of policyAssets(p.output.assets)) outByName.set(name, (outByName.get(name) ?? 0n) + q);
+    const otherByName = new Map();
+    for (const a of otherBase) if (a.policy === policy) otherByName.set(a.name, (otherByName.get(a.name) ?? 0n) + a.quantity);
+    const names = [...new Set([...inByName.keys(), ...outByName.keys(), ...otherByName.keys(), ...mint.counted.keys()])].sort();
+    totals = names.map(name => {
+      const inputQuantity = inByName.get(name) ?? 0n;
+      const mintQuantity = mint.counted.get(name) ?? 0n;
+      const expectedQuantity = inputQuantity + mintQuantity;
+      const pairedOutputQuantity = outByName.get(name) ?? 0n;
+      const otherOutputQuantity = otherByName.get(name) ?? 0n;
+      const outputQuantity = pairedOutputQuantity + otherOutputQuantity;
+      return { assetName: name, inputQuantity: inputQuantity.toString(), mintQuantity: mintQuantity.toString(), expectedQuantity: expectedQuantity.toString(), pairedOutputQuantity: pairedOutputQuantity.toString(), otherOutputQuantity: otherOutputQuantity.toString(), outputQuantity: outputQuantity.toString(), meetsInvariant: expectedQuantity >= 0n && outputQuantity >= expectedQuantity };
+    });
+    impossible = totals.filter(t => BigInt(t.expectedQuantity) < 0n).map(t => ({ assetName: t.assetName, expectedQuantity: t.expectedQuantity }));
+    verdicts.balanceInvariant = totals.length > 0 && totals.every(t => t.meetsInvariant);
+  }
+  const valid = Object.values(verdicts).every(v => v === null || v === true);
+  const renderUtxo = u => ({ address: u.address, datum: u.datum, referenceScript: u.referenceScript, assets: u.assets.map(a => ({ ...a, quantity: a.quantity.toString() })) });
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    action,
+    policy,
+    pairs: pairResults,
+    verdicts,
+    totals,
+    impossible,
+    excludedMintCount: mint.excluded,
+    modeledPairs: pairs.map(p => ({ input: renderUtxo(p.input), output: renderUtxo(p.output) })),
   };
 }
 
