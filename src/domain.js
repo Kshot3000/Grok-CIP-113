@@ -3885,7 +3885,8 @@ export function checkDelegatePairedOutputs(claim) {
 // Boundary honesty: these verdicts judge the modeled credentials,
 // withdrawals, and signers entered. PRISM read no transaction, no
 // registry, and no UTxO: whether the RegistryNode the redeemer names
-// actually carries this logic credential, whether a listed withdrawal
+// actually carries this logic credential is judged by
+// checkDelegateRegistryNode below, against a modeled node; whether a listed withdrawal
 // really executed (a withdraw-zero amount is not modeled — presence
 // in the withdrawals is the modeled evidence, exactly as the spec
 // phrases the requirement), and whether a listed signer really signed
@@ -3951,6 +3952,145 @@ export function checkDelegateLogicExecution(claim) {
     holderMode,
     holderAuthorized,
     signers,
+    verdicts,
+  };
+}
+
+// CIP-113 delegate RegistryNode resolution, modeled locally from the
+// spec's ThirdPartyAct / UnfrackingAct constructors and its Reference
+// Inputs section (re-read from the raw upstream spec this run): both
+// delegate redeemers name a registry_node_idx — the index, in the
+// transaction's reference inputs, of the RegistryNode for the token
+// being acted upon — and the delegate's first requirement on that
+// hint is that "the RegistryNode at registry_node_idx MUST exist and
+// contain the token's configuration". Exactly one policy is acted on
+// per action, and it is named by that node: the node's key IS the
+// acted-on policy, and the node's field for the action is the logic
+// credential the logic-execution checker above takes as a free input.
+// This checker resolves the hint against a modeled reference-input
+// list instead of trusting either fact, closing the boundary the
+// logic-execution checker states: whether the named node actually
+// carries the claimed credential.
+//
+// Four verdict positions, because they fail separately and the fix
+// differs:
+// - nodeResolves: registry_node_idx is in range and the reference
+//   input there is a RegistryNode at all (modeled as null for any
+//   other reference input — the protocol parameters UTxO, a global
+//   state UTxO). An index past the end, or one landing on another
+//   input, resolves to no node.
+// - nodeCarriesPolicy: the resolved node's key equals the acted-on
+//   policy. A node for a different policy is a different token's
+//   configuration, however well formed. Reported with NO verdict
+//   (null) when no node resolves — there is no key to compare.
+// - logicCredentialMatches: the resolved node's field for the action
+//   (third_party_logic_script / unfracking_logic_script) equals the
+//   claimed logic credential, kind and hash both — the credential the
+//   logic-execution checker judges against the withdrawals must be
+//   the one this node names, or the delegate reads a different
+//   token's rules. NO verdict when the node does not carry the
+//   policy: agreement with the wrong node's field proves nothing
+//   about the acted-on token.
+// - globalStateReference: when the node's global_state_cs is
+//   non-empty, the spec's Reference Inputs require a reference input
+//   carrying an NFT of that policy; the position judges whether that
+//   policy appears among the modeled reference inputs' NFT policies.
+//   An empty global_state_cs states no requirement, so the position
+//   is reported with NO verdict, and it is likewise verdictless when
+//   the node does not carry the policy.
+//
+// The unfracking forbidden shape carries over: a resolved node whose
+// unfracking field is the empty public-key credential forbids the
+// action for that policy (logicForbidden) — the claimed credential
+// may match that field exactly and the configuration still supports
+// no unfracking, so a forbidden configuration is never conforming.
+// A third-party empty field gets no forbidden reading, as in the
+// logic-execution checker: it matches or fails on agreement alone,
+// and whether an empty credential can execute is that checker's
+// verdict, not this one's.
+//
+// Refusal discipline, as in PRISM's other checkers: a claim that
+// cannot be READ — an unknown action, an unknown or missing field, a
+// policy that is not a 28-byte ID, a fractional or negative index, a
+// node entry with an unknown or missing field, a credential of an
+// unknown kind or a hash that is neither empty nor 28 bytes, a
+// global-state policy listed twice — is refused, never scored in
+// part. Hex case is canonicalised before comparison.
+//
+// Boundary honesty: these verdicts judge the modeled reference
+// inputs entered. PRISM read no transaction, no registry, and no
+// UTxO: whether the reference input at that index in a real
+// transaction really holds this node, whether the node holds the
+// registry NFT, and whether it was written by the registry validator
+// are facts about a real registry this model does not read. Whether
+// the credential this node names was actually executed is the
+// logic-execution checker's, above; the paired outputs are the
+// paired-outputs checker's.
+function delegateNodeEntry(value, index) {
+  if (value === null) return null;
+  const label = `Reference input ${index + 1}`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be null (not a RegistryNode) or a RegistryNode naming its key, its third-party and unfracking credentials, and its global_state_cs.`);
+  for (const k of Object.keys(value)) if (!['key', 'thirdParty', 'unfracking', 'globalStateCs'].includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled RegistryNode here names only its key, its third-party and unfracking credentials, and its global_state_cs; the fields this resolution reads.`);
+  for (const k of ['key', 'thirdParty', 'unfracking', 'globalStateCs']) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — a node that cannot be read in full is refused, never scored in part.`);
+  const key = registryBytesHex(value.key, `${label}'s key`);
+  if (key !== '' && key.length !== 56) throw new Error(`${label}'s key must be empty (the origin node's key) or a 28-byte policy ID (56 hexadecimal characters) — ${key.length / 2} bytes given, refused rather than read as a key it is not.`);
+  const thirdParty = delegateLogicCredential(value.thirdParty, `${label}'s third_party_logic_script`);
+  const unfracking = delegateLogicCredential(value.unfracking, `${label}'s unfracking_logic_script`);
+  const globalStateCs = registryBytesHex(value.globalStateCs, `${label}'s global_state_cs`);
+  if (globalStateCs !== '' && globalStateCs.length !== 56) throw new Error(`${label}'s global_state_cs must be empty or a 28-byte policy ID (56 hexadecimal characters) — ${globalStateCs.length / 2} bytes given, refused rather than read as a policy it is not.`);
+  return { key, thirdParty, unfracking, globalStateCs };
+}
+
+export function checkDelegateRegistryNode(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The registry-node claim must be an object naming the action, the acted-on policy, the registry_node_idx, the claimed logic credential, the modeled reference inputs, and the NFT policies those reference inputs carry.');
+  const inputFields = ['action', 'policy', 'registryNodeIdx', 'logicCredential', 'nodes', 'globalStatePolicies'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The registry-node claim carries an unknown field ${JSON.stringify(k)} — it names only the action, the policy, the registry_node_idx, the logic credential, the reference inputs, and their NFT policies.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The registry-node claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  const action = delegateAction(claim.action);
+  const policy = registryPolicyId(claim.policy, 'The acted-on policy');
+  if (!Number.isInteger(claim.registryNodeIdx) || claim.registryNodeIdx < 0) throw new Error(`registry_node_idx must be a non-negative integer — ${JSON.stringify(claim.registryNodeIdx)} given, refused rather than rounded.`);
+  const registryNodeIdx = claim.registryNodeIdx;
+  const logicCredential = delegateLogicCredential(claim.logicCredential, 'The claimed logic credential');
+  if (!Array.isArray(claim.nodes)) throw new Error('The reference inputs must be a list, one entry per reference input in transaction order — a RegistryNode, or null for any other reference input.');
+  const nodes = claim.nodes.map((n, i) => delegateNodeEntry(n, i));
+  if (!Array.isArray(claim.globalStatePolicies)) throw new Error('The global-state policies must be a list of the NFT policies the modeled reference inputs carry.');
+  const seenPolicies = new Set();
+  const globalStatePolicies = claim.globalStatePolicies.map((g, i) => {
+    const p = registryPolicyId(g, `Global-state policy ${i + 1}`);
+    if (seenPolicies.has(p)) throw new Error(`Global-state policy ${p} is listed more than once — the reference inputs carry each NFT policy once in this model, so a duplicated list names nothing twice over.`);
+    seenPolicies.add(p);
+    return p;
+  });
+  const resolvedNode = registryNodeIdx < nodes.length ? nodes[registryNodeIdx] : null;
+  const nodeResolves = resolvedNode !== null;
+  const nodeCarriesPolicy = nodeResolves ? resolvedNode.key === policy : null;
+  const nodeLogicCredential = nodeResolves ? (action === 'unfracking' ? resolvedNode.unfracking : resolvedNode.thirdParty) : null;
+  const logicCredentialMatches = nodeCarriesPolicy === true
+    ? nodeLogicCredential.kind === logicCredential.kind && nodeLogicCredential.hash === logicCredential.hash
+    : null;
+  const logicForbidden = action === 'unfracking' && nodeCarriesPolicy === true
+    && nodeLogicCredential.kind === 'pubkey' && nodeLogicCredential.hash === '';
+  const globalStateMode = nodeCarriesPolicy !== true ? null
+    : resolvedNode.globalStateCs === '' ? 'none' : 'present';
+  const globalStateReference = globalStateMode === 'present'
+    ? globalStatePolicies.includes(resolvedNode.globalStateCs)
+    : null;
+  const verdicts = { nodeResolves, nodeCarriesPolicy, logicCredentialMatches, globalStateReference };
+  const valid = nodeResolves === true && nodeCarriesPolicy === true && logicCredentialMatches === true
+    && (globalStateReference === null || globalStateReference === true) && !logicForbidden;
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    action,
+    policy,
+    registryNodeIdx,
+    resolvedNode,
+    nodeLogicCredential,
+    logicCredential,
+    logicForbidden,
+    globalStateMode,
+    globalStatePolicies,
+    referenceCount: nodes.length,
     verdicts,
   };
 }

@@ -117,9 +117,9 @@ test('live verification refuses an unconfirmed or invalid spec transaction', asy
   } finally { restore2(); }
 });
 
-test('app wires the spec version panel honestly, v1\.105', async () => {
+test('app wires the spec version panel honestly, v1\.106', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
-  assert.match(app, /v1\.105/);
+  assert.match(app, /v1\.106/);
   assert.match(app, /data-action="verify-spec-version"/);
   assert.match(app, /CIP-113 version \(spec-listed\)/);
   assert.match(app, /Different transactions/);
