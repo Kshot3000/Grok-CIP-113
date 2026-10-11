@@ -7,7 +7,7 @@ import {encodeAddress,decodeAddress,deriveSmartWallet,normalizeWalletAddress} fr
 test('exact asset units retain precision and reject unsafe inputs',()=>{
   assert.equal(toUnits('123456789.123456',6),123456789123456n);
   assert.equal(toUnits('0.000001',6),1n);
-  for(const bad of ['1e4','-1','1,000','Infinity','NaN','0x20','1.1244567','9223372036854.775808'])assert.throws(()=>toUnits(bad,6));
+  for(const bad of ['1e4','-1','1,000','Infinity','NaN','0x20','1.1254567','9223372036854.775808'])assert.throws(()=>toUnits(bad,6));
 });
 test('transfer model enforces all configured denial paths',()=>{
   const d=fromTemplate();

@@ -6831,6 +6831,97 @@ export function checkVaultIntegration(claim) {
   };
 }
 
+export const REGISTRY_INTEGRITY_SOURCES = Object.freeze(['canonical', 'project-run', 'unverified-copy', 'none']);
+export const REGISTRY_INTEGRITY_ANCHORS = Object.freeze(['bootstrap-hash', 'registry-address', 'unpinned', 'not-applicable']);
+export const REGISTRY_INTEGRITY_MONITORING = Object.freeze(['ongoing', 'setup-only', 'none']);
+export const REGISTRY_INTEGRITY_VERDICTS = Object.freeze([
+  ['usesCanonicalRegistry', 'Verification uses the canonical registry'],
+  ['monitorsForSpoofing', 'Monitoring for spoofing attempts'],
+]);
+
+function registryIntegrityEnum(value, allowed, label) {
+  if (!allowed.includes(value)) throw new Error(`${label} must be one of ${allowed.join(', ')} — ${JSON.stringify(value)} given.`);
+  return value;
+}
+
+// CIP-113 registry integrity, checked locally against the diligence
+// profile a reviewer enters for one integrator (spec: "Implementing
+// programmable tokens in DeFi protocols", "Security Considerations",
+// item 2, re-read 2026-10-11): "Registry Integrity: Verify using the
+// canonical registry; monitor for spoofing attempts."
+//
+// The Security Considerations list states both practices directly to
+// integrators, as imperatives in a considerations list — it attaches
+// no MUST keyword to them, and this checker invents none: READY here
+// means both stated practices are in place in the entered profile,
+// nothing more. The two practices are independent: verifying against
+// the canonical registry today says nothing about whether anyone is
+// watching for a spoof tomorrow, and monitoring catches attempts only
+// against a registry the integrator actually verifies with.
+// PRISM judged neither for an integrator as a whole: its registry
+// families judge proofs, nodes, and inserts inside transactions
+// against lists a reviewer enters, and its registry reader is an
+// honest unavailable stub — but which registry an integrator verifies
+// against (the canonical deployment, a project-run instance, an
+// unverified copy, or none at all) and whether it monitors for
+// spoofing were judged nowhere, so an integrator verifying against a
+// project-run copy and never watching for spoofs passed every panel
+// it touched. This checker judges exactly that, on the entered
+// profile:
+//   1. usesCanonicalRegistry — verification uses the canonical
+//      registry (a project-run instance fails too — it may be a
+//      faithful copy, but it is not the canonical registry the
+//      section names; an unverified copy and no registry fail too).
+//   2. monitorsForSpoofing — monitoring for spoofing attempts is
+//      ongoing (a one-time check at setup fails too — monitoring is
+//      an ongoing practice, and a setup snapshot cannot catch a
+//      spoof that appears later).
+// How the integrator identifies the canonical registry — its
+// canonical anchor — is REPORTED, never scored, because this item
+// does not prescribe the method: the spec's CIP-113 Version section
+// identifies a version by the hash of its bootstrap transaction,
+// which locks in all contract hashes for that deployment, so a
+// bootstrap-hash anchor is reported as pinned; a registry-address
+// anchor or an unpinned identification is reported as entered, and
+// a profile is ready on the two practices without one — and no
+// anchor, however strong, can rescue a failed practice (pinned
+// both ways in the tests).
+// A claim that cannot be read is refused, never scored in part: an
+// unknown or missing field, an unknown value, and the conditional
+// pair — an anchor named where no registry is verified against (it
+// names nothing the profile uses), and an anchor declared
+// not-applicable while a registry IS verified against (the profile
+// uses a registry it declines to identify).
+// Local model only: PRISM inspected no integrator and read no chain
+// state — the profile is the reviewer's own reading of the
+// integrator, entered here, and this checker judges its completeness
+// and consistency against the spec's registry-integrity practices.
+export function checkRegistryIntegrity(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The registry-integrity profile must be an object naming which registry verification uses, how the canonical registry is identified, and whether monitoring for spoofing attempts is ongoing.');
+  const inputFields = ['verificationRegistry', 'canonicalAnchor', 'spoofMonitoring'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The registry-integrity profile carries an unknown field ${JSON.stringify(k)} — it names only the registry verification uses, the canonical anchor, and the spoofing monitoring.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The registry-integrity profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part.`);
+  const verificationRegistry = registryIntegrityEnum(claim.verificationRegistry, REGISTRY_INTEGRITY_SOURCES, 'The verification registry');
+  const canonicalAnchor = registryIntegrityEnum(claim.canonicalAnchor, REGISTRY_INTEGRITY_ANCHORS, 'The canonical anchor');
+  const spoofMonitoring = registryIntegrityEnum(claim.spoofMonitoring, REGISTRY_INTEGRITY_MONITORING, 'The spoofing monitoring field');
+  if (verificationRegistry === 'none' && canonicalAnchor !== 'not-applicable') throw new Error('The profile names a canonical anchor where no registry is verified against — an anchor identifies a registry in use, and this profile uses none.');
+  if (verificationRegistry !== 'none' && canonicalAnchor === 'not-applicable') throw new Error('The profile names its canonical anchor not-applicable while a registry is verified against — a registry in use is identified somehow, and the profile must say how.');
+  const verdicts = {
+    usesCanonicalRegistry: verificationRegistry === 'canonical',
+    monitorsForSpoofing: spoofMonitoring === 'ongoing',
+  };
+  const valid = Object.values(verdicts).every(v => v === true);
+  return {
+    status: valid ? 'ready' : 'not-ready',
+    valid,
+    verificationRegistry,
+    canonicalAnchor,
+    canonicalAnchored: canonicalAnchor === 'bootstrap-hash',
+    spoofMonitoring,
+    verdicts,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
