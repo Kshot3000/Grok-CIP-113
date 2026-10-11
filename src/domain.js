@@ -6444,6 +6444,109 @@ export function checkSubstandardVerification(claim) {
   };
 }
 
+export const WALLET_DERIVATIONS = Object.freeze(['base-plus-stake', 'ordinary-address-only', 'none']);
+export const WALLET_STAKE_SOURCES = Object.freeze(['payment', 'staking', 'either', 'none']);
+export const WALLET_QUERY_SOURCES = Object.freeze(['smart-wallet', 'ordinary-address', 'none']);
+export const WALLET_IDENTIFICATIONS = Object.freeze(['registry-key', 'hardcoded-list', 'none']);
+export const WALLET_NATIVE_TRANSFERS = Object.freeze(['builds', 'does-not-build']);
+export const WALLET_READINESS_VERDICTS = Object.freeze([
+  ['derivesSmartWallet', 'Smart-wallet address derivation'],
+  ['balanceQueries', 'Balance queries at the smart-wallet address'],
+  ['historyTracks', 'Transaction history at the smart-wallet address'],
+  ['identifiesViaRegistry', 'Programmable-token identification via the registry'],
+]);
+
+function walletEnum(value, allowed, label) {
+  if (!allowed.includes(value)) throw new Error(`${label} must be one of ${allowed.join(', ')} — ${JSON.stringify(value)} given.`);
+  return value;
+}
+
+// CIP-113 wallet readiness, checked locally against the capability
+// profile a reviewer enters for one wallet (spec: "Implementing
+// programmable tokens in wallets and dApps", with "Address Derivation",
+// "Balance Queries", "Identifying Programmable Tokens", and
+// "Transaction History", all re-read 2026-10-11).
+//
+// A wallet supporting programmable tokens MUST implement balance
+// queries (displaying the holder's programmable-token holdings) and
+// transaction history (tracking transfers in and out of the user's
+// smart wallet). Both duties are duties AT THE SMART-WALLET ADDRESS:
+// balances are the UTxOs at the user's programmable-token address, and
+// history follows the balance changes there — a wallet querying the
+// user's ordinary address performs the gestures while looking where
+// programmable tokens never live. Two further positions complete the
+// section. The wallet must be able to derive that address — the
+// smart-wallet format is the deployment's programmableLogicBase as
+// payment credential with the user's own stake credential — and,
+// before treating any token as programmable, it must identify it the
+// spec's way: checking whether the token's policy ID exists as a key
+// in the registry, decoding the registry entries' datums. A hardcoded
+// list is not that check: it goes stale as registrations land and
+// cannot prove a negative. PRISM's own wallet tools derive and verify
+// single addresses and connect read-only, but no panel judged the
+// four duties together for a wallet as a whole. This checker judges
+// exactly that, on the entered profile:
+//   1. derivesSmartWallet — the derivation is base-plus-stake.
+//   2. balanceQueries — balances are queried at the smart-wallet
+//      address (the UTxOs there), not the ordinary address.
+//   3. historyTracks — history tracks transfers in and out of the
+//      smart-wallet address, not the ordinary address.
+//   4. identifiesViaRegistry — identification checks the policy as a
+//      registry key, not a hardcoded list.
+// Two profile facts are REPORTED, never scored, because the spec
+// itself scores neither: the stake-credential source (the credential
+// may be derived from the user's payment key or their staking key —
+// the choice is up to the team developing the substandard, so
+// 'payment', 'staking', and 'either' are all conforming), and native
+// transfers (building TransferAct transactions is the list's third
+// item, expressly optional — nice-to-have — so a ready wallet may
+// lack it, and building it cannot rescue a wallet failing a MUST).
+// Issuance and third-party operations are not wallet duties at all:
+// the spec assigns them to token-specific dApps, so the profile names
+// no such field. A claim that cannot be read is refused, never scored
+// in part: an unknown or missing field, an unknown value, a
+// base-plus-stake derivation naming no stake source (the derivation
+// IS the base plus a stake credential, so a profile naming none
+// cannot be read), and a stake source named where no smart-wallet
+// derivation is claimed (no derivation in play names nothing).
+// Local model only: PRISM inspected no wallet and read no chain
+// state — the profile is the reviewer's own reading of the wallet,
+// entered here, and this checker judges its completeness and
+// consistency against the spec's wallet duties.
+export function checkWalletReadiness(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The wallet profile must be an object naming how the wallet derives the smart-wallet address, which credential it derives the stake position from, where it queries balances, where it tracks history, how it identifies programmable tokens, and whether it builds native transfers.');
+  const inputFields = ['derivation', 'stakeSource', 'balanceSource', 'historySource', 'identification', 'nativeTransfers'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The wallet profile carries an unknown field ${JSON.stringify(k)} — it names only the derivation, the stake source, the balance source, the history source, the identification method, and native transfers. Issuance and third-party operations are not wallet duties — the spec assigns them to token-specific dApps — so the profile names no such field.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The wallet profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part.`);
+  const derivation = walletEnum(claim.derivation, WALLET_DERIVATIONS, 'The derivation');
+  const stakeSource = walletEnum(claim.stakeSource, WALLET_STAKE_SOURCES, 'The stake source');
+  const balanceSource = walletEnum(claim.balanceSource, WALLET_QUERY_SOURCES, 'The balance source');
+  const historySource = walletEnum(claim.historySource, WALLET_QUERY_SOURCES, 'The history source');
+  const identification = walletEnum(claim.identification, WALLET_IDENTIFICATIONS, 'The identification method');
+  const nativeTransfers = walletEnum(claim.nativeTransfers, WALLET_NATIVE_TRANSFERS, 'The native transfers field');
+  if (derivation === 'base-plus-stake' && stakeSource === 'none') throw new Error('A base-plus-stake derivation names no stake source — the smart-wallet address IS the programmableLogicBase payment credential plus the user’s stake credential, so a derivation claiming that form while naming no credential it derives the stake position from cannot be read.');
+  if (derivation !== 'base-plus-stake' && stakeSource !== 'none') throw new Error('A stake source is named where no smart-wallet derivation is claimed — the stake source is a property of the base-plus-stake derivation, and a profile that does not claim that derivation names no such source.');
+  const verdicts = {
+    derivesSmartWallet: derivation === 'base-plus-stake',
+    balanceQueries: balanceSource === 'smart-wallet',
+    historyTracks: historySource === 'smart-wallet',
+    identifiesViaRegistry: identification === 'registry-key',
+  };
+  const valid = Object.values(verdicts).every(v => v === true);
+  return {
+    status: valid ? 'ready' : 'not-ready',
+    valid,
+    derivation,
+    stakeSource,
+    balanceSource,
+    historySource,
+    identification,
+    nativeTransfers,
+    buildsNativeTransfers: nativeTransfers === 'builds',
+    verdicts,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
