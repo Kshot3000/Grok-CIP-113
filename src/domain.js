@@ -4600,6 +4600,161 @@ export function checkDelegateRegistryNode(claim) {
   };
 }
 
+export const DELEGATE_REGISTRY_NODE_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['nodeLogicCredential', 'Node logic credential'],
+  ['nodeResolves', 'Node resolution'],
+  ['nodeCarriesPolicy', 'Node carries the policy'],
+  ['logicCredentialMatches', 'Logic credential agreement'],
+  ['globalStateReference', 'Global-state reference'],
+]);
+
+// CIP-113 delegate registry-node impact, compared locally between
+// two modeled versions of the SAME registry-node claim — the claim
+// as checked against the registry_node_idx, the modeled reference
+// inputs, the claimed logic credential, and the global-state
+// policies as they stood, and as it would stand after some later
+// change (a reference input added ahead of the node, the node
+// itself updated, or the claim re-pointed). The registry, base
+// redeemer, delegate pairing, transfer output-value, protocol
+// upgrade, global dispatch, transfer proof-list, logic-execution,
+// and paired-outputs families already had this temporal half; the
+// registry-node family, shipped as a single checker in v1.106, had
+// only the check, so a builder whose resolution conformed when they
+// modeled it could not ask what a later change did to it — and the
+// changes that stale it are the resolution's own moving parts
+// (spec: ThirdPartyAct / UnfrackingAct constructors and Reference
+// Inputs): a reference input inserted ahead of the node moves the
+// index the redeemer names, a registry update re-pointing the
+// node's field for the action changes the credential the action
+// must invoke, and a global-state policy joining or leaving the
+// reference inputs changes whether a named global state is carried.
+//
+// Both versions are checked through checkDelegateRegistryNode
+// itself (validate-once, thirty-first application), so comparison
+// and checking can never disagree about either version, and a
+// version that cannot be read (an unknown action or field, a
+// policy that is not a 28-byte ID, a fractional or negative index,
+// a malformed node entry, a duplicated global-state policy) is
+// refused on either side with the checker's reason, never compared
+// around. Hex case is canonicalised by the checker before
+// comparison, so a node key or a credential listed in uppercase
+// still names the same node and the same credential on either side.
+//
+// The comparison tracks ONE registry-node claim: the two versions
+// must declare the same action AND the same acted-on policy. A
+// ThirdPartyAct claim and an UnfrackingAct claim are judged
+// against different fields of the node, and a claim about a
+// different policy is a claim about a different token's
+// configuration; which position moved is meaningless when the
+// claim itself changed — refused, never scored.
+//
+// Six positions are compared, in the checker's own order: the
+// status, the node logic credential (the credential the resolved
+// node names for the action — the requirement itself, as the
+// logic-execution comparison's logic credential is; null when no
+// node resolves, and null compares equal with null), the node
+// resolution verdict, the node-carries-policy verdict, the logic
+// credential agreement verdict, and the global-state reference
+// verdict (verdictless — null — when the node names no global
+// state or does not carry the policy, and null compares equal
+// with null while null against true or false differs). Credential
+// equality is kind and hash both. THE SUBSTANCE is what is NOT
+// compared as a position. The registry_node_idx itself is reported
+// as registryNodeIdxChanged, never counted: the index is a hint,
+// and the same node reached at a new index — because a reference
+// input was inserted ahead of it and the claim followed — resolves
+// identically, so counting the hint would score a move the delegate
+// never judges. The claimed logic credential itself is reported as
+// claimedLogicCredentialChanged, never counted: its only scored
+// consequence is the logic-agreement verdict's own move, so
+// counting the claim as well would count one fact twice (pinned).
+// Which modeled nodes themselves changed is reported as
+// changedNodeIndices — the indices whose modeled node differs
+// between the two reference-input lists — never counted: a node
+// the resolution never reaches moves no position, and where a
+// node's change does move a position, that position already counts
+// it. The reference-input list's own growth is reported as the
+// node counts before and after and their added/removed counts,
+// never counted. The global-state policies' own change is
+// reported as the added/removed policies, and the global-state
+// mode — whether the resolved node names a global state at all —
+// is reported as the before/after modes and whether it changed,
+// never counted: they are the causes and the breakdown, the
+// verdict positions above are the consequence.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because
+// the claim gaining or losing conformance is the headline even
+// when the node's credential also moved — then STILL NOT
+// CONFORMING (not conforming on both sides, but not the same
+// failure: a position changed underneath it) and REQUIREMENT
+// CHANGED (conforming on both sides, but the node logic credential
+// moved — reachable exactly through the node-logic-credential
+// position, since every verdict position stands on both sides:
+// the claim survives, and the credential the node requires the
+// action to invoke is no longer the one it required before).
+//
+// Boundary honesty carries over from the checker: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction, no registry, and no UTxO, and comparing checks
+// neither version and builds no transaction. Whether the reference
+// input at that index in a real transaction really holds either
+// version's node remains a fact about a real registry this model
+// does not read, on both sides alike.
+export function diffDelegateRegistryNode(beforeClaim, afterClaim) {
+  const before = checkDelegateRegistryNode(beforeClaim);
+  const after = checkDelegateRegistryNode(afterClaim);
+  if (before.action !== after.action) throw new Error(`The two modeled registry-node claims declare different actions \u2014 ${JSON.stringify(before.action)} before and ${JSON.stringify(after.action)} after. A comparison tracks one registry-node claim: the declared action names which delegate action the claim is about, and a different action is a different claim.`);
+  if (before.policy !== after.policy) throw new Error(`The two modeled registry-node claims declare different acted-on policies \u2014 ${JSON.stringify(before.policy)} before and ${JSON.stringify(after.policy)} after. A comparison tracks one registry-node claim: the acted-on policy names the token the claim is about, and a different policy is a different claim.`);
+  const sameCred = (a, b) => (a === null && b === null) || (a !== null && b !== null && a.kind === b.kind && a.hash === b.hash);
+  const positionOf = v => ({ status: v.status, nodeLogicCredential: v.nodeLogicCredential, nodeResolves: v.verdicts.nodeResolves, nodeCarriesPolicy: v.verdicts.nodeCarriesPolicy, logicCredentialMatches: v.verdicts.logicCredentialMatches, globalStateReference: v.verdicts.globalStateReference });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of DELEGATE_REGISTRY_NODE_COMPARE_FIELDS) {
+    const differs = field === 'nodeLogicCredential' ? !sameCred(beforePos[field], afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const beforeNodes = beforeClaim.nodes.map((n, i) => delegateNodeEntry(n, i));
+  const afterNodes = afterClaim.nodes.map((n, i) => delegateNodeEntry(n, i));
+  const nodeCount = Math.max(beforeNodes.length, afterNodes.length);
+  const changedNodeIndices = [];
+  for (let i = 0; i < nodeCount; i++) {
+    if (JSON.stringify(beforeNodes[i] ?? null) !== JSON.stringify(afterNodes[i] ?? null)) changedNodeIndices.push(i);
+  }
+  const beforeGlobalSet = new Set(before.globalStatePolicies), afterGlobalSet = new Set(after.globalStatePolicies);
+  return {
+    action: before.action,
+    policy: before.policy,
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    registryNodeIdxChanged: before.registryNodeIdx !== after.registryNodeIdx,
+    claimedLogicCredentialChanged: !sameCred(before.logicCredential, after.logicCredential),
+    changedNodeIndices,
+    nodeCountBefore: before.referenceCount,
+    nodeCountAfter: after.referenceCount,
+    addedNodeCount: Math.max(0, after.referenceCount - before.referenceCount),
+    removedNodeCount: Math.max(0, before.referenceCount - after.referenceCount),
+    addedGlobalStatePolicies: after.globalStatePolicies.filter(p => !beforeGlobalSet.has(p)),
+    removedGlobalStatePolicies: before.globalStatePolicies.filter(p => !afterGlobalSet.has(p)),
+    globalStateModeBefore: before.globalStateMode,
+    globalStateModeAfter: after.globalStateMode,
+    globalStateModeChanged: before.globalStateMode !== after.globalStateMode,
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: DELEGATE_REGISTRY_NODE_COMPARE_FIELDS.length,
+  };
+}
+
 // CIP-113 TransferAct authorization and logic execution, modeled
 // locally from the spec's delegate validation steps 1 and 3 and its
 // TransferAct constructor (re-read from the raw upstream spec this

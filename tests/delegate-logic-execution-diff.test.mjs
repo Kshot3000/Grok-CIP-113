@@ -208,7 +208,7 @@ test('the comparison does not mutate either claim, and its two sides are the che
   assert.deepEqual(d.after, checkDelegateLogicExecution(aSnap));
 });
 
-test('app wires the delegate logic-execution impact comparison: panel, verdicts, honest boundary, v1.114', async () => {
+test('app wires the delegate logic-execution impact comparison: panel, verdicts, honest boundary, v1.115', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /diffDelegateLogicExecution/);
   assert.match(app, /logic-execution-diff-after-withdrawals/);
@@ -216,5 +216,5 @@ test('app wires the delegate logic-execution impact comparison: panel, verdicts,
   assert.match(app, /DELEGATE LOGIC EXECUTION IMPACT · LOCAL MODEL/);
   assert.match(app, /BECAME NOT CONFORMING/);
   assert.match(app, /REQUIREMENT CHANGED/);
-  assert.match(app, /v1\.114/);
+  assert.match(app, /v1\.115/);
 });
