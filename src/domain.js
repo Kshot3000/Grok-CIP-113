@@ -6646,6 +6646,108 @@ export function checkDexIntegration(claim) {
   };
 }
 
+export const LENDING_COLLATERAL_DESTINATIONS = Object.freeze(['protocol-smart-wallet', 'protocol-ordinary-address', 'user-smart-wallet']);
+export const LENDING_TRANSFER_LOGIC = Object.freeze(['applies', 'skipped']);
+export const LENDING_LIQUIDATION_PROOFS = Object.freeze(['included', 'omitted']);
+export const LENDING_SUBSTANDARD_VERIFICATION = Object.freeze(['verified', 'not-verified']);
+export const LENDING_INTEGRATION_VERDICTS = Object.freeze([
+  ['collateralToProtocolSmartWallet', 'Collateral received at the protocol’s smart wallet'],
+  ['depositInvokesTransferLogic', 'Transfer logic validation on deposit'],
+  ['withdrawalInvokesTransferLogic', 'Transfer logic validation on withdrawal'],
+  ['liquidationIncludesRegistryProofs', 'Liquidation registry proofs'],
+]);
+
+function lendingEnum(value, allowed, label) {
+  if (!allowed.includes(value)) throw new Error(`${label} must be one of ${allowed.join(', ')} — ${JSON.stringify(value)} given.`);
+  return value;
+}
+
+// CIP-113 lending integration, checked locally against the integration
+// profile a reviewer enters for one lending protocol (spec:
+// "Implementing programmable tokens in DeFi protocols", "Lending
+// Protocols", re-read 2026-10-11).
+//
+// The lending section names the duties in three items. (1) Collateral:
+// protocols receive tokens at a smart wallet address THEY CONTROL —
+// collateral lives where programmable tokens live, at a smart-wallet
+// address, and the address must be the protocol's own: tokens received
+// at the user's smart wallet are not received by the protocol at all,
+// and tokens received at an ordinary protocol address sit where
+// programmable tokens never live. The same item adds that
+// transferLogicScript validation applies during deposit AND withdrawal
+// — two moments, judged as two positions, because a protocol can apply
+// the token's logic when collateral arrives and skip it when collateral
+// leaves. (2) Liquidations: liquidation transactions MUST include
+// proper registry proofs — the liquidation is a transfer like any
+// other, and it carries its proof of each token's registration (or
+// non-registration) with it. (3) Substandard considerations: protocols
+// SHOULD verify the substandard before accepting tokens as collateral,
+// because some substandards permit third-party actions that move tokens
+// without the holder's consent, which could affect collateral.
+// PRISM's transaction families judge registry proofs and logic
+// invocation inside generic transactions, and its substandard
+// verification checker judges an integrator's diligence profile on its
+// own, but the collateral destination was judged nowhere, the
+// deposit/withdrawal pair was judged nowhere, and no panel judged the
+// lending duties together for a lending protocol as a whole. This
+// checker judges exactly that, on the entered profile:
+//   1. collateralToProtocolSmartWallet — collateral is received at a
+//      smart wallet address the protocol controls.
+//   2. depositInvokesTransferLogic — transferLogicScript validation
+//      applies during deposit.
+//   3. withdrawalInvokesTransferLogic — transferLogicScript validation
+//      applies during withdrawal.
+//   4. liquidationIncludesRegistryProofs — liquidation transactions
+//      include proper registry proofs.
+// The substandard verification is REPORTED, never scored: the spec's
+// word for it is SHOULD — a recommendation, not a MUST — and PRISM's
+// own precedent is the registry-insert checker's protocol-minimum
+// SHOULD, which the model reports with no verdict rather than failing
+// a registration the registry itself would accept. So a protocol can
+// be ready on every MUST while its substandard verification is
+// reported as not done — the recommendation stands in front of the
+// reviewer either way — and verifying the substandard, however
+// carefully, cannot rescue a protocol failing a MUST. What the
+// verification itself consists of — the two questions of the
+// substandard verification checker — is that checker's position, not
+// repeated here. A claim that cannot be read is refused, never scored
+// in part: an unknown or missing field, an unknown value. The lending
+// section states no conditional field, so no conditional refusal is
+// invented for it.
+// Local model only: PRISM inspected no lending protocol and read no
+// chain state — the profile is the reviewer's own reading of the
+// protocol, entered here, and this checker judges its completeness
+// and consistency against the spec's lending duties.
+export function checkLendingIntegration(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The lending profile must be an object naming where collateral is received, whether transfer logic validation applies on deposit and on withdrawal, whether liquidations include registry proofs, and whether the substandard was verified before acceptance.');
+  const inputFields = ['collateralDestination', 'depositTransferLogic', 'withdrawalTransferLogic', 'liquidationRegistryProofs', 'substandardVerification'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The lending profile carries an unknown field ${JSON.stringify(k)} — it names only the collateral destination, the deposit transfer logic, the withdrawal transfer logic, the liquidation registry proofs, and the substandard verification.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The lending profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part.`);
+  const collateralDestination = lendingEnum(claim.collateralDestination, LENDING_COLLATERAL_DESTINATIONS, 'The collateral destination');
+  const depositTransferLogic = lendingEnum(claim.depositTransferLogic, LENDING_TRANSFER_LOGIC, 'The deposit transfer logic field');
+  const withdrawalTransferLogic = lendingEnum(claim.withdrawalTransferLogic, LENDING_TRANSFER_LOGIC, 'The withdrawal transfer logic field');
+  const liquidationRegistryProofs = lendingEnum(claim.liquidationRegistryProofs, LENDING_LIQUIDATION_PROOFS, 'The liquidation registry proofs field');
+  const substandardVerification = lendingEnum(claim.substandardVerification, LENDING_SUBSTANDARD_VERIFICATION, 'The substandard verification field');
+  const verdicts = {
+    collateralToProtocolSmartWallet: collateralDestination === 'protocol-smart-wallet',
+    depositInvokesTransferLogic: depositTransferLogic === 'applies',
+    withdrawalInvokesTransferLogic: withdrawalTransferLogic === 'applies',
+    liquidationIncludesRegistryProofs: liquidationRegistryProofs === 'included',
+  };
+  const valid = Object.values(verdicts).every(v => v === true);
+  return {
+    status: valid ? 'ready' : 'not-ready',
+    valid,
+    collateralDestination,
+    depositTransferLogic,
+    withdrawalTransferLogic,
+    liquidationRegistryProofs,
+    substandardVerification,
+    substandardVerified: substandardVerification === 'verified',
+    verdicts,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
