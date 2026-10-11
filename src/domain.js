@@ -4178,6 +4178,126 @@ export function checkDelegateLogicExecution(claim) {
   };
 }
 
+export const DELEGATE_LOGIC_EXECUTION_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['logicCredential', 'Logic credential'],
+  ['logicExecution', 'Logic execution'],
+  ['holderAuthorization', 'Holder authorization'],
+]);
+
+// CIP-113 delegate logic-execution impact, compared locally between
+// two modeled versions of the SAME execution claim — the claim as
+// checked against the logic credential, withdrawals, holder, and
+// signers as they stood, and as it would stand after some later
+// change (a registry update re-pointing the acted-on policy's
+// RegistryNode logic field for the action, or transaction assembly
+// adding or dropping a withdrawal or a signer). The registry, base
+// redeemer, delegate pairing, transfer output-value, protocol
+// upgrade, global dispatch, and transfer proof-list families already
+// had this temporal half; the logic-execution family, shipped as a
+// single checker, had only the check, so a builder whose execution
+// conformed when they modeled it could not ask what a later change
+// did to it — and the changes that stale it are the delegate
+// validation's own moving parts (spec: delegate validation steps 1
+// and 3): the logic credential is read from the RegistryNode the
+// redeemer names, so a registry update that re-points that node's
+// field for the action changes what must be executed without
+// touching the transaction at all, and an assembly that drops the
+// logic credential's withdrawal — or, for unfracking, the holder's
+// signature — breaks an execution that conformed when modeled.
+//
+// Both versions are checked through checkDelegateLogicExecution
+// itself (validate-once, twenty-ninth application), so comparison
+// and checking can never disagree about either version, and a
+// version that cannot be read (an unknown action or field, a
+// malformed credential, a duplicated withdrawal or signer) is
+// refused on either side with the checker's reason, never compared
+// around. Hex case is canonicalised by the checker before
+// comparison, so a credential listed in uppercase still names the
+// same credential on either side.
+//
+// The comparison tracks ONE execution claim: the two versions must
+// declare the same action. A ThirdPartyAct claim and an
+// UnfrackingAct claim are different actions — the holder position
+// is judged for one and bypassed for the other — and which
+// credential moved is meaningless when the action itself changed —
+// refused, never scored.
+//
+// Four positions are compared, in the checker's own order: the
+// status, the logic credential (kind and hash both — the
+// requirement itself, as the dispatch comparison's delegate
+// position is), the logic-execution verdict, and the
+// holder-authorization verdict (null for a third-party action on
+// both sides, where the spec bypasses authorization, so it
+// compares equal and can never differ). THE SUBSTANCE is what is
+// NOT compared as a position. The holder credential itself is
+// reported separately as holderCredentialChanged, never counted:
+// for a third-party action it is bypassed entirely, so its change
+// moves nothing the delegate judges, and for unfracking its whole
+// consequence already shows in the authorization verdict — counting
+// the credential as well would double-count the one move (pinned).
+// The withdrawal list's own change is reported as the added/removed
+// withdrawal credentials, and the signer list's as the added/removed
+// signer hashes, never counted: they are the causes, the verdict
+// positions above are the consequence.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because the
+// execution gaining or losing a requirement is the headline even
+// when the logic credential also moved — then STILL NOT CONFORMING
+// (not conforming on both sides, but not the same failure: a
+// position changed underneath it) and REQUIREMENT CHANGED
+// (conforming on both sides, but the logic credential is a
+// different credential — the execution survives, and the script
+// whose withdraw-zero validates the action is no longer the one
+// that validated it before).
+//
+// Boundary honesty carries over from the checker: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction, no registry, and no UTxO, and comparing checks
+// neither version and builds no transaction. Whether the
+// RegistryNode the redeemer names actually carries either version's
+// logic credential remains checkDelegateRegistryNode's position,
+// on both sides alike.
+export function diffDelegateLogicExecution(beforeClaim, afterClaim) {
+  const before = checkDelegateLogicExecution(beforeClaim);
+  const after = checkDelegateLogicExecution(afterClaim);
+  if (before.action !== after.action) throw new Error(`The two modeled executions declare different actions \u2014 ${JSON.stringify(before.action)} before and ${JSON.stringify(after.action)} after. A comparison tracks one execution claim: the declared action names which delegate action the claim is about, and a different action is a different execution claim.`);
+  const sameCred = (a, b) => (a === null && b === null) || (a !== null && b !== null && a.kind === b.kind && a.hash === b.hash);
+  const positionOf = v => ({ status: v.status, logicCredential: v.logicCredential, logicExecution: v.verdicts.logicExecution, holderAuthorization: v.verdicts.holderAuthorization });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of DELEGATE_LOGIC_EXECUTION_COMPARE_FIELDS) {
+    const differs = field === 'logicCredential' ? !sameCred(beforePos[field], afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const credKey = c => `${c.kind}|${c.hash}`;
+  const beforeWdSet = new Set(before.withdrawals.map(credKey)), afterWdSet = new Set(after.withdrawals.map(credKey));
+  const beforeSignerSet = new Set(before.signers), afterSignerSet = new Set(after.signers);
+  return {
+    action: before.action,
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    holderCredentialChanged: !sameCred(before.holderCredential, after.holderCredential),
+    addedWithdrawals: after.withdrawals.filter(c => !beforeWdSet.has(credKey(c))),
+    removedWithdrawals: before.withdrawals.filter(c => !afterWdSet.has(credKey(c))),
+    addedSigners: after.signers.filter(h => !beforeSignerSet.has(h)),
+    removedSigners: before.signers.filter(h => !afterSignerSet.has(h)),
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: DELEGATE_LOGIC_EXECUTION_COMPARE_FIELDS.length,
+  };
+}
+
 // CIP-113 delegate RegistryNode resolution, modeled locally from the
 // spec's ThirdPartyAct / UnfrackingAct constructors and its Reference
 // Inputs section (re-read from the raw upstream spec this run): both
