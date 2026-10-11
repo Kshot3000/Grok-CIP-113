@@ -2152,6 +2152,132 @@ export function checkRegistryInsertBinding(claim) {
   };
 }
 
+export const REGISTRY_INSERT_BINDING_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['expectedPolicyId', 'Expected policy'],
+  ['datumMatchesRedeemer', 'Datum equals redeemer'],
+  ['policyBinding', 'Policy binding'],
+  ['mintingLogicInvoked', 'Minting logic invoked'],
+]);
+
+// CIP-113 RegistryInsert binding impact, compared locally between
+// two modeled versions of the SAME claimed registration — the
+// redeemer, datum, withdrawals, and template bytes as entered, and
+// as they would stand after some later change. Every other PRISM
+// checker family already had this temporal half; the registry
+// insert binding family, shipped as a single checker, had only the
+// check, so a builder whose registration bound when they modeled
+// it could not ask what a later change did to it — and the changes
+// that stale it need never touch the redeemer itself: a deployment
+// publishing a corrected issuance template (new prefix or postfix
+// bytes) re-derives a different policy for the same credential, a
+// substandard rotating its minting logic credential leaves the
+// datum and the withdrawals pointing at the old one, and assembly
+// rebuilding the registering transaction without the credential’s
+// withdraw-zero drops the proof of instance.
+//
+// Both versions are checked through checkRegistryInsertBinding
+// itself (validate-once, thirty-fourth application), so comparison
+// and checking can never disagree about either version, and a
+// version that cannot be read (an unknown or missing field, a key
+// that is not a 28-byte policy ID, a credential of an unknown kind
+// or with a hash of any other length, template bytes that are not
+// even-length hexadecimal, a withdrawals list naming a credential
+// twice) is refused on either side with the checker’s reason,
+// never compared around. Hex case is canonicalised by the checker
+// before comparison, so a key, a credential, or template bytes in
+// uppercase still name the same registration on either side.
+//
+// The comparison tracks ONE registration claim, but the claim has
+// no action identity of its own — like the authorization and
+// proof-list comparisons, any two readable versions compare: the
+// key is data the binding judges, not an identity a version could
+// drift from, and a registration re-pointed at the policy a new
+// credential derives IS the same registration carried forward.
+//
+// Five positions are compared, in the checker’s own order: the
+// status, the expected policy (the policy the issuance template,
+// parameterised by the redeemer’s credential, derives — the
+// requirement itself, as the dispatch comparison’s delegate
+// position is: the value the key must equal, derived rather than
+// declared, and null when the redeemer names a public-key
+// credential, on which the derivation aborts and no policy
+// exists), the datum-equals-redeemer verdict, the policy-binding
+// verdict, and the minting-logic-invoked verdict. THE SUBSTANCE is
+// what is NOT compared as a position. The key’s own change is
+// reported, never counted: its only scored consequence is the
+// binding verdict’s move, so counting it would count one fact
+// twice. The redeemer and datum credentials’ own changes and the
+// template bytes’ own changes are reported, never counted, for the
+// same reason: they are the inputs the expected policy and the
+// verdicts are computed from — the causes; the positions are the
+// consequence. The withdrawal list’s own change is reported as the
+// credentials added and removed, never counted: a stranger’s
+// withdrawal joining moves no position the checker scores, and the
+// minting logic’s own withdrawal leaving is scored exactly once,
+// in the invocation verdict.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because
+// the registration gaining or losing its binding is the headline
+// even when the expected policy also moved — then STILL NOT
+// CONFORMING (not bound on both sides, but not the same failure: a
+// position changed underneath it) and REQUIREMENT CHANGED (bound
+// on both sides, but a position moved — and every such move passes
+// through the expected-policy position: a minting logic credential
+// rotated, with the key re-derived for the new credential and the
+// datum and withdrawals following it, binds exactly as before
+// under a different derived policy; the three verdicts stand true
+// on both sides throughout).
+//
+// Boundary honesty carries over from the checker: the comparison
+// is between the two modeled versions entered, against the
+// template bytes entered in each. PRISM read no reference input
+// and no transaction and registered nothing, and comparing checks
+// neither version and builds no transaction. The registry NFT the
+// new node must hold is the outputs family’s position, on both
+// sides alike.
+export function diffRegistryInsertBinding(beforeClaim, afterClaim) {
+  const before = checkRegistryInsertBinding(beforeClaim);
+  const after = checkRegistryInsertBinding(afterClaim);
+  const positionOf = v => ({ status: v.status, expectedPolicyId: v.expectedPolicyId, datumMatchesRedeemer: v.verdicts.datumMatchesRedeemer, policyBinding: v.verdicts.policyBinding, mintingLogicInvoked: v.verdicts.mintingLogicInvoked });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of REGISTRY_INSERT_BINDING_COMPARE_FIELDS) {
+    if (beforePos[field] !== afterPos[field]) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const credKey = c => `${c.kind}:${c.hash}`;
+  const beforeWdrl = new Set(before.withdrawals.map(credKey));
+  const afterWdrl = new Set(after.withdrawals.map(credKey));
+  const templateOf = c => ({ prefix: String(c.issuancePrefix).trim().toLowerCase(), postfix: String(c.issuancePostfix).trim().toLowerCase() });
+  const beforeTemplate = templateOf(beforeClaim), afterTemplate = templateOf(afterClaim);
+  return {
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    keyChanged: before.key !== after.key,
+    mintingLogicChanged: credKey(before.mintingLogic) !== credKey(after.mintingLogic),
+    datumMintingLogicChanged: credKey(before.datumMintingLogic) !== credKey(after.datumMintingLogic),
+    templatePrefixChanged: beforeTemplate.prefix !== afterTemplate.prefix,
+    templatePostfixChanged: beforeTemplate.postfix !== afterTemplate.postfix,
+    withdrawalsAdded: [...afterWdrl].filter(w => !beforeWdrl.has(w)),
+    withdrawalsRemoved: [...beforeWdrl].filter(w => !afterWdrl.has(w)),
+    withdrawalCountBefore: before.withdrawals.length,
+    withdrawalCountAfter: after.withdrawals.length,
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: REGISTRY_INSERT_BINDING_COMPARE_FIELDS.length,
+  };
+}
+
 // CIP-113 RegistryInsert outputs, modeled locally from the spec's
 // registration requirements (points 5–7) and the Foundation reference
 // implementation's output validation (lib/linked_list.ak
@@ -2309,6 +2435,156 @@ export function checkRegistryInsertOutputs(claim) {
     prevOutput: { ...prevOutput, assets: prevOutput.assets.map(a => ({ ...a, quantity: a.quantity.toString() })) },
     newOutput: { ...newOutput, assets: newOutput.assets.map(a => ({ ...a, quantity: a.quantity.toString() })) },
     verdicts,
+  };
+}
+
+export const REGISTRY_INSERT_OUTPUTS_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['expectedNfts', 'Expected node NFTs'],
+  ['mintedNft', 'Minted registry NFT'],
+  ['prevNft', 'Covering node NFT'],
+  ['newNft', 'New node NFT'],
+  ['prevExtraValue', 'Covering node value'],
+  ['newExtraValue', 'New node value'],
+  ['prevNoReferenceScript', 'Covering node reference script'],
+  ['newNoReferenceScript', 'New node reference script'],
+  ['prevAddress', 'Covering node address'],
+  ['newAddress', 'New node address'],
+]);
+
+// CIP-113 RegistryInsert outputs impact, compared locally between
+// two modeled versions of the SAME claimed registration — its mint
+// and its two registry-node outputs as entered, and as they would
+// stand after some later change. With this comparison every PRISM
+// checker family has its temporal half; the registry insert outputs
+// family, shipped as a single checker, had only the check, so a
+// builder whose outputs conformed when they modeled them could not
+// ask what a later change did to them — and the changes that stale
+// them need never touch the outputs themselves: a registry
+// redeployed under a new registry policy re-points every node
+// address and every NFT the outputs must hold, a registration
+// re-planned against a different covering node changes the NFT the
+// returned output must carry, and transaction assembly rebuilding
+// an output — parking an extra asset in it, attaching a reference
+// script, paying it to a stake-bearing address — breaks a
+// requirement the output alone states.
+//
+// Both versions are checked through checkRegistryInsertOutputs
+// itself (validate-once, thirty-fifth application), so comparison
+// and checking can never disagree about either version, and a
+// version that cannot be read (an unknown or missing field, a key
+// that is not a 28-byte policy ID, an asset named twice in one
+// value, a quantity that is not a positive decimal string, a flag
+// that is not a boolean) is refused on either side with the
+// checker’s reason, never compared around. Hex case is
+// canonicalised by the checker before comparison.
+//
+// The comparison tracks ONE registration claim, but the claim has
+// no action identity of its own — like the binding comparison
+// above, any two readable versions compare: the key, the covering
+// key, and the registry policy are data the outputs are judged
+// against, not an identity a version could drift from.
+//
+// Eleven positions are compared, in the checker’s own order: the
+// status, the expected node NFTs (the registry policy together
+// with the two asset names the outputs and the mint must answer
+// to — the new node’s NFT named by the key being registered, the
+// returned covering node’s by its own key — the requirement
+// itself, as the dispatch comparison’s delegate position is),
+// the minted-NFT verdict, the two per-output NFT verdicts, the
+// two no-other-value verdicts, the two no-reference-script
+// verdicts, and the two payment-only-address verdicts. THE
+// SUBSTANCE is what is NOT compared as a position. The registry
+// policy’s, the key’s, and the covering key’s own changes are
+// reported as the breakdown of the expected-NFTs position, never
+// counted a second time. The mint’s and each output’s asset lists’
+// own changes are reported as the assets added and removed, never
+// counted: they are the causes; the verdict positions are the
+// consequence — an extra asset joining an output is scored exactly
+// once, in that output’s value verdict, and an output’s payment
+// hash, stake flag, or reference-script flag changing is reported,
+// never counted, its scored consequence being that output’s
+// address or reference-script verdict. The new node’s lovelace
+// amount is not modeled by the checker and so not compared: the
+// spec recommends the protocol minimum, it does not require it.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because
+// the outputs gaining or losing a requirement is the headline even
+// when the expected NFTs also moved — then STILL NOT CONFORMING
+// (not conforming on both sides, but not the same failure: a
+// position changed underneath it) and REQUIREMENT CHANGED
+// (conforming on both sides, but a position moved — and every
+// such move passes through the expected-NFTs position: a registry
+// policy re-pointed with the outputs’ payment credentials and
+// asset policies following it, or a covering node replaced with
+// the returned output’s NFT following it, conforms exactly as
+// before while answering to different NFTs; the nine verdicts
+// stand true on both sides throughout).
+//
+// Boundary honesty carries over from the checker: the comparison
+// is between the two modeled versions entered. PRISM read no
+// transaction and no UTxO and registered nothing, and comparing
+// checks neither version and builds no transaction. The list
+// mechanics are the insertion family’s position, the datum
+// contents the datum checker’s, and the cryptographic binding the
+// binding family’s, on both sides alike.
+export function diffRegistryInsertOutputs(beforeClaim, afterClaim) {
+  const before = checkRegistryInsertOutputs(beforeClaim);
+  const after = checkRegistryInsertOutputs(afterClaim);
+  const requirementOf = v => ({ registryPolicy: v.registryPolicy, key: v.key, prevKey: v.prevKey });
+  const positionOf = v => ({ status: v.status, expectedNfts: requirementOf(v), mintedNft: v.verdicts.mintedNft, prevNft: v.verdicts.prevNft, newNft: v.verdicts.newNft, prevExtraValue: v.verdicts.prevExtraValue, newExtraValue: v.verdicts.newExtraValue, prevNoReferenceScript: v.verdicts.prevNoReferenceScript, newNoReferenceScript: v.verdicts.newNoReferenceScript, prevAddress: v.verdicts.prevAddress, newAddress: v.verdicts.newAddress });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of REGISTRY_INSERT_OUTPUTS_COMPARE_FIELDS) {
+    const differs = field === 'expectedNfts' ? JSON.stringify(beforePos[field]) !== JSON.stringify(afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const mintedKey = a => `${a.name}:${a.quantity}`;
+  const assetKey = a => `${a.policy}:${a.name}:${a.quantity}`;
+  const setDiff = (beforeList, afterList, keyOf) => {
+    const b = new Set(beforeList.map(keyOf)), a = new Set(afterList.map(keyOf));
+    return { added: [...a].filter(x => !b.has(x)), removed: [...b].filter(x => !a.has(x)) };
+  };
+  const minted = setDiff(before.minted, after.minted, mintedKey);
+  const prevAssets = setDiff(before.prevOutput.assets, after.prevOutput.assets, assetKey);
+  const newAssets = setDiff(before.newOutput.assets, after.newOutput.assets, assetKey);
+  return {
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    registryPolicyChanged: before.registryPolicy !== after.registryPolicy,
+    keyChanged: before.key !== after.key,
+    prevKeyChanged: before.prevKey !== after.prevKey,
+    mintedAdded: minted.added,
+    mintedRemoved: minted.removed,
+    mintedCountBefore: before.minted.length,
+    mintedCountAfter: after.minted.length,
+    prevAssetsAdded: prevAssets.added,
+    prevAssetsRemoved: prevAssets.removed,
+    prevAssetCountBefore: before.prevOutput.assets.length,
+    prevAssetCountAfter: after.prevOutput.assets.length,
+    newAssetsAdded: newAssets.added,
+    newAssetsRemoved: newAssets.removed,
+    newAssetCountBefore: before.newOutput.assets.length,
+    newAssetCountAfter: after.newOutput.assets.length,
+    prevPaymentChanged: before.prevOutput.paymentHash !== after.prevOutput.paymentHash,
+    newPaymentChanged: before.newOutput.paymentHash !== after.newOutput.paymentHash,
+    prevStakeChanged: before.prevOutput.stakeCredential !== after.prevOutput.stakeCredential,
+    newStakeChanged: before.newOutput.stakeCredential !== after.newOutput.stakeCredential,
+    prevReferenceScriptChanged: before.prevOutput.referenceScript !== after.prevOutput.referenceScript,
+    newReferenceScriptChanged: before.newOutput.referenceScript !== after.newOutput.referenceScript,
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: REGISTRY_INSERT_OUTPUTS_COMPARE_FIELDS.length,
   };
 }
 
