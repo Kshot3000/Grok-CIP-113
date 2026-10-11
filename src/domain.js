@@ -4720,6 +4720,104 @@ export function checkTransferProofList(claim) {
   };
 }
 
+export const TRANSFER_PROOF_LIST_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['required', 'Required policies'],
+  ['completeness', 'Completeness'],
+  ['ordering', 'Ordering'],
+]);
+
+// CIP-113 TransferAct proof-list impact, compared locally between two
+// modeled versions of the SAME transfer — the transfer as checked
+// against the spent, mint, and proof lists as they stood, and as it
+// would stand after some later change (assembly adding a UTxO spent
+// from a base address, a mint or burn joining the transaction, or the
+// redeemer’s proof list being rebuilt in a different order). The
+// registry, base redeemer, delegate pairing, transfer output-value,
+// protocol upgrade, and global dispatch families already had this
+// temporal half; the proof-list family, shipped as a single checker,
+// had only the check, so a builder whose proof list conformed when
+// they modeled it could not ask what a later assembly change did to
+// it — and assembly is exactly where the spec’s three list
+// requirements (RegistryProof Requirements, re-read this run from
+// the raw upstream spec) are won or lost, because the required set is
+// DERIVED from the transaction the list rides in: change what the
+// transaction spends or mints and the list that was complete is
+// complete no longer.
+//
+// Both versions are checked through checkTransferProofList itself
+// (validate-once, twenty-eighth application), so comparison and
+// checking can never disagree about either version, and a version
+// that cannot be read (an unknown field, a spent list naming no
+// policy, a policy that is not a 28-byte ID) is refused on either
+// side with the checker’s reason, never compared around.
+//
+// Four positions are compared, in the checker’s own order: the
+// status, the required policies (the distinct union the checker
+// derives — the requirement itself, as the dispatch comparison’s
+// delegate position is), completeness, and ordering. THE SUBSTANCE
+// is what is NOT compared as a position. A required policy’s SOURCE
+// is reported separately as sourceChangedPolicies, never counted:
+// the requirement is the distinct union regardless of whether a
+// policy arrives by spending, by minting, or by both, so a policy
+// moving from spent-only to spent-and-minted (a second UTxO joins,
+// a mint of the same policy is added) moves no position — the same
+// one proof still covers it (pinned). The proof list’s own change
+// is reported as the added/removed proof policies, never counted:
+// it is the verdict positions above that say what the change did.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because the
+// list gaining or losing completeness or ordering is the headline
+// even when the required set also moved — then STILL NOT
+// CONFORMING (not conforming on both sides, but not the same
+// failure: the requirement or the failing position changed
+// underneath it) and REQUIREMENT CHANGED (conforming on both sides,
+// but the required set is a different set of policies — the list
+// survives, proving a different transfer than the one modeled
+// before).
+//
+// Boundary honesty carries over from the checker: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction and no UTxO, and comparing checks neither version and
+// builds no transaction. Whether each proof is CORRECT for its
+// policy remains the registry-proof checker’s and the proof
+// verifier’s positions, on both sides alike.
+export function diffTransferProofList(beforeClaim, afterClaim) {
+  const before = checkTransferProofList(beforeClaim);
+  const after = checkTransferProofList(afterClaim);
+  const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const positionOf = v => ({ status: v.status, required: v.required, completeness: v.completeness.complete, ordering: v.ordering.ordered });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of TRANSFER_PROOF_LIST_COMPARE_FIELDS) {
+    const differs = field === 'required' ? !sameList(beforePos[field], afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const beforeSource = new Map(before.perPolicy.map(r => [r.policy, r.source]));
+  const sourceChangedPolicies = after.perPolicy.filter(r => beforeSource.has(r.policy) && beforeSource.get(r.policy) !== r.source).map(r => r.policy);
+  const beforeProofSet = new Set(before.proofs), afterProofSet = new Set(after.proofs);
+  return {
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    sourceChangedPolicies,
+    addedProofs: [...afterProofSet].filter(p => !beforeProofSet.has(p)),
+    removedProofs: [...beforeProofSet].filter(p => !afterProofSet.has(p)),
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: TRANSFER_PROOF_LIST_COMPARE_FIELDS.length,
+  };
+}
+
 // CIP-113 protocol upgradability (spec section "Protocol
 // upgradability", re-read from the raw upstream spec): the credentials
 // that make up a deployment live in the protocol parameters datum as
