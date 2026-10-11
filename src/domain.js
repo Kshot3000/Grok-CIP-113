@@ -8000,3 +8000,68 @@ export function evaluateEligibilityCohort(policy, cohort=ELIGIBILITY_COHORT) {
     results,
   };
 }
+
+export const SERVICE_FEE_BPS_LEVELS = Object.freeze([0, 25, 50, 100, 250, 500]);
+
+// Disclosed service-fee model — the split PRISM's transfer models never
+// priced. A designer building a fee-earning application on a programmable
+// token (a swap interface, a payment tool, a marketplace) charges a small
+// fee that must be disclosed to its users exactly as it is taken. This
+// model performs that split in base units with BigInt arithmetic — the
+// same exactness the studio's transfer modeling uses — so a fee priced
+// here is the fee the design describes, with no float drift at any
+// supply scale. The percentage part is FLOOR(gross × bps ÷ 10,000): the
+// fee rounds DOWN to the base unit, never up, and the rounding remainder
+// stays with the recipient — a fee that rounded up would take more than
+// the disclosed rate. A fixed per-transfer fee (in the token's own
+// units) is added after the percentage part, and an optional cap bounds
+// the total; the cap binding is reported, never hidden. A fee that would
+// take the whole transfer is refused outright — the recipient would
+// receive nothing, and no honest fee schedule does that. The monthly
+// projection multiplies the single-transfer split by a transfer count
+// the designer supplies; no volume feed is read and no revenue is
+// promised — it is the designer's own entered volume at the modeled
+// fee. LOCAL MODEL ONLY: PRISM collects nothing, charges nothing, and
+// executes no transfer; the fee modeled belongs to the design being
+// priced, and presenting it to that design's users exactly as modeled
+// is the designer's responsibility.
+export function modelServiceFee(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const gross = toUnits(input.amount === undefined ? '0' : input.amount, decimals); // Validates amount + decimals.
+  if (gross <= 0n) throw new Error('Transfer amount must be greater than zero.');
+  const bps = input.feeBps === undefined ? 100 : Number(input.feeBps);
+  if (!Number.isInteger(bps) || bps < 0 || bps > 10000) throw new Error('Fee must be a whole number of basis points between 0 and 10,000.');
+  const fixed = toUnits(input.fixedFee === undefined || input.fixedFee === '' ? '0' : input.fixedFee, decimals);
+  const hasCap = !(input.maxFee === undefined || input.maxFee === null || input.maxFee === '');
+  const cap = hasCap ? toUnits(input.maxFee, decimals) : null;
+  const transfers = input.transfersPerMonth === undefined ? 100 : Number(input.transfersPerMonth);
+  if (!Number.isInteger(transfers) || transfers < 1 || transfers > 1000000) throw new Error('Monthly transfers must be a whole number between 1 and 1,000,000.');
+  const split = atBps => {
+    const uncapped = gross * BigInt(atBps) / 10000n + fixed;
+    const fee = cap !== null && uncapped > cap ? cap : uncapped;
+    return { feeBps: atBps, uncappedFee: uncapped, fee, capApplied: cap !== null && uncapped > cap, net: gross - fee };
+  };
+  const main = split(bps);
+  if (main.fee >= gross) throw new Error('The fee would take the whole transfer — the recipient would receive nothing. Lower the rate, the fixed fee, or the cap, or raise the amount.');
+  // Effective rate as exact text: hundredths of a basis point from the
+  // BigInt split, so the displayed rate is the split's own rate.
+  const hundredths = main.fee * 1000000n / gross;
+  const effectiveBpsText = `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  const count = BigInt(transfers);
+  return {
+    decimals,
+    gross,
+    feeBps: bps,
+    bpsFee: gross * BigInt(bps) / 10000n,
+    fixedFee: fixed,
+    maxFee: cap,
+    capApplied: main.capApplied,
+    uncappedFee: main.uncappedFee,
+    fee: main.fee,
+    net: main.net,
+    effectiveBpsText,
+    transfersPerMonth: transfers,
+    monthly: { gross: gross * count, fee: main.fee * count, net: main.net * count },
+    rows: SERVICE_FEE_BPS_LEVELS.map(level => { const s = split(level); return { feeBps: level, fee: s.fee, net: s.net, capApplied: s.capApplied, takesAll: s.fee >= gross }; }),
+  };
+}
