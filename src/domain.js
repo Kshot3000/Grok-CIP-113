@@ -6145,6 +6145,191 @@ export function diffProtocolUpgrade(plannedAgainstInput, currentInput, intent) {
   };
 }
 
+// CIP-113 transaction construction, checked locally against the spec's
+// six MUST steps for DeFi protocols constructing transactions with
+// programmable tokens (spec: "Implementing programmable tokens in DeFi
+// protocols — Transaction Construction", re-read 2026-10-11 from the
+// raw upstream spec). The spec warns that steps 1 and 3 are easy to
+// omit when adapting an existing integration, because neither is
+// visible in the token's own configuration: both are properties of
+// the deployment, read at validation time.
+//
+// Until now PRISM judged each step only inside a separate family whose
+// boundary names the others as not judged there — the base redeemer
+// family plans the params_idx / wdrl_idx hints of steps 1 and 3, the
+// dispatch checker judges the declared delegate's presence, the proof
+// families judge step 2's proofs, the authorization checker judges the
+// logic executions of step 5, and the smart-wallet tools derive step
+// 6's addresses. A transaction could pass every family it was checked
+// against and still omit a step nobody was asked about. This checker
+// is the capstone: it judges the six steps TOGETHER, in the spec's
+// own order, on presence and placement only.
+//
+// The six verdicts:
+// 1. paramsRefIncluded — the protocol parameters UTxO is among the
+//    transaction's reference inputs (its position, the params_idx
+//    hint, is the base redeemer family's position, not this one's).
+// 2. registryRefsComplete — for every distinct policy the transaction
+//    touches, a registry node (its own, or the covering node proving
+//    non-registration) is included as a reference input. Extra proved
+//    policies are reported, never a verdict: the spec requires a node
+//    for each policy touched and states no prohibition on another
+//    reference input riding along. Whether each proof is CORRECT —
+//    the right node, the right covering relationship — is the proof
+//    families' position, not this one's.
+// 3. globalInvoked — the programmableLogicGlobal credential the
+//    parameters name is executed as a withdraw-zero.
+// 4. delegateInvoked — the delegate credential for the declared
+//    action is executed as a withdraw-zero.
+// 5. logicInvoked — for every REGISTERED token touched, that token's
+//    logic script for the declared action is executed as a
+//    withdraw-zero. An unregistered token has no such script and
+//    carries no requirement here; when no registered token is
+//    modeled the verdict is null (no verdict), exactly the
+//    verdictless discipline of the dispatch and paired-outputs
+//    families.
+// 6. outputsToSmartWallets — every output carrying a touched policy
+//    sits at a smart-wallet address: its payment credential is the
+//    deployment's programmableLogicBase credential and it carries a
+//    stake credential. Outputs carrying no touched policy are
+//    reported with NO verdict (ordinary change is not this step's
+//    business); when no output carries a touched policy the verdict
+//    is null — the AMOUNTS those outputs must hold are the
+//    output-value family's position, not this one's.
+//
+// Refusal discipline as elsewhere: a claim that cannot be READ — an
+// unknown or missing field, an unknown action, an empty token list, a
+// policy listed twice among the tokens or the proved policies, a
+// duplicated reference input or withdrawal, a registered token
+// naming no logic credential or an unregistered token naming one, a
+// policy listed twice in one output, any hash that is not 28 bytes —
+// is refused with the reason, never scored in part. Hex case is
+// canonicalised.
+//
+// Boundary honesty: a conforming verdict proves only that the six
+// steps' presence and placement requirements hold for the modeled
+// transaction entered. PRISM read no transaction, no protocol
+// parameters UTxO, and no chain state, and built nothing: which
+// credential the parameters name as global or delegate today, and
+// which node covers an unregistered policy, are deployment data the
+// builder supplies here.
+export const TRANSACTION_CONSTRUCTION_VERDICTS = Object.freeze([
+  ['paramsRefIncluded', 'Protocol parameters reference input'],
+  ['registryRefsComplete', 'Registry node reference inputs'],
+  ['globalInvoked', 'programmableLogicGlobal withdraw-zero'],
+  ['delegateInvoked', 'Action delegate withdraw-zero'],
+  ['logicInvoked', 'Token logic withdraw-zero'],
+  ['outputsToSmartWallets', 'Programmable tokens to smart-wallet addresses only'],
+]);
+
+function constructionToken(value, index) {
+  const label = `Token ${index + 1}`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming its policy, whether it is registered, and its logic credential for the declared action.`);
+  for (const k of Object.keys(value)) if (!['policy', 'registered', 'logicCredential'].includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled token names only its policy, its registered flag, and its logic credential.`);
+  for (const k of ['policy', 'registered', 'logicCredential']) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — a token that cannot be read in full is refused, never scored in part. The logic credential may be null for an unregistered token, but the field must be stated.`);
+  const policy = registryPolicyId(value.policy, `${label}'s policy`);
+  if (typeof value.registered !== 'boolean') throw new Error(`${label}'s registered flag must be true or false — ${JSON.stringify(value.registered)} given.`);
+  if (value.registered && value.logicCredential === null) throw new Error(`${label} is registered but names no logic credential — a registered token's logic script for the declared action is exactly what step 5 must invoke.`);
+  if (!value.registered && value.logicCredential !== null) throw new Error(`${label} is unregistered but names a logic credential — an unregistered token has no registry node and no logic script; it is treated as an ordinary native token.`);
+  const logicCredential = value.logicCredential === null ? null : baseCredential(value.logicCredential, `${label}'s logic credential`);
+  return { policy, registered: value.registered, logicCredential };
+}
+
+function constructionOutput(value, index) {
+  const label = `Output ${index + 1}`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming its payment credential, its stake credential, and the policies it carries.`);
+  for (const k of Object.keys(value)) if (!['payment', 'stake', 'policies'].includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled output names only its payment credential, its stake credential, and the policies it carries.`);
+  for (const k of ['payment', 'stake', 'policies']) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — an output that cannot be read in full is refused, never scored in part. The stake credential may be null, but the field must be stated.`);
+  const payment = baseCredential(value.payment, `${label}'s payment credential`);
+  const stake = value.stake === null ? null : baseCredential(value.stake, `${label}'s stake credential`);
+  if (!Array.isArray(value.policies)) throw new Error(`${label}'s policies must be an array of policy IDs.`);
+  const policies = value.policies.map((pol, i) => registryPolicyId(pol, `${label}'s policy ${i + 1}`));
+  const seen = new Set();
+  for (const pol of policies) {
+    if (seen.has(pol)) throw new Error(`${label} lists policy ${pol} more than once — one output holds each policy's value once, as a single quantity.`);
+    seen.add(pol);
+  }
+  return { payment, stake, policies };
+}
+
+export function checkTransactionConstruction(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The construction claim must be an object naming the declared action, the deployment credentials, the tokens touched, the reference inputs and the one holding the protocol parameters, the policies proved by a registry reference input, the withdrawals, and the outputs.');
+  const inputFields = ['action', 'base', 'globalCredential', 'delegateCredential', 'tokens', 'referenceInputs', 'paramsRef', 'registryRefPolicies', 'withdrawals', 'outputs'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The construction claim carries an unknown field ${JSON.stringify(k)} — it names only the declared action, the base, global, and delegate credentials, the tokens, the reference inputs, the parameters reference, the proved policies, the withdrawals, and the outputs.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The construction claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  const action = globalDispatchAction(claim.action);
+  const base = baseCredential(claim.base, 'The programmableLogicBase credential');
+  const globalCredential = baseCredential(claim.globalCredential, 'The programmableLogicGlobal credential');
+  const delegateCredential = baseCredential(claim.delegateCredential, 'The action delegate credential');
+  if (!Array.isArray(claim.tokens) || !claim.tokens.length) throw new Error('The tokens touched must be a non-empty array — a construction touching no policy is not a programmable-token construction.');
+  const tokens = claim.tokens.map((t, i) => constructionToken(t, i));
+  const tokenPolicies = new Set();
+  for (const t of tokens) {
+    if (tokenPolicies.has(t.policy)) throw new Error(`Policy ${t.policy} is listed more than once among the tokens — the transaction touches each distinct policy once, however many UTxOs or mint entries carry it.`);
+    tokenPolicies.add(t.policy);
+  }
+  const referenceInputs = baseReferenceInputs(claim.referenceInputs);
+  if (typeof claim.paramsRef !== 'string' || !claim.paramsRef.trim()) throw new Error('The protocol parameters reference must name one of the reference inputs — the UTxO holding the protocol parameters NFT.');
+  const paramsRef = claim.paramsRef.trim();
+  if (!Array.isArray(claim.registryRefPolicies)) throw new Error('The proved policies must be an array of policy IDs — the policies a registry node reference input is included for.');
+  const registryRefPolicies = claim.registryRefPolicies.map((pol, i) => registryPolicyId(pol, `Proved policy ${i + 1}`));
+  const provedSet = new Set();
+  for (const pol of registryRefPolicies) {
+    if (provedSet.has(pol)) throw new Error(`Policy ${pol} is proved more than once — one registry node reference input proves each policy once.`);
+    provedSet.add(pol);
+  }
+  const withdrawals = baseWithdrawals(claim.withdrawals);
+  if (!Array.isArray(claim.outputs)) throw new Error('The outputs must be an array — the transaction outputs, each naming its payment and stake credentials and the policies it carries.');
+  const outputs = claim.outputs.map((o, i) => constructionOutput(o, i));
+  const inWithdrawals = c => withdrawals.some(w => w.kind === c.kind && w.hash === c.hash);
+  const sameCred = (a, b) => a.kind === b.kind && a.hash === b.hash;
+  const paramsRefIncluded = referenceInputs.includes(paramsRef);
+  const missingPolicies = tokens.map(t => t.policy).filter(pol => !provedSet.has(pol));
+  const extraProvedPolicies = registryRefPolicies.filter(pol => !tokenPolicies.has(pol));
+  const registryRefsComplete = missingPolicies.length === 0;
+  const globalInvoked = inWithdrawals(globalCredential);
+  const delegateInvoked = inWithdrawals(delegateCredential);
+  const logicResults = tokens.map(t => ({
+    policy: t.policy,
+    registered: t.registered,
+    logicCredential: t.logicCredential,
+    invoked: t.registered ? inWithdrawals(t.logicCredential) : null,
+  }));
+  const registeredResults = logicResults.filter(r => r.registered);
+  const logicInvoked = registeredResults.length ? registeredResults.every(r => r.invoked) : null;
+  const outputResults = outputs.map((o, i) => {
+    const carried = o.policies.filter(pol => tokenPolicies.has(pol));
+    return {
+      index: i,
+      carriedPolicies: carried,
+      toSmartWallet: carried.length ? (sameCred(o.payment, base) && o.stake !== null) : null,
+    };
+  });
+  const carryingResults = outputResults.filter(r => r.carriedPolicies.length);
+  const outputsToSmartWallets = carryingResults.length ? carryingResults.every(r => r.toSmartWallet) : null;
+  const verdicts = { paramsRefIncluded, registryRefsComplete, globalInvoked, delegateInvoked, logicInvoked, outputsToSmartWallets };
+  const valid = Object.values(verdicts).every(v => v === true || v === null);
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    action,
+    base,
+    globalCredential,
+    delegateCredential,
+    tokens,
+    referenceInputs,
+    paramsRef,
+    registryRefPolicies,
+    withdrawals,
+    outputs,
+    verdicts,
+    missingPolicies,
+    extraProvedPolicies,
+    logicResults,
+    outputResults,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
