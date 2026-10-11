@@ -4054,6 +4054,169 @@ export function checkDelegatePairedOutputs(claim) {
   };
 }
 
+export const DELEGATE_PAIRED_OUTPUTS_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['address', 'Address'],
+  ['datum', 'Datum'],
+  ['otherAssets', 'Other assets'],
+  ['referenceScript', 'Reference script'],
+  ['policyPosition', 'Policy position'],
+  ['balanceInvariant', 'Balance invariant'],
+  ['invariantExpectation', 'Invariant expectation'],
+]);
+
+// CIP-113 delegate paired-outputs impact, compared locally between
+// two modeled versions of the SAME paired-output claim — the claim
+// as checked against the pairs, other base outputs, and mint as
+// they stood, and as it would stand after some later change
+// (transaction assembly rebuilding an output, value moving between
+// the paired outputs and the other base outputs, a mint or burn
+// being adjusted). The registry, base redeemer, delegate pairing,
+// transfer output-value, protocol upgrade, global dispatch, transfer
+// proof-list, and logic-execution families already had this
+// temporal half; the paired-outputs family, shipped as a single
+// checker in v1.104, had only the check, so a builder whose claim
+// conformed when they modeled it could not ask what a later change
+// did to it — and the changes that stale it are the paired-output
+// validation's own moving parts (spec: delegate validation step 4):
+// an output rebuilt at a different address or with a different
+// datum breaks a pair that conformed, value moved out of the base
+// outputs breaks the balance invariant without any pair changing,
+// a mint or burn adjusted after the outputs were built moves the
+// invariant's floor out from under them, and the floor itself can
+// move while every verdict stands — a raised mint met by raised
+// base outputs leaves the claim conforming, but outputs built
+// against the old floor no longer prove the new one.
+//
+// Both versions are checked through checkDelegatePairedOutputs
+// itself (validate-once, thirtieth application), so comparison and
+// checking can never disagree about either version, and a version
+// that cannot be read (an unknown field, an asset listed twice in
+// one value, an empty pair list) is refused on either side with the
+// checker's reason, never compared around. Hex case is
+// canonicalised by the checker before comparison, so a datum or an
+// asset name listed in uppercase still names the same value on
+// either side.
+//
+// The comparison tracks ONE paired-output claim: the two versions
+// must declare the same action AND the same acted-on policy. A
+// ThirdPartyAct claim and an UnfrackingAct claim are judged under
+// different positions — the reference script carries a verdict for
+// one and none for the other — and a claim about a different policy
+// is a claim about a different token; which position moved is
+// meaningless when the claim itself changed — refused, never
+// scored.
+//
+// Eight positions are compared, in the checker's own order: the
+// status, the address verdict, the datum verdict, the other-assets
+// verdict, the reference-script verdict, the policy-position
+// verdict, the balance-invariant verdict, and the invariant
+// expectation. The verdict positions take the checker's verdicts,
+// so a position the spec gives no verdict compares equal on both
+// sides (the reference script is null for a third-party action on
+// both sides; the balance invariant is null for unfracking on both
+// sides) and can never differ. The expectation is the requirement
+// the invariant checks, as the logic-execution comparison's logic
+// credential is: for a third-party action it is the checker's
+// totals mapped to each asset name's expected quantity — the floor
+// at base, per asset — compared by deep equality; for unfracking
+// there is no invariant and so no expectation, and the position is
+// reported with no value (null) on both sides, exactly the
+// verdictless asymmetry discipline the checker itself applies.
+// THE SUBSTANCE is what is NOT compared as a position. Which pairs
+// themselves changed is reported as changedPairIndices — the
+// indices whose modeled pair differs — never counted: for a
+// third-party action a reference-script change inside a pair moves
+// no verdict at all, so counting the pair would invent the failure
+// the checker deliberately gives none, and where a pair's change
+// does move a verdict, that verdict's position already counts it.
+// The pair list's own growth is reported as addedPairCount and
+// removedPairCount, never counted: a pair the change adds pairs
+// automatically, and its whole consequence shows in the verdict
+// positions above. The totals' own breakdown is reported as
+// totalsChanges — per asset name in either version's totals, the
+// before/after expected, output, and mint quantities wherever any
+// of them differ — never counted: it is the breakdown OF the
+// expectation position, so counting it would count the floor's
+// move twice. A change in how many mint entries sit under other
+// policies is reported as excludedMintCountChanged, never counted:
+// those entries are excluded, never judged, on both sides alike.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because the
+// claim gaining or losing conformance is the headline even when
+// the invariant's floor also moved — then STILL NOT CONFORMING
+// (not conforming on both sides, but not the same failure: a
+// position changed underneath it) and REQUIREMENT CHANGED
+// (conforming on both sides, but the invariant expectation moved —
+// reachable exactly through the expectation position, since every
+// verdict position stands on both sides: the claim survives, and
+// the floor its outputs must cover at base addresses is no longer
+// the floor they were built against).
+//
+// Boundary honesty carries over from the checker: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction, no UTxO, and no registry, and comparing checks
+// neither version and builds no transaction. Whether the pairs are
+// either version's real pairs remains the pairing planner's
+// question, on both sides alike.
+export function diffDelegatePairedOutputs(beforeClaim, afterClaim) {
+  const before = checkDelegatePairedOutputs(beforeClaim);
+  const after = checkDelegatePairedOutputs(afterClaim);
+  if (before.action !== after.action) throw new Error(`The two modeled paired-output claims declare different actions \u2014 ${JSON.stringify(before.action)} before and ${JSON.stringify(after.action)} after. A comparison tracks one paired-output claim: the declared action names which delegate action the claim is about, and a different action is a different claim.`);
+  if (before.policy !== after.policy) throw new Error(`The two modeled paired-output claims declare different acted-on policies \u2014 ${JSON.stringify(before.policy)} before and ${JSON.stringify(after.policy)} after. A comparison tracks one paired-output claim: the acted-on policy names the token the claim is about, and a different policy is a different claim.`);
+  const expectationOf = v => v.action === 'third-party' ? v.totals.map(t => ({ assetName: t.assetName, expectedQuantity: t.expectedQuantity })) : null;
+  const positionOf = v => ({ status: v.status, address: v.verdicts.address, datum: v.verdicts.datum, otherAssets: v.verdicts.otherAssets, referenceScript: v.verdicts.referenceScript, policyPosition: v.verdicts.policyPosition, balanceInvariant: v.verdicts.balanceInvariant, invariantExpectation: expectationOf(v) });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of DELEGATE_PAIRED_OUTPUTS_COMPARE_FIELDS) {
+    const differs = field === 'invariantExpectation' ? JSON.stringify(beforePos[field]) !== JSON.stringify(afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const pairCount = Math.max(before.modeledPairs.length, after.modeledPairs.length);
+  const changedPairIndices = [];
+  for (let i = 0; i < pairCount; i++) {
+    if (JSON.stringify(before.modeledPairs[i] ?? null) !== JSON.stringify(after.modeledPairs[i] ?? null)) changedPairIndices.push(i);
+  }
+  const beforeTotals = new Map(before.totals.map(t => [t.assetName, t]));
+  const afterTotals = new Map(after.totals.map(t => [t.assetName, t]));
+  const totalsChanges = [...new Set([...beforeTotals.keys(), ...afterTotals.keys()])].sort().map(assetName => {
+    const b = beforeTotals.get(assetName) ?? null, a = afterTotals.get(assetName) ?? null;
+    return {
+      assetName,
+      beforeExpectedQuantity: b ? b.expectedQuantity : null,
+      afterExpectedQuantity: a ? a.expectedQuantity : null,
+      beforeOutputQuantity: b ? b.outputQuantity : null,
+      afterOutputQuantity: a ? a.outputQuantity : null,
+      beforeMintQuantity: b ? b.mintQuantity : null,
+      afterMintQuantity: a ? a.mintQuantity : null,
+    };
+  }).filter(t => t.beforeExpectedQuantity !== t.afterExpectedQuantity || t.beforeOutputQuantity !== t.afterOutputQuantity || t.beforeMintQuantity !== t.afterMintQuantity);
+  return {
+    action: before.action,
+    policy: before.policy,
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    changedPairIndices,
+    addedPairCount: Math.max(0, after.modeledPairs.length - before.modeledPairs.length),
+    removedPairCount: Math.max(0, before.modeledPairs.length - after.modeledPairs.length),
+    totalsChanges,
+    excludedMintCountChanged: before.excludedMintCount !== after.excludedMintCount,
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: DELEGATE_PAIRED_OUTPUTS_COMPARE_FIELDS.length,
+  };
+}
+
 // CIP-113 delegate logic execution, modeled locally from the spec's
 // delegate validation step 3 and the two action constructors
 // (ThirdPartyAct / UnfrackingAct, re-read from the raw upstream spec
