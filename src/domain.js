@@ -3064,6 +3064,113 @@ export function checkGlobalDispatch(claim) {
   };
 }
 
+export const GLOBAL_DISPATCH_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['delegate', 'Declared action\u2019s delegate'],
+  ['delegateInvoked', 'Delegate invoked'],
+]);
+
+// CIP-113 programmableLogicGlobal dispatch impact, compared locally
+// between two modeled versions of the SAME dispatch — the dispatch as
+// checked against the wiring and withdrawals as they stood, and as it
+// would stand after some other change (a protocol upgrade re-pointing
+// a delegate in the parameters, a withdrawal added or dropped while
+// assembling the transaction). The registry, base redeemer, delegate
+// pairing, transfer output-value, and protocol upgrade families
+// already had this temporal half; the dispatch family, shipped as a
+// single checker, had only the check, so a builder whose dispatch
+// conformed when they modeled it could not ask what a later change
+// did to it — and the spec's own consequence for integrators is
+// exactly this staleness: because delegate credentials are read live,
+// "an integrator holding a programmable token cannot assume that the
+// logic which validated a past transfer is the logic that will
+// validate the next one" (spec: Protocol upgradability, Consequences
+// for integrators, re-read this run from the raw upstream spec).
+//
+// Both versions are checked through checkGlobalDispatch itself
+// (validate-once, twenty-seventh application), so comparison and
+// checking can never disagree about either version, and a version
+// that cannot be read (an unknown action, a payload on the claim,
+// incomplete wiring, a duplicated withdrawal) is refused on either
+// side with the checker's reason, never compared around.
+//
+// The comparison tracks ONE dispatch: the two versions must declare
+// the same action. A TransferAct dispatch and a ThirdPartyAct
+// dispatch are different redeemer arms of the same validator, and
+// which delegate moved is meaningless when the declared action
+// itself changed — refused, never scored.
+//
+// Three positions are compared, in the checker's own order: the
+// status, the delegate credential the wiring names for the declared
+// action, and the one verdict (that delegate invoked). THE SUBSTANCE
+// is what is NOT compared as a position. The other two delegates'
+// wiring is reported separately as wiringChangedFields, never
+// counted: re-pointing an undeclared action's delegate moves no
+// position of THIS dispatch — its requirement reads only its own
+// action's field — though it is exactly the change that would stale
+// a dispatch declaring that other action (pinned). The other
+// delegates' invocation is likewise reported separately as
+// otherDelegatesChanged, never counted: the checker gives it NO
+// verdict, so a comparison that counted it would invent the
+// prohibition the checker refuses to invent. The withdrawal list's
+// own change is reported as the added/removed withdrawal
+// credentials, never counted.
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because the
+// dispatch gaining or losing its one requirement is the headline
+// even when the required delegate also moved — then STILL NOT
+// CONFORMING (not conforming on both sides, but not the same
+// failure: the required delegate changed underneath it) and
+// REQUIREMENT CHANGED (conforming on both sides, but the delegate
+// the wiring requires is a different credential — the dispatch
+// survives, and what validates the action is no longer what
+// validated it before).
+//
+// Boundary honesty carries over from the checker: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction, no protocol parameters UTxO, and no chain state, and
+// comparing checks neither version and builds no transaction.
+export function diffGlobalDispatch(beforeClaim, afterClaim) {
+  const before = checkGlobalDispatch(beforeClaim);
+  const after = checkGlobalDispatch(afterClaim);
+  if (before.action !== after.action) throw new Error(`The two modeled dispatches declare different actions \u2014 ${JSON.stringify(before.action)} before and ${JSON.stringify(after.action)} after. A comparison tracks one dispatch: the declared action is the dispatcher's redeemer arm, and a different arm is a different dispatch.`);
+  const sameCred = (a, b) => a.kind === b.kind && a.hash === b.hash;
+  const positionOf = v => ({ status: v.status, delegate: v.delegate, delegateInvoked: v.delegateInvoked });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of GLOBAL_DISPATCH_COMPARE_FIELDS) {
+    const differs = field === 'delegate' ? !sameCred(beforePos[field], afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const wiringFields = [['transfer', 'transfer'], ['thirdParty', 'third-party'], ['unfracking', 'unfracking']];
+  const wiringChangedFields = wiringFields.filter(([k]) => !sameCred(before.delegates[k], after.delegates[k])).map(([, a]) => a);
+  const credKey = c => `${c.kind}|${c.hash}`;
+  const beforeWdSet = new Set(before.withdrawals.map(credKey)), afterWdSet = new Set(after.withdrawals.map(credKey));
+  const otherDelegatesChanged = before.otherDelegates.some((o, i) => o.invoked !== after.otherDelegates[i].invoked);
+  return {
+    action: before.action,
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    wiringChangedFields,
+    addedWithdrawals: after.withdrawals.filter(c => !beforeWdSet.has(credKey(c))),
+    removedWithdrawals: before.withdrawals.filter(c => !afterWdSet.has(credKey(c))),
+    otherDelegatesChanged,
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: GLOBAL_DISPATCH_COMPARE_FIELDS.length,
+  };
+}
+
 // CIP-113 action-delegate pairing planning, modeled locally from the
 // spec's ThirdPartyAct and UnfrackingAct sections.
 //
