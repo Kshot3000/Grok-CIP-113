@@ -4286,8 +4286,8 @@ export function checkTransferAuthorization(claim) {
 // written by the registry validator are facts about a real registry
 // this model does not read. Whether the proofs list is COMPLETE
 // (one per distinct spent or minted policy) and in lexicographic
-// order is the proof verifier's position, against its modeled
-// lists; whether the credential a matched node names was actually
+// order is checkTransferProofList's position, against the modeled
+// transfer's own spent and mint policies; whether the credential a matched node names was actually
 // executed, and each spend authorised, is the authorization
 // checker's, above; the expected output value is the output-value
 // family's, below.
@@ -4385,6 +4385,117 @@ export function checkTransferRegistryProofs(claim) {
     referenceCount: nodes.length,
     existsCount: proofResults.filter(r => r.proofType === 'TokenExists').length,
     notExistsCount: proofResults.filter(r => r.proofType === 'TokenDoesNotExist').length,
+  };
+}
+
+// CIP-113 TransferAct proof-list completeness and ordering, modeled
+// locally from the spec's RegistryProof Requirements (re-read from
+// the raw upstream spec this run): the proofs list in a TransferAct
+// redeemer MUST satisfy three requirements at once — completeness,
+// ordering, and correctness. Correctness of each individual proof is
+// judged elsewhere in PRISM (verifyRegistryProofs against a modeled
+// registry key list, and checkTransferRegistryProofs against modeled
+// reference inputs). This checker judges the two requirements that
+// are about the list AS A WHOLE, against the transfer itself:
+//
+// - COMPLETENESS: one proof for each distinct non-lovelace token
+//   policy present in any UTxO being spent from
+//   programmableLogicBase OR in tx.mint. The required set is the
+//   DISTINCT UNION of the two sources: a policy both spent and
+//   minted is proven ONCE, not twice — demanding a second proof for
+//   it would refuse a list the delegate accepts. Mint belongs in
+//   the union at all because the spec's transfer security
+//   considerations say minted and burned tokens are validated
+//   through the same proofs list as spent tokens: a mint-only policy
+//   with no proof would bypass the registry check entirely. A
+//   required policy with no proof is MISSING, a proof for a policy
+//   the transfer neither spends from base nor mints is EXTRA, and a
+//   policy proven more than once is a DUPLICATE — each named
+//   separately, because the fix differs.
+// - ORDERING: the list order MUST match the lexicographic ordering
+//   of the token policies — bytewise, as the spec's own ordering
+//   defines it. Every policy here is 28 bytes, compared with the
+//   same registryBytesCompare the covering-node formula uses.
+//   Judged on the claimed sequence as given: the first adjacent pair
+//   that is not strictly increasing fails it, at that position — a
+//   duplicate is out of order with itself.
+//
+// The modeled spent and mint lists are OCCURRENCE lists — one entry
+// per policy occurrence (a policy held by two spent UTxOs, or minted
+// under two asset names, appears once per occurrence) — and collapse
+// to the distinct set the requirement names; a repeated occurrence
+// is a fact about the transfer, never a refusal. The claimed proof
+// list, by contrast, is judged exactly as given, duplicates
+// included.
+//
+// Refusal discipline, as in PRISM's other checkers: a claim that
+// cannot be READ — an unknown or missing field, a spent list naming
+// no policy (a modeled transfer spending no non-lovelace policy from
+// a base address states no proof requirement for this checker to
+// judge), a policy that is not a 28-byte ID in any of the three
+// lists — is refused, never scored in part. An EMPTY proof list, by
+// contrast, is a readable claim: it fails completeness with every
+// required policy named missing. Hex case is canonicalised before
+// comparison.
+//
+// Boundary honesty: these verdicts judge the modeled spent, mint,
+// and proof lists entered. PRISM read no transaction and no UTxO:
+// which policies a real transaction's base UTxOs and mint actually
+// carry are facts about that transaction, not judged here. Whether
+// each listed proof accurately represents its policy's registration
+// status (correctness) is the proof verifier's position against its
+// modeled key list, and the registry-proof checker's against its
+// modeled reference inputs; whether a proven-registered token's
+// transfer logic executed and each spend was authorised is the
+// authorization checker's; the expected output value is the
+// output-value family's.
+export function checkTransferProofList(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The proof-list claim must be an object naming the policies spent from programmableLogicBase, the policies in the transaction mint, and the policies the claimed proof list proves, in list order.');
+  const inputFields = ['spentPolicies', 'mintPolicies', 'proofPolicies'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The proof-list claim carries an unknown field ${JSON.stringify(k)} — it names only the spent policies, the mint policies, and the proof policies.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The proof-list claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  if (!Array.isArray(claim.spentPolicies) || !claim.spentPolicies.length) throw new Error('The spent policies must be a non-empty list, one entry per non-lovelace policy occurrence in a UTxO spent from programmableLogicBase — a modeled transfer spending no such policy states no proof requirement to judge.');
+  if (!Array.isArray(claim.mintPolicies)) throw new Error('The mint policies must be a list, one entry per policy occurrence in the transaction mint — an empty list models a transfer that mints and burns nothing.');
+  if (!Array.isArray(claim.proofPolicies)) throw new Error('The proof policies must be a list, one entry per proof in the claimed list, in list order — an empty list models a transfer claiming no proofs at all.');
+  const spent = claim.spentPolicies.map((p, i) => registryPolicyId(p, `Spent policy ${i + 1}`));
+  const mint = claim.mintPolicies.map((p, i) => registryPolicyId(p, `Mint policy ${i + 1}`));
+  const proofs = claim.proofPolicies.map((p, i) => registryPolicyId(p, `Proof ${i + 1}'s policy`));
+  const spentSet = new Set(spent);
+  const mintSet = new Set(mint);
+  const required = [...new Set([...spent, ...mint])].sort((a, b) => registryBytesCompare(a, b));
+  const proofCounts = new Map();
+  for (const p of proofs) proofCounts.set(p, (proofCounts.get(p) ?? 0) + 1);
+  const perPolicy = required.map(policy => ({
+    policy,
+    source: spentSet.has(policy) && mintSet.has(policy) ? 'spent-and-minted' : spentSet.has(policy) ? 'spent' : 'minted',
+    proven: proofCounts.has(policy),
+  }));
+  const missing = perPolicy.filter(r => !r.proven).map(r => r.policy);
+  const extra = [...new Set(proofs.filter(p => !spentSet.has(p) && !mintSet.has(p)))];
+  const duplicates = [...proofCounts.entries()].filter(([, n]) => n > 1).map(([p]) => p);
+  let firstOutOfOrder = null;
+  for (let i = 1; i < proofs.length; i++) {
+    if (registryBytesCompare(proofs[i], proofs[i - 1]) <= 0) { firstOutOfOrder = i; break; }
+  }
+  const completeness = { complete: missing.length === 0 && extra.length === 0 && duplicates.length === 0, missing, extra, duplicates };
+  const ordering = { ordered: firstOutOfOrder === null, firstOutOfOrder };
+  const valid = completeness.complete && ordering.ordered;
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    required,
+    perPolicy,
+    proofs,
+    completeness,
+    ordering,
+    requiredCount: required.length,
+    proofCount: proofs.length,
+    spentDistinctCount: spentSet.size,
+    mintDistinctCount: mintSet.size,
+    overlapCount: perPolicy.filter(r => r.source === 'spent-and-minted').length,
+    missingCount: missing.length,
+    extraCount: extra.length,
+    duplicateCount: duplicates.length,
   };
 }
 
