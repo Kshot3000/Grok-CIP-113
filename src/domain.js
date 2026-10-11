@@ -6922,6 +6922,108 @@ export function checkRegistryIntegrity(claim) {
   };
 }
 
+export const USER_STATE_MODES = Object.freeze(['none', 'spending-user', 'transfer-users']);
+export const USER_STATE_INCLUSION = Object.freeze(['included', 'omitted', 'not-applicable']);
+export const USER_STATE_QUERIES = Object.freeze(['nft', 'other', 'not-applicable']);
+export const USER_STATE_VERDICTS = Object.freeze([
+  ['senderStateIncluded', 'Sender user-state reference input'],
+  ['receiverStateIncluded', 'Receiver user-state reference input'],
+]);
+
+function userStateEnum(value, allowed, label) {
+  if (!allowed.includes(value)) throw new Error(`${label} must be one of ${allowed.join(', ')} — ${JSON.stringify(value)} given.`);
+  return value;
+}
+
+// CIP-113 user-state reference inputs, checked locally against the
+// transfer profile a reviewer enters for one substandard (spec:
+// "Reference Inputs", item 4, and "Existing substandards", both
+// re-read 2026-10-11): "Depending on the substandard implementation,
+// one or more reference inputs representing user state MAY be
+// required. The exact requirements depend on the substandard", and
+// each substandard manages user state differently — no state at all,
+// one state per user involved in the spending (queried by NFT, as
+// when a sender must provide a reference input carrying their
+// allowlist NFT), or one state per user involved in the transfer
+// itself, inputs and outputs (both sender and receiver providing
+// reference inputs proving KYC status).
+//
+// The requirement is CONDITIONAL ON THE SUBSTANDARD: the section
+// imposes no user-state duty of its own — it makes the duty a
+// property of the substandard's stated mode, which the reviewer
+// enters here and this checker does not judge. READY means the
+// entered transfer includes exactly the user-state reference inputs
+// its entered mode requires, nothing more. PRISM judged this
+// nowhere: its learn path teaches the three modes, its KYC and
+// allowlist simulators model eligibility outcomes, and its
+// transaction families judge the protocol-parameters, registry, and
+// global-state reference inputs — but whether a transfer carries the
+// user-state reference inputs its own substandard's mode requires
+// was judged in no panel, so a transfer under a both-parties KYC
+// substandard that omitted the receiver's state input passed every
+// panel it touched. This checker judges exactly that, on the entered
+// profile:
+//   1. senderStateIncluded — scored in both state modes: the sender
+//      is a user involved in the spending in each. Null — NO
+//      VERDICT — under a stateless substandard, where no user state
+//      exists to include.
+//   2. receiverStateIncluded — scored only in the transfer-users
+//      mode, where the receiver is also a user involved in the
+//      transfer; null in the spending-user mode (the receiver is not
+//      involved in the spending) and under no state.
+// A stateless profile is ready vacuously: every position carries no
+// verdict and nothing is required — readiness there names the
+// absence of a requirement, not a passed check.
+// How the state is queried is REPORTED, never scored: the spec
+// presents NFT querying as the modes' stated method, in examples,
+// while the requirement the section attaches is that the state
+// reference inputs be provided — so a profile is ready with another
+// query method, and an NFT query cannot rescue an omitted state
+// input (pinned both ways in the tests).
+// A claim that cannot be read is refused, never scored in part: an
+// unknown or missing field, an unknown value, and the conditional
+// refusals — state inputs or a query method named where the mode
+// manages no state, a sender input declared not-applicable in a
+// state mode (the sender is involved in both), a receiver input
+// declared not-applicable where the mode involves the receiver or
+// named where it does not, and a query method declared
+// not-applicable while a mode manages state.
+// Local model only: PRISM inspected no transfer and read no
+// substandard or chain state — the profile is the reviewer's own
+// reading of the substandard and the transfer, entered here, and
+// this checker judges its completeness and consistency against the
+// spec's user-state modes.
+export function checkUserStateReferences(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The user-state profile must be an object naming the substandard state mode, whether the sender and receiver state reference inputs are included, and how the state is queried.');
+  const inputFields = ['stateMode', 'senderState', 'receiverState', 'stateQuery'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The user-state profile carries an unknown field ${JSON.stringify(k)} — it names only the state mode, the sender and receiver state inputs, and the state query method.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The user-state profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part.`);
+  const stateMode = userStateEnum(claim.stateMode, USER_STATE_MODES, 'The state mode');
+  const senderState = userStateEnum(claim.senderState, USER_STATE_INCLUSION, 'The sender state field');
+  const receiverState = userStateEnum(claim.receiverState, USER_STATE_INCLUSION, 'The receiver state field');
+  const stateQuery = userStateEnum(claim.stateQuery, USER_STATE_QUERIES, 'The state query field');
+  if (stateMode === 'none' && (senderState !== 'not-applicable' || receiverState !== 'not-applicable' || stateQuery !== 'not-applicable')) throw new Error('The profile names user state where the substandard manages no state — a stateless substandard has no state inputs to include and no state to query.');
+  if (stateMode !== 'none' && senderState === 'not-applicable') throw new Error('The profile names the sender state input not-applicable in a state mode — the sender is a user involved in the spending in both state modes, so the sender input always applies.');
+  if (stateMode === 'transfer-users' && receiverState === 'not-applicable') throw new Error('The profile names the receiver state input not-applicable where the mode involves the receiver — a transfer-users substandard manages state for the receiver too, so the receiver input applies.');
+  if (stateMode === 'spending-user' && receiverState !== 'not-applicable') throw new Error('The profile names a receiver state input where the mode involves only the spending user — the receiver is not a user involved in the spending, so no receiver input applies.');
+  if (stateMode !== 'none' && stateQuery === 'not-applicable') throw new Error('The profile names the state query method not-applicable while the substandard manages state — state that is managed is queried somehow, and the profile must say how.');
+  const verdicts = {
+    senderStateIncluded: stateMode === 'none' ? null : senderState === 'included',
+    receiverStateIncluded: stateMode === 'transfer-users' ? receiverState === 'included' : null,
+  };
+  const valid = Object.values(verdicts).every(v => v !== false);
+  return {
+    status: valid ? 'ready' : 'not-ready',
+    valid,
+    stateMode,
+    senderState,
+    receiverState,
+    stateQuery,
+    stateQueriedByNft: stateQuery === 'nft',
+    verdicts,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
