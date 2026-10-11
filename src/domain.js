@@ -6748,6 +6748,89 @@ export function checkLendingIntegration(claim) {
   };
 }
 
+export const VAULT_DEPOSIT_DESTINATIONS = Object.freeze(['vault-smart-wallet', 'vault-ordinary-address', 'user-smart-wallet']);
+export const VAULT_TRANSFER_VALIDATION = Object.freeze(['applies', 'skipped']);
+export const VAULT_WITHDRAWAL_DESTINATIONS = Object.freeze(['user-smart-wallet', 'user-ordinary-address', 'vault-smart-wallet']);
+export const VAULT_INTEGRATION_VERDICTS = Object.freeze([
+  ['depositsToVaultSmartWallet', 'Deposits received at the vault’s smart wallet'],
+  ['interProtocolTransfersValidated', 'Validation on each inter-protocol transfer'],
+  ['withdrawalsToUserSmartWallet', 'Withdrawals sent to the user’s smart wallet'],
+]);
+
+function vaultEnum(value, allowed, label) {
+  if (!allowed.includes(value)) throw new Error(`${label} must be one of ${allowed.join(', ')} — ${JSON.stringify(value)} given.`);
+  return value;
+}
+
+// CIP-113 yield aggregators and vaults, checked locally against the
+// profile a reviewer enters for one vault (spec: "Implementing
+// programmable tokens in DeFi protocols", "Yield Aggregators and
+// Vaults", re-read 2026-10-11).
+//
+// The vault subsection states NO MUST and NO SHOULD — unlike the DEX
+// subsection beside it, which imposes MUSTs, and the lending
+// subsection, which adds a SHOULD. It lists, descriptively, three
+// practices by which vaults manage programmable tokens: (1) receiving
+// deposits at the vault's smart wallet address, (2) moving tokens
+// between protocols with proper validation on each transfer, and
+// (3) sending withdrawals to users' smart wallet addresses. This
+// checker therefore judges FOLLOWING THE LISTED PRACTICES, and says
+// so wherever it renders: READY here means the entered profile
+// follows all three listed practices — it does not mean the vault
+// meets a duty, because this subsection imposes none, and this
+// checker invents none. A vault that skips a listed practice is not
+// managing programmable tokens the way the section describes, and
+// the missing practice names what it does differently.
+// PRISM judged none of the three for a vault as a whole: the DEX
+// checker judges where LP tokens go and the lending checker where a
+// protocol receives collateral, but a vault deposit is neither; the
+// transaction families judge validation inside single transactions,
+// not a vault's practice across every inter-protocol move; and no
+// panel judged where a vault sends withdrawals. This checker judges
+// exactly that, on the entered profile:
+//   1. depositsToVaultSmartWallet — deposits are received at the
+//      vault's own smart wallet (the user's smart wallet fails too —
+//      a deposit left there has not been received by the vault).
+//   2. interProtocolTransfersValidated — moving tokens between
+//      protocols applies proper validation on EACH transfer (one
+//      position: the practice is stated per-transfer, so validating
+//      some moves and not others is not the listed practice).
+//   3. withdrawalsToUserSmartWallet — withdrawals are sent to the
+//      user's smart wallet (the vault's own smart wallet fails too —
+//      a withdrawal still sitting at the vault has not been sent to
+//      the user — as does the user's ordinary address, where
+//      programmable tokens never live).
+// A claim that cannot be read is refused, never scored in part: an
+// unknown or missing field, an unknown value. The section states no
+// conditional field, so no conditional refusal is invented for it.
+// Local model only: PRISM inspected no vault and read no chain
+// state — the profile is the reviewer's own reading of the vault,
+// entered here, and this checker judges its completeness and
+// consistency against the spec's listed vault practices.
+export function checkVaultIntegration(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The vault profile must be an object naming where deposits are received, whether proper validation applies on each transfer between protocols, and where withdrawals are sent.');
+  const inputFields = ['depositDestination', 'transferValidation', 'withdrawalDestination'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The vault profile carries an unknown field ${JSON.stringify(k)} — it names only the deposit destination, the transfer validation, and the withdrawal destination.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The vault profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part.`);
+  const depositDestination = vaultEnum(claim.depositDestination, VAULT_DEPOSIT_DESTINATIONS, 'The deposit destination');
+  const transferValidation = vaultEnum(claim.transferValidation, VAULT_TRANSFER_VALIDATION, 'The transfer validation field');
+  const withdrawalDestination = vaultEnum(claim.withdrawalDestination, VAULT_WITHDRAWAL_DESTINATIONS, 'The withdrawal destination');
+  const verdicts = {
+    depositsToVaultSmartWallet: depositDestination === 'vault-smart-wallet',
+    interProtocolTransfersValidated: transferValidation === 'applies',
+    withdrawalsToUserSmartWallet: withdrawalDestination === 'user-smart-wallet',
+  };
+  const valid = Object.values(verdicts).every(v => v === true);
+  return {
+    status: valid ? 'ready' : 'not-ready',
+    valid,
+    depositDestination,
+    transferValidation,
+    withdrawalDestination,
+    verdicts,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
