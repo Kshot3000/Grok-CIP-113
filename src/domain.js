@@ -2950,6 +2950,120 @@ export function diffBaseSpendRedeemer(beforeInput, afterInput) {
   };
 }
 
+// CIP-113 programmableLogicGlobal dispatch, modeled locally from the
+// spec's Layer 2 component list, its Transfer section, and its
+// "Architecture: Delegation Pattern" (re-read from the raw upstream
+// spec this run): the delegation chain has three links, and this is
+// the middle one. programmableLogicBase (the first link, planned and
+// verified above) reads the live programmableLogicGlobal credential
+// from the protocol parameters datum and requires its withdraw-zero.
+// programmableLogicGlobal itself "is a dispatcher, not the validator
+// of record": it is parameterized by the credentials of the action
+// delegates, reads the declared action from its redeemer, and does
+// exactly one thing — require that the delegate for the declared
+// action was invoked in this transaction. It "performs no validation
+// of its own": every check on the action itself belongs to the third
+// link, that action's delegate, judged by the delegate and transfer
+// checkers below.
+//
+// The dispatcher's redeemer arms carry no payload — TransferAct,
+// ThirdPartyAct, UnfrackingAct are names, not records. Everything an
+// action needs travels in its own delegate's redeemer, and repeating
+// any of it in the dispatcher's redeemer would create a second,
+// unchecked claim about the same fact. This claim therefore names
+// only the declared action, the deployment's delegate wiring, and the
+// transaction's withdrawals: an unknown field is refused outright,
+// because a dispatcher claim carrying a payload is not a dispatcher
+// claim this standard defines.
+//
+// The delegate wiring is modeled as the three delegate credentials
+// the protocol parameters name — the live wiring the upgrade family
+// below can re-point — because that datum, not a cached value, is
+// the authority on which delegate serves which action today.
+//
+// One verdict position, because the dispatcher imposes exactly one
+// requirement:
+// - delegateInvoked: the delegate credential the wiring names for
+//   the DECLARED action appears among the modeled withdrawals,
+//   kind and hash both — its withdraw-zero invocation in this
+//   transaction. The other two delegates are reported with NO
+//   verdict (null): the spec requires the declared action's
+//   delegate and states no prohibition on another delegate also
+//   being invoked, and a requirement the spec does not state gets
+//   no failure here — the same asymmetry discipline as the
+//   paired-outputs reference script. A transaction in which the
+//   wrong delegate was invoked therefore fails on the declared
+//   action's absence, never on the other's presence.
+//
+// Refusal discipline, as in PRISM's other checkers: a claim that
+// cannot be READ — an unknown action, an unknown or missing field,
+// a wiring object naming anything but the three delegates, a
+// delegate credential whose hash is not 28 bytes, a withdrawal
+// credential listed twice — is refused, never scored in part. Hex
+// case is canonicalised before comparison.
+//
+// Boundary honesty: these verdicts judge the modeled action,
+// wiring, and withdrawals entered. PRISM read no transaction and
+// no protocol parameters UTxO: which credential the parameters
+// datum names for each action today, and whether the global
+// validator deployed for a deployment was really parameterized by
+// those delegate credentials at compile time, are deployment facts
+// this model does not read. Whether the base validator's hints
+// resolve to the parameters UTxO and this global credential's
+// withdraw-zero is the base redeemer family's position above;
+// everything the invoked delegate then validates — pairing, paired
+// outputs, logic execution, registry proofs, authorization — is
+// the delegate and transfer checkers' positions below.
+export const GLOBAL_DISPATCH_ACTIONS = Object.freeze(['transfer', 'third-party', 'unfracking']);
+
+const GLOBAL_DISPATCH_DELEGATE_FIELDS = Object.freeze({ transfer: 'transfer', 'third-party': 'thirdParty', unfracking: 'unfracking' });
+
+function globalDispatchAction(value) {
+  if (!GLOBAL_DISPATCH_ACTIONS.includes(value)) throw new Error(`The declared action must be transfer, third-party, or unfracking — ${JSON.stringify(value)} given. The dispatcher's redeemer names one of the three actions and carries no payload beyond it.`);
+  return value;
+}
+
+function globalDispatchDelegates(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('The delegate wiring must be an object naming the transfer, third-party, and unfracking delegate credentials — the wiring the protocol parameters name.');
+  const fields = ['transfer', 'thirdParty', 'unfracking'];
+  for (const k of Object.keys(value)) if (!fields.includes(k)) throw new Error(`The delegate wiring carries an unknown field ${JSON.stringify(k)} — it names only the transfer, third-party, and unfracking delegates.`);
+  for (const k of fields) if (value[k] === undefined) throw new Error(`The delegate wiring is missing its ${JSON.stringify(k)} delegate — wiring that cannot be read in full is refused, never scored in part.`);
+  return {
+    transfer: baseCredential(value.transfer, 'The transfer delegate credential'),
+    thirdParty: baseCredential(value.thirdParty, 'The third-party delegate credential'),
+    unfracking: baseCredential(value.unfracking, 'The unfracking delegate credential'),
+  };
+}
+
+export function checkGlobalDispatch(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The dispatch claim must be an object naming the declared action, the delegate wiring, and the transaction\u2019s withdrawals.');
+  const inputFields = ['action', 'delegates', 'withdrawals'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The dispatch claim carries an unknown field ${JSON.stringify(k)} — the dispatcher's redeemer arms carry no payload, so a dispatch claim names only the declared action, the delegate wiring, and the withdrawals.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The dispatch claim is missing its ${JSON.stringify(k)} field — a claim that cannot be read in full is refused, never scored in part.`);
+  const action = globalDispatchAction(claim.action);
+  const delegates = globalDispatchDelegates(claim.delegates);
+  const withdrawals = baseWithdrawals(claim.withdrawals);
+  const inWithdrawals = c => withdrawals.some(w => w.kind === c.kind && w.hash === c.hash);
+  const delegate = delegates[GLOBAL_DISPATCH_DELEGATE_FIELDS[action]];
+  const delegateInvoked = inWithdrawals(delegate);
+  const otherDelegates = GLOBAL_DISPATCH_ACTIONS.filter(a => a !== action).map(a => {
+    const credential = delegates[GLOBAL_DISPATCH_DELEGATE_FIELDS[a]];
+    return { action: a, credential, invoked: inWithdrawals(credential) };
+  });
+  const valid = delegateInvoked;
+  return {
+    status: valid ? 'conforming' : 'not-conforming',
+    valid,
+    action,
+    delegates,
+    delegate,
+    delegateInvoked,
+    otherDelegates,
+    withdrawals,
+    verdicts: { delegateInvoked, otherDelegatesInvoked: null },
+  };
+}
+
 // CIP-113 action-delegate pairing planning, modeled locally from the
 // spec's ThirdPartyAct and UnfrackingAct sections.
 //
