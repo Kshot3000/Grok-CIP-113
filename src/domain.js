@@ -4874,6 +4874,159 @@ export function checkTransferAuthorization(claim) {
 }
 
 
+export const TRANSFER_AUTHORIZATION_COMPARE_FIELDS = Object.freeze([
+  ['status', 'Status'],
+  ['requiredTransferCredentials', 'Required transfer credentials'],
+  ['holderAuthorization', 'Holder authorization'],
+  ['logicExecution', 'Logic execution'],
+]);
+
+// CIP-113 TransferAct authorization impact, compared locally between
+// two modeled versions of the SAME transfer — the transfer as checked
+// against the spent stake credentials, the tokens, the withdrawals,
+// and the signers as they stood, and as it would stand after some
+// later change. The registry, base redeemer, delegate pairing,
+// transfer output-value, protocol upgrade, global dispatch, transfer
+// proof-list, delegate logic-execution, delegate paired-outputs, and
+// delegate registry-node families already had this temporal half;
+// the transfer authorization family, shipped as a single checker in
+// v1.107, had only the check, so a builder whose transfer conformed
+// when they modeled it could not ask what a later change did to it —
+// and the changes that stale it need never touch its logic at all
+// (spec: delegate validation steps 1 and 3 and the TransferAct
+// constructor): a signer added or dropped changes whether a
+// public-key stake credential's spend is authorised, a withdrawal
+// dropped changes both a script stake credential's authorization and
+// a registered token's execution, transaction assembly spending a
+// UTxO of a new stake credential adds a spend that must be authorised
+// by its own credential, a registry update re-pointing a token's
+// transfer_logic_script changes the credential that must be executed,
+// and a token's registration proof flipping changes whether it is a
+// registered token with a requirement at all or an ordinary native
+// token with none.
+//
+// Both versions are checked through checkTransferAuthorization
+// itself (validate-once, thirty-second application), so comparison
+// and checking can never disagree about either version, and a
+// version that cannot be read (an unknown or missing field, an empty
+// spent list, a stake or transfer credential of an unknown kind or
+// with a hash that is not 28 bytes, a token whose registered flag is
+// not a boolean, a registered token naming no transfer credential,
+// the same policy listed twice, a duplicated withdrawal or signer)
+// is refused on either side with the checker's reason, never
+// compared around. Hex case is canonicalised by the checker before
+// comparison, so a credential or a signer listed in uppercase still
+// names the same credential and the same signer on either side.
+//
+// The comparison tracks ONE transfer claim, but the claim has no
+// action or policy identity field of its own — like the proof-list
+// comparison, any two readable versions compare: the spent inputs,
+// the tokens, the withdrawals, and the signers ARE the claim, and
+// there is no separate identity a version could drift from.
+//
+// Four positions are compared, in the checker's own order: the
+// status, the required transfer credentials (the list of
+// {policy, kind, hash} for every REGISTERED token, sorted by policy
+// — the requirement itself, as the dispatch comparison's delegate
+// position is; an unregistered token names no requirement, so its
+// credential, entered or not, is not in this list), the holder
+// authorization verdict, and the logic execution verdict (no verdict
+// — null — when no registered token is modeled on that side, and
+// null compares equal with null while null against true or false
+// differs, so a token becoming registered moves this position
+// alongside the requirement's own move while both sides conform).
+// The required list compares by its JSON, policy, kind, and hash
+// together, in sorted order. THE SUBSTANCE is what is NOT compared
+// as a position. The spent inputs' own change is reported as the
+// spent credentials added/removed and the spent counts before and
+// after, never counted: a new spent UTxO is a cause, and its scored
+// consequence — whether its own stake credential authorises it — is
+// the authorization verdict's move, so counting the spend as well
+// would count one fact twice. The withdrawals' and the signers' own
+// changes are reported as the added/removed entries, never counted,
+// for the same reason: they are the causes whose consequence is a
+// verdict position. The token list's own change is reported as the
+// policies added/removed and the registered policies added/removed
+// with the registered counts before and after, never counted: a
+// token joining or leaving, or a registration flag flipping, moves
+// a position only through the requirement it creates or removes and
+// the execution verdict that requirement carries, and where it
+// moves neither — an unregistered token's entered credential
+// changing, which names no requirement and is given no verdict —
+// it is report material and nothing more (pinned).
+//
+// The change is classified by its conformance story first — BECAME
+// NOT CONFORMING and BECAME CONFORMING take precedence, because the
+// transfer gaining or losing authorization or execution is the
+// headline even when the required credentials also moved — then
+// STILL NOT CONFORMING (not conforming on both sides, but not the
+// same failure: a position changed underneath it) and REQUIREMENT
+// CHANGED (conforming on both sides, but a position moved — and
+// every such move passes through the required-credentials position:
+// re-pointing a registered token's credential to a new one the
+// withdrawals follow, a token becoming registered and executed, or
+// a token becoming unregistered, each changes the requirement
+// itself while every verdict that stands, stands on both sides).
+//
+// Boundary honesty carries over from the checker: the comparison is
+// between the two modeled versions entered — PRISM read no
+// transaction, no registry, and no UTxO, and comparing checks
+// neither version and builds no transaction. Whether the registry
+// proofs that mark a policy registered actually validate, and
+// whether a policy's RegistryNode actually carries either version's
+// transfer credential, are the registry-proof checker's positions,
+// on both sides alike; the expected output value is the
+// output-value family's.
+export function diffTransferAuthorization(beforeClaim, afterClaim) {
+  const before = checkTransferAuthorization(beforeClaim);
+  const after = checkTransferAuthorization(afterClaim);
+  const requiredOf = v => v.tokens.filter(t => t.registered).map(t => ({ policy: t.policy, kind: t.transferCredential.kind, hash: t.transferCredential.hash })).sort((a, b) => (a.policy < b.policy ? -1 : a.policy > b.policy ? 1 : 0));
+  const positionOf = v => ({ status: v.status, requiredTransferCredentials: requiredOf(v), holderAuthorization: v.verdicts.holderAuthorization, logicExecution: v.verdicts.logicExecution });
+  const beforePos = positionOf(before), afterPos = positionOf(after);
+  const differences = [];
+  for (const [field, label] of TRANSFER_AUTHORIZATION_COMPARE_FIELDS) {
+    const differs = field === 'requiredTransferCredentials' ? JSON.stringify(beforePos[field]) !== JSON.stringify(afterPos[field]) : beforePos[field] !== afterPos[field];
+    if (differs) differences.push({ field, label, before: beforePos[field], after: afterPos[field] });
+  }
+  let change;
+  if (!differences.length) change = 'unchanged';
+  else if (before.valid && !after.valid) change = 'became-not-conforming';
+  else if (!before.valid && after.valid) change = 'became-conforming';
+  else if (!before.valid) change = 'still-not-conforming';
+  else change = 'requirement-changed';
+  const credKey = c => `${c.kind}:${c.hash}`;
+  const beforeSpentSet = new Set(before.spentInputs.map(r => credKey(r.credential))), afterSpentSet = new Set(after.spentInputs.map(r => credKey(r.credential)));
+  const beforeWdSet = new Set(before.withdrawals.map(credKey)), afterWdSet = new Set(after.withdrawals.map(credKey));
+  const beforeSignerSet = new Set(before.signers), afterSignerSet = new Set(after.signers);
+  const beforeTokenSet = new Set(before.tokens.map(t => t.policy)), afterTokenSet = new Set(after.tokens.map(t => t.policy));
+  const beforeRegSet = new Set(before.tokens.filter(t => t.registered).map(t => t.policy)), afterRegSet = new Set(after.tokens.filter(t => t.registered).map(t => t.policy));
+  return {
+    change,
+    changedFields: differences.map(d => d.label),
+    differences,
+    spentCredentialsAdded: [...afterSpentSet].filter(k => !beforeSpentSet.has(k)),
+    spentCredentialsRemoved: [...beforeSpentSet].filter(k => !afterSpentSet.has(k)),
+    spentCountBefore: before.spentInputs.length,
+    spentCountAfter: after.spentInputs.length,
+    withdrawalsAdded: [...afterWdSet].filter(k => !beforeWdSet.has(k)),
+    withdrawalsRemoved: [...beforeWdSet].filter(k => !afterWdSet.has(k)),
+    signersAdded: after.signers.filter(h => !beforeSignerSet.has(h)),
+    signersRemoved: before.signers.filter(h => !afterSignerSet.has(h)),
+    tokensAdded: [...afterTokenSet].filter(p => !beforeTokenSet.has(p)),
+    tokensRemoved: [...beforeTokenSet].filter(p => !afterTokenSet.has(p)),
+    registeredPoliciesAdded: [...afterRegSet].filter(p => !beforeRegSet.has(p)),
+    registeredPoliciesRemoved: [...beforeRegSet].filter(p => !afterRegSet.has(p)),
+    registeredCountBefore: before.registeredCount,
+    registeredCountAfter: after.registeredCount,
+    before,
+    after,
+    unchanged: differences.length === 0,
+    changedCount: differences.length,
+    positionCount: TRANSFER_AUTHORIZATION_COMPARE_FIELDS.length,
+  };
+}
+
+
 // CIP-113 TransferAct registry-proof resolution, modeled locally
 // from the spec's delegate validation step 2, its TransferAct
 // constructor, and its Reference Inputs section (re-read from the
