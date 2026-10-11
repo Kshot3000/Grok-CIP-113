@@ -6330,6 +6330,120 @@ export function checkTransactionConstruction(claim) {
   };
 }
 
+export const SUBSTANDARD_VERIFICATION_ACTIONS = Object.freeze(['freeze', 'unfreeze', 'seize', 'forced-transfer', 'rebase', 'other']);
+export const SUBSTANDARD_TRIGGER_AUTHORITIES = Object.freeze(['designated-key-set', 'anyone', 'restricted-non-reducing', 'undetermined']);
+export const SUBSTANDARD_VERIFICATION_VERDICTS = Object.freeze([
+  ['actionsAnswered', 'Third-party actions without holder consent (question a)'],
+  ['authorityAnswered', 'Who can trigger them (question b)'],
+  ['restrictionHolds', 'Restricted to actions that cannot reduce a holder’s balance'],
+]);
+
+function substandardAction(value, index) {
+  const label = `Third-party action ${index + 1}`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object naming the action and whether it can reduce a holder’s balance.`);
+  for (const k of Object.keys(value)) if (!['action', 'reducesBalance'].includes(k)) throw new Error(`${label} carries an unknown field ${JSON.stringify(k)} — a modeled third-party action names only the action and whether it can reduce a holder’s balance.`);
+  for (const k of ['action', 'reducesBalance']) if (value[k] === undefined) throw new Error(`${label} is missing its ${JSON.stringify(k)} field — an action that cannot be read in full is refused, never scored in part.`);
+  if (!SUBSTANDARD_VERIFICATION_ACTIONS.includes(value.action)) throw new Error(`${label}’s action must be one of ${SUBSTANDARD_VERIFICATION_ACTIONS.join(', ')} — ${JSON.stringify(value.action)} given. Name a capability the list does not enumerate as other, and say whether it can reduce a holder’s balance.`);
+  if (typeof value.reducesBalance !== 'boolean') throw new Error(`${label}’s reducesBalance flag must be true or false — ${JSON.stringify(value.reducesBalance)} given.`);
+  return { action: value.action, reducesBalance: value.reducesBalance };
+}
+
+// CIP-113 substandard verification, checked locally against the profile
+// an integrator enters from reviewing one substandard (spec:
+// "Implementing programmable tokens in DeFi protocols — Security
+// Considerations" #1, the Lending section's SHOULD, and "Existing
+// substandards", all re-read 2026-10-11).
+//
+// Before integrating a programmable token — above all before accepting
+// it as collateral — the spec requires verifying its substandard by
+// reviewing its thirdPartyLogicScript and answering TWO INDEPENDENT
+// questions: (a) WHAT actions can it authorise without the holder's
+// consent (freeze, seize, forced transfer, rebase, etc.), and (b) WHO
+// can trigger them. The standard does not constrain either answer — a
+// script may be permissioned, permissionless, or restricted to actions
+// that cannot reduce a holder's balance — so neither question can be
+// answered from CIP-113 conformance alone, and PRISM's other panels,
+// which model what the reference substandards DO, never judge whether
+// an integrator has answered the two questions for the substandard in
+// front of them. This checker judges exactly that, on the profile the
+// reviewer enters:
+//   1. actionsAnswered — the reviewer attests the entered list is the
+//      COMPLETE set of third-party actions the script can authorise
+//      without the holder's consent. An incomplete review leaves
+//      question (a) unanswered, however many actions it names.
+//   2. authorityAnswered — the trigger authority is determined:
+//      a designated key set (whose members the claim names — where a
+//      script requires signatures from a designated key set, that set
+//      is the substandard's admin), anyone (permissionless), or a
+//      script restricted to non-reducing actions. 'undetermined'
+//      states honestly that question (b) is still open.
+//   3. restrictionHolds — only where the authority is claimed as
+//      restricted-non-reducing: no entered action may reduce a
+//      holder's balance. For every other authority the position is
+//      null, NO VERDICT: a permissioned or permissionless script is
+//      not claimed to be restricted, and the checker invents no
+//      restriction it was not told about.
+// The balance exposure is DERIVED and reported, never scored as a
+// verdict: the actions that can reduce a holder's balance, and whether
+// any exist. A profile can therefore VERIFY with a balance-reducing
+// exposure — freeze-and-seize does — because verification means the
+// two questions are answered, not that the answers are comfortable;
+// whether to accept such a token as collateral is the integrator's
+// decision, made with the exposure in front of them. A claim that
+// cannot be read is refused, never scored in part: an unknown or
+// missing field, a duplicated action, a designated key set naming no
+// key, a permissionless authority naming an admin set it by definition
+// does not have, a non-28-byte admin hash. Local model only: PRISM
+// read no substandard script and no chain state — the profile is the
+// reviewer's own review, entered here, and this checker judges its
+// completeness and consistency, not the substandard itself.
+export function checkSubstandardVerification(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The verification profile must be an object naming the third-party actions the substandard can authorise without the holder’s consent, whether that list is complete, who can trigger them, and the admin credentials where a designated key set triggers them.');
+  const inputFields = ['actions', 'actionsComplete', 'triggerAuthority', 'adminCredentials'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The verification profile carries an unknown field ${JSON.stringify(k)} — it names only the third-party actions, whether that list is complete, the trigger authority, and the admin credentials.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The verification profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part. The admin credentials may be an empty array, but the field must be stated.`);
+  if (!Array.isArray(claim.actions)) throw new Error('The third-party actions must be an array — the actions the substandard’s thirdPartyLogicScript can authorise without the holder’s consent, each naming whether it can reduce a holder’s balance. An empty array states the script authorises none.');
+  const actions = claim.actions.map((a, i) => substandardAction(a, i));
+  const seenActions = new Set();
+  for (const a of actions) {
+    if (seenActions.has(a.action)) throw new Error(`Action ${JSON.stringify(a.action)} is listed more than once — the profile names each third-party action once, with its single balance effect.`);
+    seenActions.add(a.action);
+  }
+  if (typeof claim.actionsComplete !== 'boolean') throw new Error(`The actionsComplete flag must be true or false — ${JSON.stringify(claim.actionsComplete)} given. It attests whether the entered list is the complete set the script can authorise.`);
+  if (!SUBSTANDARD_TRIGGER_AUTHORITIES.includes(claim.triggerAuthority)) throw new Error(`The trigger authority must be one of ${SUBSTANDARD_TRIGGER_AUTHORITIES.join(', ')} — ${JSON.stringify(claim.triggerAuthority)} given.`);
+  if (!Array.isArray(claim.adminCredentials)) throw new Error('The admin credentials must be an array of credentials — the designated key set that can trigger the third-party actions, where the substandard has one.');
+  const adminCredentials = claim.adminCredentials.map((c, i) => baseCredential(c, `Admin credential ${i + 1}`));
+  const seenAdmins = new Set();
+  for (const c of adminCredentials) {
+    const key = `${c.kind}:${c.hash}`;
+    if (seenAdmins.has(key)) throw new Error(`Admin credential ${c.hash} (${c.kind}) is listed more than once — a designated key set names each member once.`);
+    seenAdmins.add(key);
+  }
+  if (claim.triggerAuthority === 'designated-key-set' && !adminCredentials.length) throw new Error('A designated-key-set authority names no admin credential — where a script requires signatures from a designated key set, that set is the substandard’s admin, and a permissioned profile that names none of its members cannot be read.');
+  if (claim.triggerAuthority === 'anyone' && adminCredentials.length) throw new Error('A permissionless (anyone) authority names admin credentials — a script anyone can trigger has no designated key set; naming one contradicts the authority it claims.');
+  const reducingActions = actions.filter(a => a.reducesBalance).map(a => a.action);
+  const canReduceHolderBalance = reducingActions.length > 0;
+  const actionsAnswered = claim.actionsComplete;
+  const authorityAnswered = claim.triggerAuthority !== 'undetermined';
+  const restrictionHolds = claim.triggerAuthority === 'restricted-non-reducing' ? !canReduceHolderBalance : null;
+  const verdicts = { actionsAnswered, authorityAnswered, restrictionHolds };
+  const valid = actionsAnswered && authorityAnswered && restrictionHolds !== false;
+  const exposure = canReduceHolderBalance ? 'balance-reducing' : actions.length ? 'non-reducing' : 'no-third-party-actions';
+  return {
+    status: valid ? 'verified' : 'not-verified',
+    valid,
+    actions,
+    actionsComplete: claim.actionsComplete,
+    triggerAuthority: claim.triggerAuthority,
+    adminCredentials,
+    adminCount: adminCredentials.length,
+    verdicts,
+    reducingActions,
+    canReduceHolderBalance,
+    exposure,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
