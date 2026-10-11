@@ -6547,6 +6547,105 @@ export function checkWalletReadiness(claim) {
   };
 }
 
+export const DEX_LP_DESTINATIONS = Object.freeze(['smart-wallet', 'ordinary-address', 'pool-address']);
+export const DEX_SWAP_PARTS = Object.freeze(['included', 'omitted']);
+export const DEX_BATCHER_MODES = Object.freeze(['batches', 'single', 'none']);
+export const DEX_BATCHER_REF_INPUTS = Object.freeze(['all', 'partial', 'none', 'not-applicable']);
+export const DEX_INTEGRATION_VERDICTS = Object.freeze([
+  ['lpToSmartWallet', 'Liquidity provision to the user’s smart wallet'],
+  ['swapInvokesTransferLogic', 'Swap transferLogicScript withdrawal'],
+  ['swapReferencesRegistry', 'Swap registryNode reference input'],
+  ['batcherReferencesAll', 'Batcher reference inputs'],
+]);
+
+function dexEnum(value, allowed, label) {
+  if (!allowed.includes(value)) throw new Error(`${label} must be one of ${allowed.join(', ')} — ${JSON.stringify(value)} given.`);
+  return value;
+}
+
+// CIP-113 DEX integration, checked locally against the integration
+// profile a reviewer enters for one DEX (spec: "Implementing
+// programmable tokens in DeFi protocols", "DEX Integration", re-read
+// 2026-10-11).
+//
+// The DEX section names three duties. (1) Liquidity provision: LP
+// tokens involving programmable tokens MUST be sent to the user's
+// smart wallet address — the LP position is itself a programmable-
+// token holding, so it lives where programmable tokens live, not at
+// the user's ordinary address and not pooled at the DEX. (2) Swaps:
+// a swap transaction MUST include the transferLogicScript withdrawal
+// (the withdraw-zero pattern) AND the relevant registryNode as a
+// reference input — two halves of one sentence, judged as two
+// positions, because a swap can carry either without the other.
+// (3) Batcher integration: batchers CAN process programmable-token
+// swaps by including all required reference inputs and batching
+// multiple transfers in a single transaction. PRISM's transaction
+// construction checker judges the swap halves inside a generic
+// transaction, but the LP destination is judged nowhere and the
+// batcher's reference-input completeness is judged nowhere, and no
+// panel judged the three together for a DEX as a whole. This checker
+// judges exactly that, on the entered profile:
+//   1. lpToSmartWallet — LP tokens go to the user's smart wallet.
+//   2. swapInvokesTransferLogic — swaps include the
+//      transferLogicScript withdraw-zero.
+//   3. swapReferencesRegistry — swaps include the relevant
+//      registryNode as a reference input.
+//   4. batcherReferencesAll — where a batcher is in play, it
+//      includes ALL required reference inputs; null (NO VERDICT)
+//      where no batcher is claimed, because no batcher in play
+//      names nothing to judge.
+// The batcher's existence and shape are REPORTED, never scored:
+// the spec's batcher sentence is a capability ("batchers can
+// process"), not a duty — a DEX with no batcher fails no MUST, the
+// preloaded example is ready with none, and batching many transfers
+// versus processing them one at a time is reported the same way.
+// What IS scored, when a batcher exists, is the condition the spec
+// itself attaches to batcher processing: all required reference
+// inputs — a batcher carrying only some of them has not performed
+// the integration the sentence describes. A claim that cannot be
+// read is refused, never scored in part: an unknown or missing
+// field, an unknown value, a batcher reference-input handling named
+// where no batcher is claimed (no batcher in play names nothing —
+// the v1.121 stake-source discipline), and reference inputs named
+// not-applicable where a batcher IS claimed (a batcher in play has
+// reference inputs to account for).
+// Local model only: PRISM inspected no DEX and read no chain
+// state — the profile is the reviewer's own reading of the DEX,
+// entered here, and this checker judges its completeness and
+// consistency against the spec's DEX duties.
+export function checkDexIntegration(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The DEX profile must be an object naming where its LP tokens are sent, whether its swaps include the transferLogicScript withdrawal and the registryNode reference input, whether a batcher processes its swaps, and which reference inputs that batcher includes.');
+  const inputFields = ['lpDestination', 'swapTransferLogic', 'swapRegistryRef', 'batcher', 'batcherRefInputs'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The DEX profile carries an unknown field ${JSON.stringify(k)} — it names only the LP destination, the swap transfer logic, the swap registry reference, the batcher mode, and the batcher reference inputs.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The DEX profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part.`);
+  const lpDestination = dexEnum(claim.lpDestination, DEX_LP_DESTINATIONS, 'The LP destination');
+  const swapTransferLogic = dexEnum(claim.swapTransferLogic, DEX_SWAP_PARTS, 'The swap transfer logic field');
+  const swapRegistryRef = dexEnum(claim.swapRegistryRef, DEX_SWAP_PARTS, 'The swap registry reference field');
+  const batcher = dexEnum(claim.batcher, DEX_BATCHER_MODES, 'The batcher mode');
+  const batcherRefInputs = dexEnum(claim.batcherRefInputs, DEX_BATCHER_REF_INPUTS, 'The batcher reference inputs field');
+  if (batcher === 'none' && batcherRefInputs !== 'not-applicable') throw new Error('Batcher reference inputs are named where no batcher is claimed — the reference-input handling is a property of a batcher in play, and a profile that claims no batcher names no such handling.');
+  if (batcher !== 'none' && batcherRefInputs === 'not-applicable') throw new Error('A batcher is claimed while its reference inputs are named not-applicable — a batcher in play includes some set of reference inputs, and the profile must say which.');
+  const verdicts = {
+    lpToSmartWallet: lpDestination === 'smart-wallet',
+    swapInvokesTransferLogic: swapTransferLogic === 'included',
+    swapReferencesRegistry: swapRegistryRef === 'included',
+    batcherReferencesAll: batcher === 'none' ? null : batcherRefInputs === 'all',
+  };
+  const valid = verdicts.lpToSmartWallet && verdicts.swapInvokesTransferLogic && verdicts.swapReferencesRegistry && verdicts.batcherReferencesAll !== false;
+  return {
+    status: valid ? 'ready' : 'not-ready',
+    valid,
+    lpDestination,
+    swapTransferLogic,
+    swapRegistryRef,
+    batcher,
+    batcherRefInputs,
+    hasBatcher: batcher !== 'none',
+    batchesTransfers: batcher === 'batches',
+    verdicts,
+  };
+}
+
 export function parseManifest(raw) {
   if(typeof raw!=='string'||raw.length>100000) throw new Error('Choose a PRISM JSON file under 100 KB.');
   let m;
