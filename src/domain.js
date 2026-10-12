@@ -8109,3 +8109,52 @@ export function serviceFeeBreakEven(input = {}) {
     coversAtEnteredVolume: monthlyNet >= 0n,
   };
 }
+
+// Required service fee — the pricing question the break-even model
+// inverts. serviceFeeBreakEven starts from a fee and asks what volume
+// covers the cost; a designer setting a fee schedule starts from the
+// other end: a monthly operating cost and an expected transfer volume
+// are (roughly) known, and the fee is the unknown. This solver divides
+// the cost by the entered volume, rounding the required per-transfer
+// fee UP to the base unit — a fractional base unit cannot be charged,
+// and rounding the requirement down would name a fee whose collected
+// total falls short of the cost by up to a base unit per transfer.
+// It then solves for the smallest whole number of basis points whose
+// percentage part — computed exactly as modelServiceFee computes it,
+// floor(gross × bps ÷ 10,000), plus the entered fixed fee — reaches
+// that required fee: at one basis point less the collected fee is
+// provably below the requirement, and that is pinned in the tests.
+// Two outcomes are stated as results, never modeled around: a cap
+// below the required fee makes coverage impossible at ANY rate (the
+// cap, not the rate, is the binding problem), and a required fee at
+// or above the whole transfer amount is impossible too — no honest
+// fee takes the transfer it is charged on. A zero cost requires no
+// fee at all. All figures are the designer's own entered cost and
+// volume: no feed is read and no revenue is promised. LOCAL MODEL
+// ONLY, on the split's boundary: PRISM collects nothing, charges
+// nothing, and executes no transfer.
+export function requiredServiceFee(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const gross = toUnits(input.amount === undefined ? '0' : input.amount, decimals); // Validates amount + decimals.
+  if (gross <= 0n) throw new Error('Transfer amount must be greater than zero.');
+  const fixed = toUnits(input.fixedFee === undefined || input.fixedFee === '' ? '0' : input.fixedFee, decimals);
+  const hasCap = !(input.maxFee === undefined || input.maxFee === null || input.maxFee === '');
+  const cap = hasCap ? toUnits(input.maxFee, decimals) : null;
+  const transfers = input.transfersPerMonth === undefined ? 100 : Number(input.transfersPerMonth);
+  if (!Number.isInteger(transfers) || transfers < 1 || transfers > 1000000) throw new Error('Monthly transfers must be a whole number between 1 and 1,000,000.');
+  const monthlyCost = toUnits(input.monthlyCost === undefined || input.monthlyCost === '' ? '0' : input.monthlyCost, decimals);
+  if (monthlyCost < 0n) throw new Error('Monthly cost cannot be negative.');
+  const count = BigInt(transfers);
+  const requiredFeePerTransfer = monthlyCost === 0n ? 0n : (monthlyCost + count - 1n) / count;
+  const feeAtBps = bps => { const uncapped = gross * BigInt(bps) / 10000n + fixed; return cap !== null && uncapped > cap ? cap : uncapped; };
+  const base = { decimals, gross, fixedFee: fixed, maxFee: cap, monthlyCost, transfersPerMonth: transfers, requiredFeePerTransfer };
+  if (monthlyCost === 0n) { const f0 = feeAtBps(0); return { ...base, requiredBps: 0, impossible: false, impossibleReason: null, feeAtRequiredBps: f0, feeOneBpsLess: null, monthlyFeeIncomeAtRequired: f0 * count, surplusAtRequired: f0 * count, maxMonthlyFeeIncome: null }; }
+  if (requiredFeePerTransfer >= gross) return { ...base, requiredBps: null, impossible: true, impossibleReason: 'takes-all', feeAtRequiredBps: null, feeOneBpsLess: null, monthlyFeeIncomeAtRequired: null, surplusAtRequired: null, maxMonthlyFeeIncome: null };
+  if (cap !== null && cap < requiredFeePerTransfer) return { ...base, requiredBps: null, impossible: true, impossibleReason: 'cap', feeAtRequiredBps: null, feeOneBpsLess: null, monthlyFeeIncomeAtRequired: null, surplusAtRequired: null, maxMonthlyFeeIncome: cap * count };
+  const need = requiredFeePerTransfer > fixed ? requiredFeePerTransfer - fixed : 0n;
+  const requiredBps = need === 0n ? 0 : Number((need * 10000n + gross - 1n) / gross);
+  const feeAtRequiredBps = feeAtBps(requiredBps);
+  const feeOneBpsLess = requiredBps > 0 ? feeAtBps(requiredBps - 1) : null;
+  const monthlyFeeIncomeAtRequired = feeAtRequiredBps * count;
+  return { ...base, requiredBps, impossible: false, impossibleReason: null, feeAtRequiredBps, feeOneBpsLess, monthlyFeeIncomeAtRequired, surplusAtRequired: monthlyFeeIncomeAtRequired - monthlyCost, maxMonthlyFeeIncome: null };
+}
