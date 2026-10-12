@@ -8158,3 +8158,69 @@ export function requiredServiceFee(input = {}) {
   const monthlyFeeIncomeAtRequired = feeAtRequiredBps * count;
   return { ...base, requiredBps, impossible: false, impossibleReason: null, feeAtRequiredBps, feeOneBpsLess, monthlyFeeIncomeAtRequired, surplusAtRequired: monthlyFeeIncomeAtRequired - monthlyCost, maxMonthlyFeeIncome: null };
 }
+
+// Volume-tiered service fee — the fee axis the pricing triangle does not
+// cover. modelServiceFee prices one transfer at one rate, the break-even
+// model asks what volume that rate needs, and requiredServiceFee solves
+// the rate a cost and volume require — all three hold the rate FLAT
+// across the whole month. Real fee schedules for fee-earning designs
+// (swap interfaces, payment tools, marketplaces) commonly change rate
+// with volume: the first tierThreshold transfers of the month pay the
+// base rate, and every transfer after that pays the tier rate — a
+// discount when the tier rate is lower, a premium when it is higher,
+// stated either way from the signed difference against the flat month.
+// Each tier's per-transfer fee is computed EXACTLY as modelServiceFee
+// computes it — floor(gross × bps ÷ 10,000) plus the fixed fee, bounded
+// by the cap when one is set — so a tier never invents its own rounding:
+// the percentage part rounds down in both tiers and the cap binding is
+// reported per tier. A tier rate whose fee would take the whole transfer
+// is refused only when that tier actually carries transfers; a tier no
+// transfer reaches prices nothing and refuses nothing. The blended
+// effective rate is derived from the month's BigInt totals (hundredths
+// of a basis point), so it is the schedule's own rate, not an average
+// of the two printed rates. All figures are the designer's own entered
+// volume and rates: no feed is read and no revenue is promised. LOCAL
+// MODEL ONLY, on the split's boundary: PRISM collects nothing, charges
+// nothing, and executes no transfer; the tiered schedule modeled
+// belongs to the design being priced and must be disclosed to its users
+// exactly as modeled — tiers, threshold, and rates together.
+export function tieredServiceFee(input = {}) {
+  const split = modelServiceFee(input); // Validates amount/decimals/base fee inputs; its takes-all refusal for the base rate propagates.
+  const threshold = input.tierThreshold === undefined ? 50 : Number(input.tierThreshold);
+  if (!Number.isInteger(threshold) || threshold < 0 || threshold > 1000000) throw new Error('Tier threshold must be a whole number between 0 and 1,000,000.');
+  const tierBps = input.tierBps === undefined ? 50 : Number(input.tierBps);
+  if (!Number.isInteger(tierBps) || tierBps < 0 || tierBps > 10000) throw new Error('Tier fee must be a whole number of basis points between 0 and 10,000.');
+  const gross = split.gross, fixed = split.fixedFee, cap = split.maxFee;
+  const uncappedTier = gross * BigInt(tierBps) / 10000n + fixed;
+  const tierFee = cap !== null && uncappedTier > cap ? cap : uncappedTier;
+  const tierCapApplied = cap !== null && uncappedTier > cap;
+  const transfers = split.transfersPerMonth;
+  const baseCount = Math.min(transfers, threshold);
+  const tierCount = transfers - baseCount;
+  if (tierCount > 0 && tierFee >= gross) throw new Error('The tier fee would take the whole transfer — the recipient would receive nothing. Lower the tier rate, the fixed fee, or the cap, or raise the amount.');
+  const monthlyFlatFee = split.monthly.fee;
+  const monthlyTieredFee = split.fee * BigInt(baseCount) + tierFee * BigInt(tierCount);
+  const monthlyGross = split.monthly.gross;
+  const hundredths = monthlyGross === 0n ? 0n : monthlyTieredFee * 1000000n / monthlyGross;
+  const blendedBpsText = `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  return {
+    decimals: split.decimals,
+    gross,
+    feeBps: split.feeBps,
+    tierBps,
+    tierThreshold: threshold,
+    transfersPerMonth: transfers,
+    baseCount,
+    tierCount,
+    baseFeePerTransfer: split.fee,
+    tierFeePerTransfer: tierFee,
+    baseCapApplied: split.capApplied,
+    tierCapApplied,
+    monthlyFlatFee,
+    monthlyTieredFee,
+    differenceVsFlat: monthlyFlatFee - monthlyTieredFee,
+    monthlyGross,
+    monthlyNetTiered: monthlyGross - monthlyTieredFee,
+    blendedBpsText,
+  };
+}
