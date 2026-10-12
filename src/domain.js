@@ -8377,3 +8377,88 @@ export function serviceFeeSizeProfile(input = {}) {
     fixedDominatesUntil,
   };
 }
+
+// Service-fee revenue split — the fee question every model above does
+// not ask. The split, break-even, solver, tiered, multi-asset, and
+// size models all price HOW MUCH fee a transfer pays; none of them
+// says WHERE a collected fee goes. A fee-earning design does not keep
+// its fee in one place by accident: it is divided — an operator's
+// share, a treasury's share, a community or rewards share — and a fee
+// disclosed to users with its destinations undisclosed is only half
+// disclosed. This model divides the exact per-transfer fee from
+// modelServiceFee, and the month's total fee, among an entered list
+// of recipients by entered shares in basis points. Each recipient's
+// amount is FLOOR(total × share ÷ 10,000): a share rounds DOWN, so no
+// recipient is ever paid more than their stated share of the fee.
+// What the floors leave behind is named in two parts, because they
+// are two different things: the UNALLOCATED part, when the entered
+// shares sum to less than the whole fee — that part belongs to a
+// recipient nobody named, and the model gives it to no one — and the
+// ROUNDING REMAINDER, the base-unit dust the floors themselves leave
+// (less than one base unit per recipient, plus one for the
+// unallocated share). A remainder belongs to NO recipient in this
+// model; a real design must say where its remainder goes, and a
+// design whose shares sum past the whole fee is refused outright —
+// it promises out more than it collects. The month's split is
+// computed from the month's total, not by multiplying the
+// per-transfer amounts: splitting the aggregate leaves its own,
+// smaller dust, and the two splits are stated side by side rather
+// than one being silently derived from the other. Recipients are
+// told apart by label — required, trimmed, duplicates refused
+// case-insensitively — because two rows a reader cannot tell apart
+// cannot be disclosed honestly. All figures are the designer's own
+// entered fee and shares: no feed is read and no revenue is
+// promised. LOCAL MODEL ONLY, on the split's boundary: PRISM
+// collects nothing, charges nothing, and executes no transfer; the
+// fee divided belongs to the design being priced, and its shares
+// must be disclosed to its users exactly as modeled.
+export function serviceFeeRevenueSplit(input = {}) {
+  const split = modelServiceFee(input); // Validates the fee inputs; its refusals (incl. takes-all) propagate.
+  const list = input.shares;
+  if (!Array.isArray(list) || list.length === 0) throw new Error('At least one fee recipient is required to model a revenue split.');
+  if (list.length > 5) throw new Error('A revenue split models at most five recipients at a time.');
+  const seen = new Set();
+  const shares = list.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') throw new Error(`Recipient ${index + 1} needs its own label and share.`);
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    if (!label) throw new Error(`Recipient ${index + 1} needs a label so its share can be told apart from the others.`);
+    const key = label.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate recipient label: ${label}. Each recipient in the split needs its own label.`);
+    seen.add(key);
+    const shareBps = entry.shareBps === undefined ? NaN : Number(entry.shareBps);
+    if (!Number.isInteger(shareBps) || shareBps < 0 || shareBps > 10000) throw new Error(`${label}: share must be a whole number of basis points between 0 and 10,000.`);
+    return { label, shareBps };
+  });
+  const totalShareBps = shares.reduce((sum, entry) => sum + entry.shareBps, 0);
+  if (totalShareBps > 10000) throw new Error(`The shares total ${totalShareBps} basis points — more than the whole fee. Lower a share so the split promises out no more than it collects.`);
+  const unallocatedBps = 10000 - totalShareBps;
+  const divide = total => {
+    const amounts = shares.map(entry => total * BigInt(entry.shareBps) / 10000n);
+    const allocated = amounts.reduce((sum, amount) => sum + amount, 0n);
+    const unallocatedAmount = total * BigInt(unallocatedBps) / 10000n;
+    const remainder = total - allocated;
+    return { amounts, allocated, unallocatedAmount, roundingRemainder: remainder - unallocatedAmount, remainder };
+  };
+  const perTransfer = divide(split.fee);
+  const monthly = divide(split.monthly.fee);
+  return {
+    decimals: split.decimals,
+    gross: split.gross,
+    feeBps: split.feeBps,
+    fee: split.fee,
+    monthlyFee: split.monthly.fee,
+    transfersPerMonth: split.transfersPerMonth,
+    recipients: shares.map((entry, index) => ({ label: entry.label, shareBps: entry.shareBps, amount: perTransfer.amounts[index], monthlyAmount: monthly.amounts[index] })),
+    totalShareBps,
+    unallocatedBps,
+    fullyShared: totalShareBps === 10000,
+    allocated: perTransfer.allocated,
+    remainder: perTransfer.remainder,
+    unallocatedAmount: perTransfer.unallocatedAmount,
+    roundingRemainder: perTransfer.roundingRemainder,
+    monthlyAllocated: monthly.allocated,
+    monthlyRemainder: monthly.remainder,
+    monthlyUnallocatedAmount: monthly.unallocatedAmount,
+    monthlyRoundingRemainder: monthly.roundingRemainder,
+  };
+}
