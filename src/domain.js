@@ -8292,3 +8292,88 @@ export function multiAssetServiceFee(input = {}) {
     totalsCombined: false,
   };
 }
+
+export const SERVICE_FEE_SIZE_LADDER = Object.freeze(['1', '10', '100', '1000', '10000', '100000']);
+
+// Service-fee size profile — the fee question every model above does
+// not ask. The split, break-even, solver, tiered, and multi-asset
+// models all hold the transfer AMOUNT fixed and price that one size;
+// a fee schedule, once disclosed, is charged on EVERY size its users
+// send, and the same schedule does not cost every size the same: the
+// percentage part scales with the transfer, but the fixed part does
+// not, so a fixed fee makes a small transfer pay a far higher
+// effective rate than a large one — and at a small enough size the
+// fixed fee alone can take the transfer whole. This profile re-splits
+// ONE entered schedule at a standard ladder of sizes, exactly as
+// modelServiceFee splits it — floor(gross × bps ÷ 10,000) plus the
+// fixed fee, bounded by the cap when one is set, the cap binding
+// reported per rung — so a designer sees the schedule as its smallest
+// users will meet it, not only at the size they happened to model.
+// A rung whose fee takes that rung's whole transfer is FLAGGED, not
+// refused: the ladder explores sizes the designer did not enter, and
+// flagging the rung is what names the smallest size the schedule can
+// honestly serve. Against the designer's own stated fairness bound
+// (maxEffectiveBps) the profile reports the first ladder size whose
+// effective rate stays within it, and whether every larger rung
+// stays within it too — computed per rung, never assumed from the
+// direction of the ladder, because floor rounding can move a rung's
+// exact rate back across a tight bound. It also reports the last
+// size at which the fixed fee outweighs the percentage part, which
+// is the size below which the schedule is really a fixed charge
+// wearing a percentage label. The ladder claims are exact ON THE
+// LADDER: no rate is interpolated between rungs, and a size between
+// rungs pays what the split formula says at that size, which the
+// designer can model directly. The fee still rounds down inside
+// each split, as everywhere in this family. All figures are the
+// designer's own entered schedule and bound: no feed is read and no
+// revenue is promised. LOCAL MODEL ONLY, on the split's boundary:
+// PRISM collects nothing, charges nothing, and executes no transfer;
+// the schedule profiled belongs to the design being priced and must
+// be disclosed to its users exactly as modeled — at every size.
+export function serviceFeeSizeProfile(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const bps = input.feeBps === undefined ? 100 : Number(input.feeBps);
+  if (!Number.isInteger(bps) || bps < 0 || bps > 10000) throw new Error('Fee must be a whole number of basis points between 0 and 10,000.');
+  const fixed = toUnits(input.fixedFee === undefined || input.fixedFee === '' ? '0' : input.fixedFee, decimals); // Validates fixed fee + decimals.
+  const hasCap = !(input.maxFee === undefined || input.maxFee === null || input.maxFee === '');
+  const cap = hasCap ? toUnits(input.maxFee, decimals) : null;
+  const bound = input.maxEffectiveBps === undefined ? 500 : Number(input.maxEffectiveBps);
+  if (!Number.isInteger(bound) || bound < 1 || bound > 10000) throw new Error('Fairness bound must be a whole number of basis points between 1 and 10,000.');
+  const rows = SERVICE_FEE_SIZE_LADDER.map(amount => {
+    const gross = toUnits(amount, decimals);
+    const bpsFee = gross * BigInt(bps) / 10000n;
+    const uncappedFee = bpsFee + fixed;
+    const fee = cap !== null && uncappedFee > cap ? cap : uncappedFee;
+    const capApplied = cap !== null && uncappedFee > cap;
+    const takesAll = fee >= gross;
+    // Effective rate as exact text: hundredths of a basis point from
+    // the BigInt split, the same formula as modelServiceFee — stated
+    // even on a takes-all rung, where the rate is at or above 10,000.
+    const hundredths = fee * 1000000n / gross;
+    const effectiveBpsText = `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+    // The fixed fee's share of the rung's total fee, as exact text:
+    // hundredths of a basis point of the fee (10,000.00 is the whole
+    // fee), from fixed × 1,000,000 ÷ fee. Null when the fee is zero —
+    // a share of nothing is not a number, and none is invented.
+    const shareHundredths = fee === 0n ? null : fixed * 1000000n / fee;
+    const fixedShareBpsText = shareHundredths === null ? null : `${shareHundredths / 100n}.${String(shareHundredths % 100n).padStart(2, '0')}`;
+    const withinBound = !takesAll && fee * 10000n <= gross * BigInt(bound);
+    return { amount, gross, bpsFee, fixedFee: fixed, uncappedFee, fee, net: gross - fee, capApplied, takesAll, effectiveBpsText, fixedShareBpsText, withinBound };
+  });
+  const firstWithin = rows.find(row => row.withinBound);
+  const firstSizeWithinBound = firstWithin ? firstWithin.amount : null;
+  const withinBoundFromThatSizeOn = firstWithin ? rows.slice(rows.indexOf(firstWithin)).every(row => row.withinBound) : false;
+  const dominating = rows.filter(row => row.fee > 0n && row.fixedFee > row.bpsFee);
+  const fixedDominatesUntil = dominating.length ? dominating[dominating.length - 1].amount : null;
+  return {
+    decimals,
+    feeBps: bps,
+    fixedFee: fixed,
+    maxFee: cap,
+    maxEffectiveBps: bound,
+    rows,
+    firstSizeWithinBound,
+    withinBoundFromThatSizeOn,
+    fixedDominatesUntil,
+  };
+}
