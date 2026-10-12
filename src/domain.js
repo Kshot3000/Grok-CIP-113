@@ -8065,3 +8065,47 @@ export function modelServiceFee(input = {}) {
     rows: SERVICE_FEE_BPS_LEVELS.map(level => { const s = split(level); return { feeBps: level, fee: s.fee, net: s.net, capApplied: s.capApplied, takesAll: s.fee >= gross }; }),
   };
 }
+
+// Service-fee break-even — the volume question the fee split alone does
+// not answer. Pricing a disclosed fee (modelServiceFee) says what one
+// transfer pays; a fee-earning design is only sustainable if those fees
+// cover what running it costs. This model divides the designer's own
+// entered monthly operating cost by the exact per-transfer fee from the
+// split above. The break-even count rounds UP — the one rounding in the
+// fee family that favours the fee — because a fractional transfer does
+// not exist: at one transfer fewer, the fees collected are still short
+// of the cost, and stating the lower count would claim coverage the fees
+// do not reach. The fee itself still rounds down inside the split; the
+// two roundings answer different questions and neither is hidden. A
+// design whose fee per transfer is zero NEVER covers a positive cost —
+// that is stated as a result, never a division by zero — and a cost of
+// zero is covered before the first transfer. At the designer's entered
+// volume the model reports the month's fee income, the signed net
+// against the cost, and whether the entered volume covers it. All
+// figures are the designer's own entered cost and volume at the modeled
+// fee: no cost feed, no volume feed, no revenue promised. LOCAL MODEL
+// ONLY, on the same boundary as the split: PRISM collects nothing,
+// charges nothing, and executes no transfer.
+export function serviceFeeBreakEven(input = {}) {
+  const split = modelServiceFee(input); // Validates the fee inputs; its refusals (incl. takes-all) propagate.
+  const monthlyCost = toUnits(input.monthlyCost === undefined || input.monthlyCost === '' ? '0' : input.monthlyCost, split.decimals);
+  if (monthlyCost < 0n) throw new Error('Monthly cost cannot be negative.');
+  const feePerTransfer = split.fee;
+  const neverCovers = feePerTransfer === 0n && monthlyCost > 0n;
+  const breakEvenTransfers = monthlyCost === 0n ? 0n : neverCovers ? null : (monthlyCost + feePerTransfer - 1n) / feePerTransfer;
+  const monthlyFeeIncome = split.monthly.fee;
+  const monthlyNet = monthlyFeeIncome - monthlyCost;
+  return {
+    decimals: split.decimals,
+    feePerTransfer,
+    capApplied: split.capApplied,
+    monthlyCost,
+    breakEvenTransfers,
+    neverCovers,
+    breakEvenGross: breakEvenTransfers === null ? null : breakEvenTransfers * split.gross,
+    transfersPerMonth: split.transfersPerMonth,
+    monthlyFeeIncome,
+    monthlyNet,
+    coversAtEnteredVolume: monthlyNet >= 0n,
+  };
+}
