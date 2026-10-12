@@ -8547,3 +8547,110 @@ export function serviceFeeSchedule(input = {}) {
     firstLaterMonth: laterMonths > 0 ? initialMonths + 1 : null,
   };
 }
+
+export const FEE_DISCLOSURE_RATES = Object.freeze(['exact', 'rate-only', 'none']);
+export const FEE_DISCLOSURE_RECIPIENTS = Object.freeze(['named', 'unnamed', 'none']);
+export const FEE_DISCLOSURE_TIMINGS = Object.freeze(['before-confirm', 'after', 'never']);
+export const FEE_DISCLOSURE_ROUNDING = Object.freeze(['stated', 'unstated']);
+export const FEE_DISCLOSURE_NET = Object.freeze(['shown', 'not-shown']);
+export const FEE_DISCLOSURE_CHANGES = Object.freeze(['fixed', 'changes-with-notice', 'changes-without-notice']);
+export const FEE_DISCLOSURE_NOTICES = Object.freeze(['advance', 'at-change', 'none', 'not-applicable']);
+export const FEE_DISCLOSURE_VERDICTS = Object.freeze([
+  ['rateStated', 'Fee rate, fixed fee, and cap stated exactly'],
+  ['recipientsNamed', 'Fee recipients named'],
+  ['shownBeforeTransfer', 'Fee shown before the user confirms'],
+  ['roundingStated', 'Rounding and the remainder’s owner stated'],
+  ['netAmountShown', 'Recipient’s net amount shown before confirming'],
+  ['changeTermsStated', 'Fee-change terms stated'],
+]);
+
+function feeDisclosureEnum(value, allowed, label) {
+  if (!allowed.includes(value)) throw new Error(`${label} must be one of ${allowed.join(', ')} — ${JSON.stringify(value)} given.`);
+  return value;
+}
+
+// Service-fee disclosure, checked locally against the disclosure profile
+// a reviewer enters for one fee-earning design (a swap interface, payment
+// tool, marketplace, or launchpad built on a programmable token).
+//
+// The v1.127–v1.134 fee family prices a fee exactly — its rate, volume,
+// cost, tiers, asset, size, distribution, and schedule over time — but
+// pricing a fee and disclosing it are different acts, and PRISM judged
+// the second nowhere. The profit mandate this family serves carries its
+// own condition: a fee is taken only when it is honestly disclosed and
+// plainly labeled. This checker judges a design's user-facing
+// disclosure in five positions, plus a sixth that is conditional:
+//   1. rateStated — the exact rate is stated: the percentage rate AND
+//      the fixed fee AND the cap, when the schedule carries them. A
+//      percentage stated alone leaves a fixed fee or a cap to surprise
+//      the user at transfer time.
+//   2. recipientsNamed — who receives the fee is named, including every
+//      recipient of a split. "A fee is charged" with no destination is
+//      half a disclosure: the destination is part of the fee.
+//   3. shownBeforeTransfer — the fee is shown before the user confirms
+//      the transfer. A fee first visible afterwards is a deduction,
+//      not a disclosure.
+//   4. roundingStated — the rounding is stated: the fee floors, and who
+//      keeps the remainder. The models above floor every fee; a design
+//      that does not say so lets users assume the remainder is theirs.
+//   5. netAmountShown — what the recipient actually receives is shown
+//      before confirming, so the fee's size is judged against the net,
+//      not the gross.
+//   6. changeTermsStated — CONDITIONAL: null, no verdict, when the fee
+//      is fixed (there are no change terms to state); scored when the
+//      fee can change — its terms are stated only when changes are
+//      announced in advance.
+// Whether the fee CAN change is REPORTED, never scored: a changeable
+// fee is a legitimate design (the schedule model prices announced
+// steps), and a fixed fee is not more honest than a changeable one —
+// what this checker scores is whether the change terms, where they
+// exist, are stated, the same treatment the DEX checker gives a
+// batcher: the capability is reported, the condition the claim carries
+// is scored when the capability is claimed.
+// Refusal discipline as elsewhere: a profile that cannot be read is
+// refused, never scored in part — an unknown or missing field, an
+// unknown value, a fixed fee naming a change notice (a fixed fee has
+// no changes to notice), and a changeable fee naming its notice
+// not-applicable (a fee that can change names how, or the profile
+// cannot be read).
+// Local model only: PRISM inspected no application and read no user
+// interface — the profile is the reviewer's own reading of the design's
+// disclosure, entered here, and this checker judges its completeness
+// and consistency. PRISM collects nothing itself.
+export function checkFeeDisclosure(claim) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) throw new Error('The fee disclosure profile must be an object naming how the design states its rate, its recipients, when it shows the fee, whether it states its rounding, whether it shows the net amount, whether the fee can change, and how changes are noticed.');
+  const inputFields = ['rateDisclosure', 'recipientDisclosure', 'timing', 'roundingDisclosure', 'netDisclosure', 'feeChanges', 'changeNotice'];
+  for (const k of Object.keys(claim)) if (!inputFields.includes(k)) throw new Error(`The fee disclosure profile carries an unknown field ${JSON.stringify(k)} — it names only the rate disclosure, the recipient disclosure, the timing, the rounding disclosure, the net disclosure, whether the fee changes, and the change notice.`);
+  for (const k of inputFields) if (claim[k] === undefined) throw new Error(`The fee disclosure profile is missing its ${JSON.stringify(k)} field — a profile that cannot be read in full is refused, never scored in part.`);
+  const rateDisclosure = feeDisclosureEnum(claim.rateDisclosure, FEE_DISCLOSURE_RATES, 'The rate disclosure');
+  const recipientDisclosure = feeDisclosureEnum(claim.recipientDisclosure, FEE_DISCLOSURE_RECIPIENTS, 'The recipient disclosure');
+  const timing = feeDisclosureEnum(claim.timing, FEE_DISCLOSURE_TIMINGS, 'The timing');
+  const roundingDisclosure = feeDisclosureEnum(claim.roundingDisclosure, FEE_DISCLOSURE_ROUNDING, 'The rounding disclosure');
+  const netDisclosure = feeDisclosureEnum(claim.netDisclosure, FEE_DISCLOSURE_NET, 'The net disclosure');
+  const feeChanges = feeDisclosureEnum(claim.feeChanges, FEE_DISCLOSURE_CHANGES, 'The fee changes field');
+  const changeNotice = feeDisclosureEnum(claim.changeNotice, FEE_DISCLOSURE_NOTICES, 'The change notice');
+  if (feeChanges === 'fixed' && changeNotice !== 'not-applicable') throw new Error('A fixed fee names a change notice — a fee that never changes has no changes to announce, so a profile claiming both cannot be read.');
+  if (feeChanges !== 'fixed' && changeNotice === 'not-applicable') throw new Error('A changeable fee names its change notice not-applicable — a fee that can change carries change terms, and a profile that names none cannot be read.');
+  const verdicts = {
+    rateStated: rateDisclosure === 'exact',
+    recipientsNamed: recipientDisclosure === 'named',
+    shownBeforeTransfer: timing === 'before-confirm',
+    roundingStated: roundingDisclosure === 'stated',
+    netAmountShown: netDisclosure === 'shown',
+    changeTermsStated: feeChanges === 'fixed' ? null : changeNotice === 'advance',
+  };
+  const valid = Object.values(verdicts).every(v => v === true || v === null);
+  return {
+    status: valid ? 'complete' : 'incomplete',
+    valid,
+    rateDisclosure,
+    recipientDisclosure,
+    timing,
+    roundingDisclosure,
+    netDisclosure,
+    feeChanges,
+    changeNotice,
+    canChange: feeChanges !== 'fixed',
+    verdicts,
+  };
+}
