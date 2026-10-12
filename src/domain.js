@@ -8462,3 +8462,88 @@ export function serviceFeeRevenueSplit(input = {}) {
     monthlyRoundingRemainder: monthly.roundingRemainder,
   };
 }
+
+// Service-fee schedule over time — the fee dimension every model above
+// holds still. The split prices a rate, the tiered model changes the
+// rate with VOLUME, the revenue split divides what is collected — but
+// every one of them holds the schedule fixed in TIME, and real fee
+// schedules for fee-earning designs do not stay fixed: a design
+// launches at an introductory rate and steps to its standard rate, or
+// announces a rate rise (or cut) from a named month. This model prices
+// ONE such step: the first initialMonths months of a horizonMonths
+// horizon pay the base rate (feeBps, priced exactly as modelServiceFee
+// prices it), and every month after pays laterBps, each period's fee
+// computed with the same split — floor(gross × bps ÷ 10,000) plus the
+// fixed fee, bounded by the cap, cap binding reported per period — so
+// a period never invents its own rounding. A later rate whose fee
+// would take the whole transfer is refused only when the later period
+// actually carries months; a step scheduled beyond the horizon prices
+// nothing and refuses nothing (the tiered model's conditional refusal,
+// on the time axis). The direction of the step is stated from the
+// FEES, not the rates: an increase, a decrease, or no change — a cap
+// can hold two different rates to the same fee, and the honest claim
+// is about what transfers pay. The blended effective rate is derived
+// from the horizon's BigInt totals (hundredths of a basis point), so
+// it is the schedule's own rate over the horizon, never an average of
+// the two printed rates. Volume is the designer's entered monthly
+// transfer count, held constant across the horizon because this model
+// prices a schedule, not a growth forecast: no feed is read and no
+// revenue is promised. LOCAL MODEL ONLY, on the split's boundary:
+// PRISM collects nothing, charges nothing, and executes no transfer;
+// the schedule modeled belongs to the design being priced and must be
+// disclosed to its users exactly as modeled — both rates, and the
+// month the step takes effect.
+export function serviceFeeSchedule(input = {}) {
+  const split = modelServiceFee(input); // Validates amount/decimals/base fee inputs; its takes-all refusal for the initial rate propagates.
+  const laterBps = input.laterBps === undefined ? 200 : Number(input.laterBps);
+  if (!Number.isInteger(laterBps) || laterBps < 0 || laterBps > 10000) throw new Error('Later fee must be a whole number of basis points between 0 and 10,000.');
+  const horizonMonths = input.horizonMonths === undefined ? 12 : Number(input.horizonMonths);
+  if (!Number.isInteger(horizonMonths) || horizonMonths < 1 || horizonMonths > 36) throw new Error('Horizon must be a whole number of months between 1 and 36.');
+  const initialMonths = input.initialMonths === undefined ? 3 : Number(input.initialMonths);
+  if (!Number.isInteger(initialMonths) || initialMonths < 0 || initialMonths > horizonMonths) throw new Error(`Months at the initial rate must be a whole number between 0 and the horizon of ${horizonMonths}.`);
+  const gross = split.gross, fixed = split.fixedFee, cap = split.maxFee;
+  const uncappedLater = gross * BigInt(laterBps) / 10000n + fixed;
+  const laterFee = cap !== null && uncappedLater > cap ? cap : uncappedLater;
+  const laterCapApplied = cap !== null && uncappedLater > cap;
+  const laterMonths = horizonMonths - initialMonths;
+  if (laterMonths > 0 && laterFee >= gross) throw new Error('The later fee would take the whole transfer — the recipient would receive nothing. Lower the later rate, the fixed fee, or the cap, or raise the amount.');
+  const transfers = BigInt(split.transfersPerMonth);
+  const monthlyInitialFee = split.fee * transfers;
+  const monthlyLaterFee = laterFee * transfers;
+  const initialTotalFee = monthlyInitialFee * BigInt(initialMonths);
+  const laterTotalFee = monthlyLaterFee * BigInt(laterMonths);
+  const totalFee = initialTotalFee + laterTotalFee;
+  const totalGross = gross * transfers * BigInt(horizonMonths);
+  const flatTotalAtInitialFee = split.fee * transfers * BigInt(horizonMonths);
+  const hundredths = totalGross === 0n ? 0n : totalFee * 1000000n / totalGross;
+  const blendedBpsText = `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  const change = laterFee > split.fee ? 'increase' : laterFee < split.fee ? 'decrease' : 'none';
+  return {
+    decimals: split.decimals,
+    gross,
+    feeBps: split.feeBps,
+    laterBps,
+    initialMonths,
+    laterMonths,
+    horizonMonths,
+    transfersPerMonth: split.transfersPerMonth,
+    initialFeePerTransfer: split.fee,
+    laterFeePerTransfer: laterFee,
+    initialCapApplied: split.capApplied,
+    laterCapApplied,
+    monthlyInitialFee,
+    monthlyLaterFee,
+    periods: [
+      { key: 'initial', months: initialMonths, feePerTransfer: split.fee, monthlyFee: monthlyInitialFee, totalFee: initialTotalFee, capApplied: split.capApplied },
+      { key: 'later', months: laterMonths, feePerTransfer: laterFee, monthlyFee: monthlyLaterFee, totalFee: laterTotalFee, capApplied: laterCapApplied },
+    ],
+    totalFee,
+    totalGross,
+    totalNet: totalGross - totalFee,
+    flatTotalAtInitialFee,
+    differenceVsFlatInitial: flatTotalAtInitialFee - totalFee,
+    blendedBpsText,
+    change,
+    firstLaterMonth: laterMonths > 0 ? initialMonths + 1 : null,
+  };
+}
