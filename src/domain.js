@@ -8224,3 +8224,71 @@ export function tieredServiceFee(input = {}) {
     blendedBpsText,
   };
 }
+
+// Multi-asset service fee — the fee axis the single-asset models do not
+// cover. modelServiceFee and its break-even, solver, and tiered
+// companions all price transfers of ONE token: one amount, one decimal
+// scale, one fee taken in that token. A fee-earning design that serves
+// several programmable tokens at once — a swap interface quoting many
+// pairs, a marketplace settling in more than one asset — runs a fee
+// schedule PER ASSET, each fee taken in the asset being transferred.
+// This model prices every asset in the entered list EXACTLY as
+// modelServiceFee prices it, in that asset's own base units and
+// decimals: the percentage part rounds down per asset (the rounding
+// remainder stays with that asset's recipient), the fixed fee and cap
+// are that asset's own, the cap binding is reported per asset, and a
+// fee that would take an asset's whole transfer is refused naming that
+// asset — every listed asset carries transfers, so unlike an unreached
+// tier the refusal is never conditional. Assets are told apart by
+// label: a label is required, it is trimmed, and duplicates are
+// refused case-insensitively, because two rows a reader cannot tell
+// apart cannot be disclosed honestly. THE DESIGN POINT IS WHAT THE
+// MODEL REFUSES TO ADD: there is no combined total. Fees in different
+// assets are amounts of different things — adding their base units
+// would produce a number with no asset and no meaning, and converting
+// them to one asset would need a price for each, which PRISM does not
+// read and will not invent. The result therefore carries the per-asset
+// splits and per-asset monthly figures only, with crossAssetTotal
+// stated null and totalsCombined false. All figures are the
+// designer's own entered amounts, rates, and volumes: no feed is read
+// and no revenue is promised. LOCAL MODEL ONLY, on the split's
+// boundary: PRISM collects nothing, charges nothing, and executes no
+// transfer; the schedule modeled belongs to the design being priced
+// and must be disclosed to its users exactly as modeled — per asset,
+// in that asset, with no combined figure the model never produced.
+export function multiAssetServiceFee(input = {}) {
+  const list = input.assets;
+  if (!Array.isArray(list) || list.length === 0) throw new Error('At least one asset is required to model a multi-asset fee schedule.');
+  if (list.length > 8) throw new Error('A multi-asset fee schedule models at most eight assets at a time.');
+  const seen = new Set();
+  const assets = list.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') throw new Error(`Asset ${index + 1} needs its own fee inputs.`);
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    if (!label) throw new Error(`Asset ${index + 1} needs a label so its fee can be told apart from the others.`);
+    const key = label.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate asset label: ${label}. Each asset in the schedule needs its own label.`);
+    seen.add(key);
+    let split;
+    try { split = modelServiceFee(entry); } catch (e) { throw new Error(`${label}: ${e.message}`); }
+    return {
+      label,
+      decimals: split.decimals,
+      gross: split.gross,
+      feeBps: split.feeBps,
+      fixedFee: split.fixedFee,
+      maxFee: split.maxFee,
+      capApplied: split.capApplied,
+      fee: split.fee,
+      net: split.net,
+      effectiveBpsText: split.effectiveBpsText,
+      transfersPerMonth: split.transfersPerMonth,
+      monthly: split.monthly,
+    };
+  });
+  return {
+    assetCount: assets.length,
+    assets,
+    crossAssetTotal: null,
+    totalsCombined: false,
+  };
+}
