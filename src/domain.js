@@ -8909,3 +8909,115 @@ export function modelLaunchpadSale(input = {}) {
     }),
   };
 }
+
+export const LAUNCH_ESCROW_RELEASE_LEVELS = Object.freeze([0, 2500, 5000, 7500, 10000]);
+
+// Launch-escrow milestone model — a launch whose proceeds enter
+// escrow, priced end to end. The launchpad model (v1.138) states a
+// capped raise on its own and the escrow model (v1.136) states a
+// locked amount on its own, but a real raise often chains them: the
+// launch fills, and what the issuer actually receives is held in
+// escrow until milestones are met. Chaining them raises two
+// questions neither model answers alone, and this model states both
+// plainly. FIRST, THE ESCROW STAGE'S BASE: the escrow prices the
+// PROCEEDS — the fill minus the launch fee — never the fill itself,
+// because the launch fee is already taken when the proceeds are
+// locked; pricing the escrow fee on the fill would charge a second
+// fee on money the platform already kept. Both stages reuse their
+// own models unchanged (modelLaunchpadSale, then modelEscrow on the
+// proceeds), so each stage's validation and refusals propagate,
+// judged on that stage's own base: the launch's takes-all refusal on
+// the fill, the escrow's on the proceeds. SECOND, THE FAILURE
+// REFUND: if the milestones fail, the escrow stage charges ZERO and
+// everything still escrowed returns (the escrow model's disclosed
+// rule), on top of the launch's own fee-free refund of the
+// oversubscription; the LAUNCH fee is retained, disclosed here, in
+// the panel, and in the README — the raise itself completed, and
+// the escrow refund rule governs the escrow stage only. On a full
+// release the two fees are the whole cost and the accounting
+// identity holds across both stages: launchFee + escrowFee +
+// issuerFinalNet + launchRefunded === subscribed. On a partial
+// release the escrow's partial discipline applies to the released
+// share of the proceeds (fee only on the released part, capped at
+// the part and flagged takesAll when the computed fee would take
+// it, the uncapped figure exposed), and launchFee + releasedFee +
+// releasedNet + stillHeld + launchRefunded === subscribed always.
+// The total fee rate is derived from the two fees over the FILLED
+// amount — the money actually raised — never from the entered
+// rates. The release-level rows explore other release shares of the
+// proceeds at the same two fees and FLAG a takes-all level instead
+// of refusing it (the ladder treatment). LOCAL MODEL ONLY: PRISM
+// runs no launchpad, holds no escrow, and takes no subscriptions;
+// no feed is read and no raise or return is promised — and a real
+// design must disclose both fees, each fee's base (the fill, then
+// the proceeds), both refund rules, and each fee's recipient to its
+// subscribers exactly as modeled.
+export function modelLaunchEscrow(input = {}) {
+  const launch = modelLaunchpadSale({ hardCap: input.hardCap, subscribed: input.subscribed, decimals: input.decimals, feeBps: input.launchFeeBps, fixedFee: input.launchFixedFee, maxFee: input.launchMaxFee }); // Stage 1: its validation and takes-all refusal (on the fill) propagate.
+  const decimals = launch.decimals;
+  const proceeds = launch.issuerNet;
+  const escrow = modelEscrow({ amount: formatUnits(proceeds, decimals), decimals, feeBps: input.escrowFeeBps, fixedFee: input.escrowFixedFee, maxFee: input.escrowMaxFee, releasedBps: input.releasedBps }); // Stage 2: priced on the PROCEEDS; its full-release takes-all refusal (on the proceeds) propagates.
+  const totalFeesFull = launch.platformFee + escrow.release.fee;
+  const hundredthsOf = (amount, base) => {
+    const hundredths = amount * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const feeOnPart = part => {
+    if (part === 0n) return { fee: 0n, computedFee: 0n, capApplied: false, takesAll: false };
+    const uncapped = part * BigInt(escrow.feeBps) / 10000n + escrow.fixedFee;
+    const computedFee = escrow.maxFee !== null && uncapped > escrow.maxFee ? escrow.maxFee : uncapped;
+    const takesAll = computedFee >= part;
+    return { fee: takesAll ? part : computedFee, computedFee, capApplied: escrow.maxFee !== null && uncapped > escrow.maxFee, takesAll };
+  };
+  return {
+    decimals,
+    hardCap: launch.hardCap,
+    subscribed: launch.subscribed,
+    filled: launch.filled,
+    launchRefunded: launch.refunded,
+    refundedAtLaunch: launch.refunded,
+    oversubscribed: launch.oversubscribed,
+    launchFeeBps: launch.feeBps,
+    launchFee: launch.platformFee,
+    platformFee: launch.platformFee,
+    launchUncappedFee: launch.platformUncappedFee,
+    launchCapApplied: launch.capApplied,
+    proceeds,
+    escrowed: proceeds,
+    escrowFeeBps: escrow.feeBps,
+    escrowFixedFee: escrow.fixedFee,
+    escrowMaxFee: escrow.maxFee,
+    releasedBps: escrow.releasedBps,
+    release: {
+      escrowFee: escrow.release.fee,
+      escrowUncappedFee: escrow.release.uncappedFee,
+      escrowCapApplied: escrow.release.capApplied,
+      issuerFinalNet: escrow.release.net,
+      totalFees: totalFeesFull,
+    },
+    refund: {
+      escrowFee: 0n,
+      refundedTotal: launch.refunded + proceeds,
+      escrowedReturned: proceeds,
+      launchFeeRetained: launch.platformFee,
+    },
+    partial: {
+      releasedBps: escrow.partial.releasedBps,
+      releasedGross: escrow.partial.releasedGross,
+      releasedFee: escrow.partial.releasedFee,
+      computedFee: escrow.partial.computedFee,
+      capApplied: escrow.partial.capApplied,
+      takesAll: escrow.partial.takesAll,
+      releasedNet: escrow.partial.releasedNet,
+      stillHeld: escrow.partial.refundedRemainder,
+      totalFees: launch.platformFee + escrow.partial.releasedFee,
+    },
+    totalFeesFull,
+    totalFeeRateBpsText: hundredthsOf(totalFeesFull, launch.filled),
+    rows: LAUNCH_ESCROW_RELEASE_LEVELS.map(level => {
+      const releasedGross = proceeds * BigInt(level) / 10000n;
+      const f = feeOnPart(releasedGross);
+      return { levelBps: level, releasedGross, escrowFee: f.fee, computedFee: f.computedFee, capApplied: f.capApplied, takesAll: f.takesAll, releasedNet: releasedGross - f.fee, stillHeld: proceeds - releasedGross, totalFees: launch.platformFee + f.fee };
+    }),
+  };
+}
