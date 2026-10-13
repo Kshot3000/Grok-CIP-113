@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.142): the profit mandate names staking
+// Staking rewards dev fee (v1.143): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.142): PRISM designs programmable tokens
+// Token vesting schedule (v1.143): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9298,5 +9298,67 @@ export function modelVestingSchedule(input = {}) {
       const rowVested = cumulativeAt(n);
       return { periods: n, vested: rowVested, locked: total - rowVested };
     }),
+  };
+}
+
+// Vesting revocation model (v1.143): the vesting schedule model
+// (v1.142) prices an allocation that runs to its full duration,
+// but a standard real design is REVOCABLE — team and contractor
+// allocations are often revocable, for example when the recipient
+// leaves — and what happens on revocation is part of the design.
+// New modelVestingRevocation composes modelVestingSchedule
+// UNCHANGED, pricing the schedule at the revocation period as its
+// elapsed point, so the base model's validation and its
+// cumulative-floor schedule propagate exactly. Its semantics are
+// stated plainly: at the revocation period the recipient keeps
+// EXACTLY what had vested by then — the cumulative-floor amount at
+// that period, which is zero when revocation comes before the
+// cliff, because nothing had vested yet — everything not yet
+// vested returns to the issuer/treasury, no release after
+// revocation occurs, and revoking at or after the full duration
+// changes nothing: the recipient keeps the whole allocation and
+// nothing returns. At every revocation point kept + returned ===
+// total always, and the kept and returned shares are derived from
+// the BigInt amounts (hundredths of a basis point over the total),
+// never from period ratios. Milestone rows reuse the schedule's
+// own milestone periods, each priced as the kept and returned
+// amounts if revocation happened at that period instead. All
+// figures are the designer's own entered allocation and periods:
+// no chain state is read and no revocation is executed. LOCAL
+// MODEL ONLY — PRISM revokes nothing, holds no allocation,
+// returns no tokens; a real design must disclose whether vesting
+// is revocable, by whom, and what happens on revocation, exactly
+// as modeled.
+export function modelVestingRevocation(input = {}) {
+  const revocationPeriod = input.revocationPeriod === undefined ? Number(input.cliffPeriods ?? 0) : Number(input.revocationPeriod);
+  if (!Number.isInteger(revocationPeriod) || revocationPeriod < 0) throw new Error('Revocation period must be a whole number between 0 and the vesting periods.');
+  let base;
+  try {
+    base = modelVestingSchedule({ amount: input.amount, decimals: input.decimals, cliffPeriods: input.cliffPeriods, vestingPeriods: input.vestingPeriods, elapsedPeriods: revocationPeriod }); // Composed unchanged: its validation propagates, judged at the revocation point.
+  } catch (err) {
+    if (err.message.startsWith('Elapsed periods')) throw new Error('Revocation period must be a whole number between 0 and the vesting periods.'); // The base judges the revocation point as its elapsed point; a point past the duration is this model's own refusal.
+    throw err;
+  }
+  if (revocationPeriod > base.vestingPeriods) throw new Error('Revocation period must be a whole number between 0 and the vesting periods.');
+  const total = base.total;
+  const kept = base.vested;
+  const returned = total - kept;
+  const shareText = amount => {
+    const hundredths = amount * 1000000n / total;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals: base.decimals,
+    total,
+    cliffPeriods: base.cliffPeriods,
+    vestingPeriods: base.vestingPeriods,
+    revocationPeriod,
+    kept,
+    returned,
+    keptShareBpsText: shareText(kept),
+    returnedShareBpsText: shareText(returned),
+    beforeCliff: revocationPeriod < base.cliffPeriods, // Revoked before the cliff: nothing had vested, so nothing is kept.
+    noEffect: revocationPeriod >= base.vestingPeriods, // Revoked at or after the full duration: the schedule had already completed.
+    rows: base.rows.map(row => ({ periods: row.periods, kept: row.vested, returned: total - row.vested })),
   };
 }
