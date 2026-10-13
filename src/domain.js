@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.144): the profit mandate names staking
+// Staking rewards dev fee (v1.145): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.144): PRISM designs programmable tokens
+// Token vesting schedule (v1.145): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.144): the vesting schedule model
+// Vesting revocation model (v1.145): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.144): the vesting schedule model
+// Vesting acceleration model (v1.145): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9441,5 +9441,80 @@ export function modelVestingAcceleration(input = {}) {
     zeroAcceleration: acceleratedBps === 0, // No share accelerates: the recipient's final amount is exactly what had vested normally.
     noEffect: accelerationPeriod >= base.vestingPeriods, // Accelerated at or after the full duration: the schedule had already completed, so nothing remains to accelerate.
     rows: base.rows.map(row => ({ periods: row.periods, ...priceAt(row.vested) })),
+  };
+}
+
+// Pro-rata holder distribution model (v1.145): a distribution to a
+// token's holders — an airdrop, a revenue share, a reward pool —
+// divides ONE pool among holders in proportion to what each one
+// HOLDS, and PRISM modeled no such division. This is a different
+// question from the revenue split (v1.133), which divides a fee
+// among named recipients by ENTERED percentage shares: here no
+// share is ever entered — each holder's share is DERIVED from
+// their balance, so the model's first discipline is its base:
+// every amount is priced on the balances, never on what a holder
+// receives. New modelHolderDistribution states the division
+// exactly: each holder receives floor(pool × balance ÷
+// totalBalances), in BigInt, so a holder's fraction of the pool
+// is their fraction of the total balance, floored per holder.
+// Per-holder flooring leaves dust: distributed is the sum of the
+// floored receives, undistributed is pool − distributed, and
+// distributed + undistributed === pool always — the undistributed
+// remainder belongs to NO holder in this model, and because each
+// holder's floor loses less than one base unit it is always
+// >= 0 and < the holder count in base units. A zero-balance
+// holder receives zero and holds a zero share; one holder
+// holding the whole total balance (soleHolder) receives the
+// whole pool exactly, with no dust. Each holder's holding share
+// is derived from the BALANCE amounts (hundredths of a basis
+// point over totalBalances), never from the receives — flooring
+// can move a receive by a base unit, and the share a design
+// discloses is the holding that priced it, not its floored
+// result. Holders are told apart by label — required, trimmed,
+// duplicates refused case-insensitively (the revenue split's
+// discipline) — because two rows a reader cannot tell apart
+// cannot be disclosed honestly. All figures are the designer's
+// own entered pool and balances: no chain state is read, no
+// snapshot is taken, and no balance is verified. LOCAL MODEL
+// ONLY — PRISM distributes nothing, holds no pool, and pays no
+// holder; a real design must disclose the snapshot of balances
+// a distribution is priced on and what happens to the
+// undistributed remainder, exactly as modeled.
+export function modelHolderDistribution(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const pool = toUnits(input.pool === undefined ? '0' : input.pool, decimals); // Validates pool + decimals.
+  if (pool <= 0n) throw new Error('Distribution pool must be greater than zero.');
+  const list = input.holders;
+  if (!Array.isArray(list) || list.length === 0) throw new Error('At least one holder is required to model a holder distribution.');
+  if (list.length > 5) throw new Error('A holder distribution models at most five holders at a time.');
+  const seen = new Set();
+  const holders = list.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') throw new Error(`Holder ${index + 1} needs its own label and balance.`);
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    if (!label) throw new Error(`Holder ${index + 1} needs a label so its share can be told apart from the others.`);
+    const key = label.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate holder label: ${label}. Each holder in the distribution needs its own label.`);
+    seen.add(key);
+    const balance = toUnits(entry.balance === undefined ? '0' : entry.balance, decimals); // Zero is allowed: a zero-balance holder receives zero.
+    return { label, balance };
+  });
+  const totalBalances = holders.reduce((sum, entry) => sum + entry.balance, 0n);
+  if (totalBalances <= 0n) throw new Error('Total holder balance must be greater than zero.');
+  const priced = holders.map(entry => {
+    const receives = pool * entry.balance / totalBalances; // BigInt floor: the holder's balance share of the pool, floored per holder.
+    const hundredths = entry.balance * 1000000n / totalBalances;
+    return { label: entry.label, balance: entry.balance, receives, holdingShareBpsText: `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}` };
+  });
+  const distributed = priced.reduce((sum, entry) => sum + entry.receives, 0n);
+  const undistributed = pool - distributed; // Floor dust: belongs to no holder; always >= 0 and < the holder count in base units.
+  return {
+    decimals,
+    pool,
+    totalBalances,
+    holders: priced,
+    distributed,
+    undistributed,
+    soleHolder: holders.some(entry => entry.balance === totalBalances), // One holder holds the whole total balance, so they receive the whole pool and there is no dust.
+    hasDust: undistributed > 0n, // Per-holder flooring left a remainder that belongs to no holder.
   };
 }
