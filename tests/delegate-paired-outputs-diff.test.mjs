@@ -239,7 +239,7 @@ test('the comparison does not mutate either claim, and its two sides are the che
   assert.deepEqual(d.after, checkDelegatePairedOutputs(aSnap));
 });
 
-test('app wires the delegate paired-outputs impact comparison: panel, verdicts, honest boundary, v1.139', async () => {
+test('app wires the delegate paired-outputs impact comparison: panel, verdicts, honest boundary, v1.140', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /diffDelegatePairedOutputs/);
   assert.match(app, /paired-outputs-diff-after-pairs/);
@@ -247,7 +247,7 @@ test('app wires the delegate paired-outputs impact comparison: panel, verdicts, 
   assert.match(app, /DELEGATE PAIRED-OUTPUTS IMPACT · LOCAL MODEL/);
   assert.match(app, /BECAME NOT CONFORMING/);
   assert.match(app, /REQUIREMENT CHANGED/);
-  assert.match(app, /v1\.139/);
+  assert.match(app, /v1\.140/);
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.match(readme, /Delegate paired-outputs impact/);
 });

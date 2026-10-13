@@ -9021,3 +9021,125 @@ export function modelLaunchEscrow(input = {}) {
     }),
   };
 }
+
+export const MARKETPLACE_ESCROW_RELEASE_LEVELS = Object.freeze([0, 2500, 5000, 7500, 10000]);
+
+// Marketplace-escrow settlement model — a marketplace sale whose
+// seller proceeds are held in escrow until delivery, priced end to
+// end. The marketplace model (v1.137) states a sale’s two deductions
+// on its own and the escrow model (v1.136) states a locked amount’s
+// outcomes on its own, but a real marketplace sale often chains
+// them: the buyer pays the price, and what the seller would receive
+// is held until the item is delivered. Chaining them raises two
+// questions neither model answers alone, and this model states both
+// plainly. FIRST, THE ESCROW STAGE’S BASE: the escrow prices the
+// SELLER PROCEEDS — the price minus the platform fee minus the
+// royalty — never the price itself, because the platform fee and
+// the royalty are the sale’s deductions, taken on the full price
+// exactly as the marketplace model states them; pricing the escrow
+// fee on the price would charge a third deduction on money the
+// seller never stood to receive. Both stages reuse their own models
+// unchanged (modelMarketplaceSale, then modelEscrow on the
+// proceeds), so each stage’s validation and refusals propagate,
+// judged on that stage’s own base: the marketplace stage’s refusals
+// on the price (the platform fee alone taking it, or the platform
+// fee and the royalty together taking it), the escrow’s takes-all
+// refusal on the proceeds. SECOND, THE FAILURE REFUND: if delivery
+// fails, the buyer receives the WHOLE price back and NO deduction
+// is retained — the platform fee is not kept, the royalty is not
+// kept, and the escrow stage charges zero. That is deliberately
+// different from the launch-escrow model (v1.139), where the launch
+// fee is retained on a milestone failure: there the launch had
+// already completed before the escrow began, so its fee priced a
+// completed stage. Here the sale and its escrow are ONE settlement
+// — a sale whose item never delivers never completes, so none of
+// its deductions is earned. On a full release the three deductions
+// are the whole cost and the accounting identity holds across both
+// stages: platformFee + royalty + escrowFee + sellerFinalNet ===
+// gross. On a partial release the escrow’s partial discipline
+// applies to the released share of the proceeds (fee only on the
+// released part, capped at the part and flagged takesAll when the
+// computed fee would take it, the uncapped figure exposed), and
+// platformFee + royalty + releasedFee + releasedNet + stillHeld
+// === gross always. The total deduction rate is derived from the
+// three deductions over the PRICE — the money the buyer paid —
+// never from the entered rates. The release-level rows explore
+// other release shares of the proceeds at the same three rates and
+// FLAG a takes-all level instead of refusing it (the ladder
+// treatment). LOCAL MODEL ONLY: PRISM runs no marketplace, holds
+// no escrow, and executes no sale; no feed is read and no revenue
+// is promised — and a real design must disclose all three
+// deductions, each deduction’s base (the price, the price, then
+// the proceeds), the refund rule (the whole price, nothing
+// retained), and each deduction’s recipient to its buyers and
+// sellers exactly as modeled.
+export function modelMarketplaceEscrow(input = {}) {
+  const sale = modelMarketplaceSale({ amount: input.amount, decimals: input.decimals, feeBps: input.feeBps, fixedFee: input.fixedFee, maxFee: input.maxFee, royaltyBps: input.royaltyBps, salesPerMonth: 1 }); // Stage 1: its validation and refusals (on the price) propagate.
+  const decimals = sale.decimals;
+  const proceeds = sale.sellerNet;
+  const escrow = modelEscrow({ amount: formatUnits(proceeds, decimals), decimals, feeBps: input.escrowFeeBps, fixedFee: input.escrowFixedFee, maxFee: input.escrowMaxFee, releasedBps: input.releasedBps }); // Stage 2: priced on the PROCEEDS; its full-release takes-all refusal (on the proceeds) propagates.
+  const totalDeductionsFull = sale.platformFee + sale.royalty + escrow.release.fee;
+  const hundredthsOf = (amount, base) => {
+    const hundredths = amount * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const feeOnPart = part => {
+    if (part === 0n) return { fee: 0n, computedFee: 0n, capApplied: false, takesAll: false };
+    const uncapped = part * BigInt(escrow.feeBps) / 10000n + escrow.fixedFee;
+    const computedFee = escrow.maxFee !== null && uncapped > escrow.maxFee ? escrow.maxFee : uncapped;
+    const takesAll = computedFee >= part;
+    return { fee: takesAll ? part : computedFee, computedFee, capApplied: escrow.maxFee !== null && uncapped > escrow.maxFee, takesAll };
+  };
+  return {
+    decimals,
+    gross: sale.gross,
+    price: sale.gross,
+    feeBps: sale.feeBps,
+    fixedFee: sale.fixedFee,
+    maxFee: sale.maxFee,
+    platformFee: sale.platformFee,
+    platformUncappedFee: sale.platformUncappedFee,
+    capApplied: sale.capApplied,
+    royaltyBps: sale.royaltyBps,
+    royalty: sale.royalty,
+    proceeds,
+    sellerProceeds: proceeds,
+    escrowed: proceeds,
+    escrowFeeBps: escrow.feeBps,
+    escrowFixedFee: escrow.fixedFee,
+    escrowMaxFee: escrow.maxFee,
+    releasedBps: escrow.releasedBps,
+    release: {
+      escrowFee: escrow.release.fee,
+      escrowUncappedFee: escrow.release.uncappedFee,
+      escrowCapApplied: escrow.release.capApplied,
+      sellerFinalNet: escrow.release.net,
+      totalDeductions: totalDeductionsFull,
+    },
+    refund: {
+      escrowFee: 0n,
+      platformFeeRetained: 0n,
+      royaltyRetained: 0n,
+      buyerReceives: sale.gross,
+      refundedTotal: sale.gross,
+    },
+    partial: {
+      releasedBps: escrow.partial.releasedBps,
+      releasedGross: escrow.partial.releasedGross,
+      releasedFee: escrow.partial.releasedFee,
+      computedFee: escrow.partial.computedFee,
+      capApplied: escrow.partial.capApplied,
+      takesAll: escrow.partial.takesAll,
+      releasedNet: escrow.partial.releasedNet,
+      stillHeld: escrow.partial.refundedRemainder,
+      totalDeductions: sale.platformFee + sale.royalty + escrow.partial.releasedFee,
+    },
+    totalDeductionsFull,
+    totalDeductionRateBpsText: hundredthsOf(totalDeductionsFull, sale.gross),
+    rows: MARKETPLACE_ESCROW_RELEASE_LEVELS.map(level => {
+      const releasedGross = proceeds * BigInt(level) / 10000n;
+      const f = feeOnPart(releasedGross);
+      return { levelBps: level, releasedGross, escrowFee: f.fee, computedFee: f.computedFee, capApplied: f.capApplied, takesAll: f.takesAll, releasedNet: releasedGross - f.fee, stillHeld: proceeds - releasedGross, totalDeductions: sale.platformFee + sale.royalty + f.fee };
+    }),
+  };
+}
