@@ -294,7 +294,7 @@ test('the comparison does not mutate either claim, and its two sides are the che
   assert.deepEqual(d.after, checkDelegateRegistryNode(aSnap));
 });
 
-test('app wires the delegate registry-node impact comparison: panel, verdicts, honest boundary, v1.148', async () => {
+test('app wires the delegate registry-node impact comparison: panel, verdicts, honest boundary, v1.149', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /diffDelegateRegistryNode/);
   assert.match(app, /registry-node-diff-after-nodes/);
@@ -302,7 +302,7 @@ test('app wires the delegate registry-node impact comparison: panel, verdicts, h
   assert.match(app, /DELEGATE REGISTRY-NODE IMPACT · LOCAL MODEL/);
   assert.match(app, /BECAME NOT CONFORMING/);
   assert.match(app, /REQUIREMENT CHANGED/);
-  assert.match(app, /v1\.148/);
+  assert.match(app, /v1\.149/);
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.match(readme, /Delegate registry-node impact/);
 });

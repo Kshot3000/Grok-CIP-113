@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.148): the profit mandate names staking
+// Staking rewards dev fee (v1.149): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.148): PRISM designs programmable tokens
+// Token vesting schedule (v1.149): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.148): the vesting schedule model
+// Vesting revocation model (v1.149): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.148): the vesting schedule model
+// Vesting acceleration model (v1.149): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.148): a distribution to a
+// Pro-rata holder distribution model (v1.149): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.148): the holder
+// Capped pro-rata holder distribution model (v1.149): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.148): the holder
+// Minimum-guarantee holder distribution model (v1.149): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.148): a real
+// Capped-and-floored holder distribution model (v1.149): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9832,5 +9832,75 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
     cappedCount: priced.filter(entry => entry.capped).length,
     allCapped: priced.filter(entry => entry.balance > 0n).every(entry => entry.capped), // Every holder who holds anything is at the cap, so nothing more can be distributed under it.
     rounds,
+  };
+}
+
+// Holder distribution claim-window model (v1.149): the
+// distribution family (v1.145–v1.148) prices what each holder is
+// ALLOCATED, but a priced distribution is rarely paid instantly —
+// holders claim within a window or by a deadline, some never
+// claim, and what happens to an UNCLAIMED allocation was modeled
+// nowhere. This is a lifecycle composition, not a fifth bound
+// variant: the allocation is priced by the uncapped holder
+// distribution (v1.145) composed UNCHANGED — its validation and
+// refusals propagate exactly (pool greater than zero, one to
+// five holders, labels required and trimmed, duplicates refused
+// case-insensitively, total balance greater than zero) — and
+// each holder's allocation then splits by their claim status:
+// a holder who claimed is paid out their whole allocation, a
+// holder who did not claim leaves their whole allocation
+// unclaimed, and a claim status that is stated must be stated as
+// a boolean — claimed or unclaimed — or it is refused with its
+// own message; a missing status means unclaimed. The accounting
+// is exact in BigInt: claimedTotal + unclaimedTotal ===
+// distributed and claimedTotal + unclaimedTotal + undistributed
+// === pool always, where undistributed is the base division's
+// floor dust, which belongs to no holder and is claimed by
+// nobody. The claimed share is derived from the AMOUNTS —
+// claimedTotal over distributed — never from holder counts: one
+// holder of three claiming can be most of the claimed amount,
+// and three holders claiming dust can be almost none of it.
+// allClaimed judges only holders whose allocation is greater
+// than zero — a zero-allocation holder's status changes nothing,
+// because there was nothing for them to claim — and when
+// nothing was distributed at all there is nothing to have
+// claimed, so allClaimed is false; noneClaimed states that a
+// real distribution went entirely unclaimed. All figures are
+// the designer's own entered pool, balances, and claim
+// statuses: no chain state is read, no claim is verified, and
+// no deadline is observed. LOCAL MODEL ONLY — PRISM
+// distributes nothing, holds no pool, pays no claim, and runs
+// no claim window; a real design must disclose its claim
+// deadline, what counts as a claim, and where unclaimed
+// allocations go (treasury, redistribution, burn, or a later
+// window) — PRISM models the amount, the design chooses the
+// destination, exactly as modeled.
+export function modelHolderDistributionClaims(input = {}) {
+  const base = modelHolderDistribution(input); // Composed unchanged: its validation, refusals, allocation, and dust are this model's.
+  const list = input.holders;
+  const holders = base.holders.map((entry, index) => {
+    const raw = list[index] && list[index].claimed;
+    if (raw !== undefined && typeof raw !== 'boolean') throw new Error(`Holder ${index + 1}'s claim status must be stated as claimed or unclaimed.`);
+    const claimed = raw === undefined ? false : raw; // A missing claim status means the holder has not claimed.
+    const allocated = entry.receives;
+    return { label: entry.label, balance: entry.balance, allocated, claimed, paidOut: claimed ? allocated : 0n, unclaimedAmount: claimed ? 0n : allocated, holdingShareBpsText: entry.holdingShareBpsText };
+  });
+  const claimedTotal = holders.reduce((sum, entry) => sum + entry.paidOut, 0n);
+  const unclaimedTotal = holders.reduce((sum, entry) => sum + entry.unclaimedAmount, 0n);
+  const hundredths = base.distributed > 0n ? claimedTotal * 1000000n / base.distributed : 0n; // Derived from the amounts, never from holder counts.
+  return {
+    decimals: base.decimals,
+    pool: base.pool,
+    totalBalances: base.totalBalances,
+    holders,
+    distributed: base.distributed,
+    claimedTotal,
+    unclaimedTotal,
+    undistributed: base.undistributed,
+    claimedShareBpsText: `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`,
+    allClaimed: base.distributed > 0n && holders.filter(entry => entry.allocated > 0n).every(entry => entry.claimed), // A zero-allocation holder's status changes nothing; with nothing distributed there is nothing to have claimed.
+    noneClaimed: claimedTotal === 0n && base.distributed > 0n, // A real distribution went entirely unclaimed.
+    claimedCount: holders.filter(entry => entry.claimed).length,
+    unclaimedCount: holders.filter(entry => !entry.claimed).length,
   };
 }
