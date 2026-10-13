@@ -8654,3 +8654,98 @@ export function checkFeeDisclosure(claim) {
     verdicts,
   };
 }
+
+// Escrow release model — the lifecycle the fee family never modeled.
+// The v1.127–v1.135 fee family prices what a disclosed fee takes from a
+// transfer, but an escrow flow is not one transfer: a funder locks an
+// amount, and what happens next has three distinct outcomes — the
+// amount is RELEASED to the seller on completion, REFUNDED to the
+// funder when the conditions are unmet or time out, or PARTIALLY
+// released, with the rest refunded. This model states all three in
+// base units with the split's own BigInt discipline, reusing
+// modelServiceFee on the full amount so its validation and refusals —
+// including the takes-all refusal on a full release — propagate
+// unchanged. The disclosed platform fee is taken AT RELEASE, never at
+// funding: funding collects no fee (feeAtFunding is zero), because
+// at funding no service has been completed. On a full release the fee
+// is the split's exact fee (floor percentage part plus fixed fee,
+// bounded by the cap, binding reported) and the seller receives the
+// rest. On a refund the fee is ZERO and the funder receives the full
+// gross back — a fee on refunded money would charge for a service
+// never completed, and that is this model's disclosed rule, stated
+// in the panel and the README as plainly as the fee itself. On a
+// partial release of releasedBps of the amount, the released gross is
+// floor(gross × releasedBps ÷ 10,000) and the fee is taken ONLY on
+// the released part, computed with the same split rules on that part
+// (floor percentage part plus the fixed fee, bounded by the cap,
+// binding reported); the unreleased remainder is refunded in full
+// with no fee. A computed partial fee that would take the whole
+// released part does NOT refuse the model — the partial explores a
+// size the full-release input did not, so it is flagged takesAll on
+// the partial outcome, the fee taken is the whole released part, and
+// the released net is zero (the ladder treatment the size profile
+// uses). The accounting identity holds on every outcome:
+// releasedNet + releasedFee + refundedRemainder === gross. All
+// figures are the designer's own entered amount and fee: no feed is
+// read. LOCAL MODEL ONLY: PRISM holds no funds, locks nothing, and
+// executes no release or refund; the escrow modeled belongs to the
+// design being priced, and its fee timing and refund rule must be
+// disclosed to its users exactly as modeled.
+export function modelEscrow(input = {}) {
+  const split = modelServiceFee(input); // Validates amount/decimals/fee inputs on the FULL amount; its refusals (incl. takes-all) propagate.
+  const releasedBps = input.releasedBps === undefined ? 5000 : Number(input.releasedBps);
+  if (!Number.isInteger(releasedBps) || releasedBps < 0 || releasedBps > 10000) throw new Error('releasedBps must be a whole number of basis points between 0 and 10,000.');
+  const gross = split.gross, fixed = split.fixedFee, cap = split.maxFee;
+  const feeOn = part => {
+    if (part === 0n) return { fee: 0n, computedFee: 0n, capApplied: false, takesAll: false };
+    const uncapped = part * BigInt(split.feeBps) / 10000n + fixed;
+    const computedFee = cap !== null && uncapped > cap ? cap : uncapped;
+    const capApplied = cap !== null && uncapped > cap;
+    const takesAll = computedFee >= part;
+    return { fee: takesAll ? part : computedFee, computedFee, capApplied, takesAll };
+  };
+  const rateText = (fee, base) => {
+    if (base === 0n) return '0.00';
+    const hundredths = fee * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const partialFee = feeOn(gross * BigInt(releasedBps) / 10000n);
+  const releasedGross = gross * BigInt(releasedBps) / 10000n;
+  const releasedNet = releasedGross - partialFee.fee;
+  return {
+    decimals: split.decimals,
+    gross,
+    feeBps: split.feeBps,
+    fixedFee: fixed,
+    maxFee: cap,
+    releasedBps,
+    feeAtFunding: 0n,
+    release: {
+      gross,
+      fee: split.fee,
+      platformFee: split.fee,
+      sellerNet: split.net,
+      net: split.net,
+      uncappedFee: split.uncappedFee,
+      capApplied: split.capApplied,
+      effectiveBpsText: split.effectiveBpsText,
+    },
+    refund: {
+      fee: 0n,
+      refunded: gross,
+      funderReceives: gross,
+    },
+    partial: {
+      releasedBps,
+      releasedGross,
+      fee: partialFee.fee,
+      releasedFee: partialFee.fee,
+      computedFee: partialFee.computedFee,
+      capApplied: partialFee.capApplied,
+      takesAll: partialFee.takesAll,
+      releasedNet,
+      refundedRemainder: gross - releasedGross,
+      effectiveBpsText: rateText(partialFee.fee, releasedGross),
+    },
+  };
+}
