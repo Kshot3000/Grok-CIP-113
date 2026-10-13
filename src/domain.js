@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.152): the profit mandate names staking
+// Staking rewards dev fee (v1.153): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.152): PRISM designs programmable tokens
+// Token vesting schedule (v1.153): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.152): the vesting schedule model
+// Vesting revocation model (v1.153): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.152): the vesting schedule model
+// Vesting acceleration model (v1.153): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.152): a distribution to a
+// Pro-rata holder distribution model (v1.153): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.152): the holder
+// Capped pro-rata holder distribution model (v1.153): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.152): the holder
+// Minimum-guarantee holder distribution model (v1.153): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.152): a real
+// Capped-and-floored holder distribution model (v1.153): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9835,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.152): the
+// Holder distribution claim-window model (v1.153): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9905,7 +9905,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.152): one destination
+// Holder distribution redistribution model (v1.153): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -9957,7 +9957,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.152): the
+// Holder distribution second claim window model (v1.153): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10021,7 +10021,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.152): the final
+// Holder distribution treasury sweep model (v1.153): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10079,6 +10079,66 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
     allSweptToTreasury: second.finalPaidTotal === 0n && second.distributed > 0n, // Nobody claimed in either window: the whole distributed amount was swept.
     finalClaimedCount: second.finalClaimedCount,
     sweptCount: holders.filter(entry => entry.sweptAmount > 0n).length,
+    stillUnclaimedCount: second.stillUnclaimedCount,
+  };
+}
+
+// Holder distribution burn model (v1.153): the other final
+// disposition the second-window model (v1.151) names for the
+// allocations still unclaimed after BOTH claim windows — the
+// design BURNS them, so they leave the total supply. Unlike the
+// treasury sweep (v1.152), a burn is a SUPPLY question: what is
+// burned does not move to another holder, it stops existing, so
+// the model carries a total supply the design states and the
+// supply's final figure is part of the accounting —
+// supplyAfter === supplyBefore - burnedTotal always. The
+// second-window model is composed unchanged: its allocation,
+// both claim splits, every validation, and every refusal are
+// this model's. Each still-unclaimed holder's allocation is
+// burned in full; a holder who claimed in either window has
+// nothing burned. The base division's floor dust is NOT
+// burned: it was never allocated to anyone, so it is no
+// holder's unclaimed allocation — and it stays undistributed
+// beside the burn, stated separately. This model's own refusal
+// is the supply bound: a burn larger than the stated total
+// supply is refused, because a burn cannot destroy more than
+// was issued. Both shares are derived from the AMOUNTS, never
+// from holder counts: the burned share of the distributed
+// amount, and the burn's share of the total supply before the
+// burn. Local simulation only: no tokens are burned, no supply
+// is read or changed, and no transaction is produced.
+export function modelHolderDistributionBurn(input = {}) {
+  const second = modelHolderDistributionSecondWindow(input); // Composed unchanged: its validation, refusals, allocation, and both claim splits are this model's.
+  const supplyBefore = toUnits(input.supplyBefore === undefined ? '0' : input.supplyBefore, second.decimals); // The stated total supply before the burn; the design must state it, because the burn is priced against it.
+  const burnedTotal = second.stillUnclaimedTotal; // The whole amount neither window paid out — burned in full, never divided.
+  if (burnedTotal > supplyBefore) throw new Error('The amount left unclaimed to burn is larger than the stated total supply before the burn — a burn cannot destroy more than was issued.');
+  const supplyAfter = supplyBefore - burnedTotal;
+  const holders = second.holders.map((entry) => ({ label: entry.label, balance: entry.balance, allocated: entry.allocated, claimed: entry.claimed, claimedSecond: entry.claimedSecond, lateClaimed: entry.lateClaimed, paidOut: entry.paidOut, latePaid: entry.latePaid, finalPaid: entry.finalPaid, burnedAmount: entry.stillUnclaimedAmount, holdingShareBpsText: entry.holdingShareBpsText }));
+  const burnedHundredths = second.distributed > 0n ? burnedTotal * 1000000n / second.distributed : 0n; // Derived from the amounts, never from holder counts.
+  const supplyHundredths = supplyBefore > 0n ? burnedTotal * 1000000n / supplyBefore : 0n; // What fraction of the total supply before the burn this burn removes.
+  return {
+    decimals: second.decimals,
+    pool: second.pool,
+    totalBalances: second.totalBalances,
+    holders,
+    distributed: second.distributed,
+    firstWindowTotal: second.firstWindowTotal,
+    secondWindowTotal: second.secondWindowTotal,
+    finalPaidTotal: second.finalPaidTotal,
+    unclaimedTotal: second.unclaimedTotal,
+    stillUnclaimedTotal: second.stillUnclaimedTotal,
+    burnedTotal,
+    supplyBefore,
+    supplyAfter,
+    undistributed: second.undistributed,
+    burnedShareBpsText: `${burnedHundredths / 100n}.${String(burnedHundredths % 100n).padStart(2, '0')}`,
+    supplyBurnShareBpsText: `${supplyHundredths / 100n}.${String(supplyHundredths % 100n).padStart(2, '0')}`,
+    allFinallyClaimed: second.allFinallyClaimed,
+    burnHappened: burnedTotal > 0n, // A real amount was burned and the supply fell.
+    nothingToBurn: burnedTotal === 0n && second.distributed > 0n, // Every allocated holder claimed in one of the windows, so nothing was left to burn and the supply is untouched.
+    allBurned: second.finalPaidTotal === 0n && second.distributed > 0n, // Nobody claimed in either window: the whole distributed amount was burned.
+    finalClaimedCount: second.finalClaimedCount,
+    burnedCount: holders.filter(entry => entry.burnedAmount > 0n).length,
     stillUnclaimedCount: second.stillUnclaimedCount,
   };
 }
