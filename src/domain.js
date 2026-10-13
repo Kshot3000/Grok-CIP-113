@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.143): the profit mandate names staking
+// Staking rewards dev fee (v1.144): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.143): PRISM designs programmable tokens
+// Token vesting schedule (v1.144): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.143): the vesting schedule model
+// Vesting revocation model (v1.144): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9360,5 +9360,86 @@ export function modelVestingRevocation(input = {}) {
     beforeCliff: revocationPeriod < base.cliffPeriods, // Revoked before the cliff: nothing had vested, so nothing is kept.
     noEffect: revocationPeriod >= base.vestingPeriods, // Revoked at or after the full duration: the schedule had already completed.
     rows: base.rows.map(row => ({ periods: row.periods, kept: row.vested, returned: total - row.vested })),
+  };
+}
+
+// Vesting acceleration model (v1.144): the vesting schedule model
+// (v1.142) prices an allocation that unlocks on its entered
+// schedule, and the revocation model (v1.143) prices ending it
+// early — but a standard real design also ACCELERATES vesting on
+// a stated event (an acquisition, a milestone, a departure on
+// good terms): part or all of what has not yet vested releases at
+// once, and what that means in amounts was modeled nowhere. New
+// modelVestingAcceleration composes modelVestingSchedule
+// UNCHANGED, pricing the schedule at the acceleration period as
+// its elapsed point, so the base model's validation and its
+// cumulative-floor schedule propagate exactly. Its semantics are
+// stated plainly: the accelerated amount is floor(unvested ×
+// acceleratedBps ÷ 10,000) — a share of the UNVESTED remainder at
+// that period, never of the total, because what already vested
+// needs no acceleration — the recipient's final amount is what
+// had vested normally plus the accelerated amount, and the rest
+// stays locked on the original schedule. Acceleration before the
+// cliff is priced as entered: nothing had vested normally yet,
+// so the accelerated share applies to the whole allocation as the
+// unvested remainder. Accelerating at or after the full duration
+// changes nothing: everything had already vested, the unvested
+// remainder is zero, and the accelerated amount is zero.
+// recipientFinal + stillLocked === total always, and the
+// recipient and locked shares are derived from the BigInt amounts
+// (hundredths of a basis point over the total), never from period
+// ratios. Milestone rows reuse the schedule's own milestone
+// periods, each priced as the final and locked amounts if
+// acceleration happened at that period instead, at the same
+// accelerated share. All figures are the designer's own entered
+// allocation and periods: no chain state is read and no
+// acceleration is executed. LOCAL MODEL ONLY — PRISM accelerates
+// nothing, holds no allocation, releases no tokens; a real design
+// must disclose whether vesting accelerates, on what event, and
+// by how much, exactly as modeled.
+export function modelVestingAcceleration(input = {}) {
+  const accelerationPeriod = input.accelerationPeriod === undefined ? Number(input.cliffPeriods ?? 0) : Number(input.accelerationPeriod);
+  if (!Number.isInteger(accelerationPeriod) || accelerationPeriod < 0) throw new Error('Acceleration period must be a whole number between 0 and the vesting periods.');
+  const acceleratedBps = input.acceleratedBps === undefined ? 5000 : Number(input.acceleratedBps);
+  if (!Number.isInteger(acceleratedBps) || acceleratedBps < 0 || acceleratedBps > 10000) throw new Error('Accelerated share must be a whole number of basis points between 0 and 10000.');
+  let base;
+  try {
+    base = modelVestingSchedule({ amount: input.amount, decimals: input.decimals, cliffPeriods: input.cliffPeriods, vestingPeriods: input.vestingPeriods, elapsedPeriods: accelerationPeriod }); // Composed unchanged: its validation propagates, judged at the acceleration point.
+  } catch (err) {
+    if (err.message.startsWith('Elapsed periods')) throw new Error('Acceleration period must be a whole number between 0 and the vesting periods.'); // The base judges the acceleration point as its elapsed point; a point past the duration is this model's own refusal.
+    throw err;
+  }
+  if (accelerationPeriod > base.vestingPeriods) throw new Error('Acceleration period must be a whole number between 0 and the vesting periods.');
+  const total = base.total;
+  const priceAt = vested => {
+    const unvested = total - vested;
+    const accelerated = unvested * BigInt(acceleratedBps) / 10000n; // BigInt floor: the accelerated share of the unvested remainder, never of the total.
+    const recipientFinal = vested + accelerated;
+    return { normallyVested: vested, unvestedAtPeriod: unvested, accelerated, recipientFinal, stillLocked: total - recipientFinal };
+  };
+  const priced = priceAt(base.vested);
+  const shareText = amount => {
+    const hundredths = amount * 1000000n / total;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals: base.decimals,
+    total,
+    cliffPeriods: base.cliffPeriods,
+    vestingPeriods: base.vestingPeriods,
+    accelerationPeriod,
+    acceleratedBps,
+    normallyVested: priced.normallyVested,
+    unvestedAtPeriod: priced.unvestedAtPeriod,
+    accelerated: priced.accelerated,
+    recipientFinal: priced.recipientFinal,
+    stillLocked: priced.stillLocked,
+    recipientShareBpsText: shareText(priced.recipientFinal),
+    lockedShareBpsText: shareText(priced.stillLocked),
+    beforeCliff: accelerationPeriod < base.cliffPeriods, // Accelerated before the cliff: nothing had vested normally, so the share applies to the whole allocation.
+    fullAcceleration: acceleratedBps === 10000, // The whole unvested remainder accelerates, so nothing stays locked.
+    zeroAcceleration: acceleratedBps === 0, // No share accelerates: the recipient's final amount is exactly what had vested normally.
+    noEffect: accelerationPeriod >= base.vestingPeriods, // Accelerated at or after the full duration: the schedule had already completed, so nothing remains to accelerate.
+    rows: base.rows.map(row => ({ periods: row.periods, ...priceAt(row.vested) })),
   };
 }
