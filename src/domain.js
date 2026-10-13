@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.146): the profit mandate names staking
+// Staking rewards dev fee (v1.147): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.146): PRISM designs programmable tokens
+// Token vesting schedule (v1.147): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.146): the vesting schedule model
+// Vesting revocation model (v1.147): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.146): the vesting schedule model
+// Vesting acceleration model (v1.147): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.146): a distribution to a
+// Pro-rata holder distribution model (v1.147): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.146): the holder
+// Capped pro-rata holder distribution model (v1.147): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9617,5 +9617,88 @@ export function modelCappedHolderDistribution(input = {}) {
     cappedCount: priced.filter(entry => entry.capped).length,
     allCapped: priced.filter(entry => entry.balance > 0n).every(entry => entry.capped), // Every holder who holds anything is at the cap, so nothing more can be distributed under it.
     rounds,
+  };
+}
+
+// Minimum-guarantee holder distribution model (v1.147): the holder
+// distribution (v1.145) divides a pool by holdings with no limit,
+// and the capped distribution (v1.146) caps what any one holder
+// may receive; a standard real design does the opposite — it
+// GUARANTEES each eligible holder a minimum, an airdrop floor so
+// small holders are not dusted out, then divides what remains
+// pro-rata by holdings. That changes the design question, so this
+// is a new model, not a knob on the old ones: the guarantees are
+// reserved FIRST, they are feasible only if minimum × eligible
+// count fits in the pool, and only holders who actually hold are
+// eligible for the guarantee — a zero-balance holder receives
+// zero and is guaranteed nothing. Division: guaranteeTotal =
+// minimum × eligibleCount is reserved first; remainderPool =
+// pool − guaranteeTotal is divided among eligible holders exactly
+// as the uncapped model divides its pool —
+// floor(remainderPool × balance ÷ totalBalances) in BigInt — and
+// each eligible holder receives minimum + their remainder share.
+// Distributed + undistributed === pool always, and the
+// undistributed remainder is floor dust from the remainder
+// division only: it is < eligibleCount in base units when
+// eligibleCount > 0. A minimum of zero is allowed and reproduces
+// the uncapped division exactly. Each holder's holding share is
+// still derived from the BALANCE amounts, never from the
+// receives. Holders are told apart by label exactly as in the
+// uncapped model — required, trimmed, duplicates refused
+// case-insensitively. All figures are the designer's own entered
+// pool, minimum, and balances: no chain state is read, no
+// snapshot is taken, and no balance is verified. LOCAL MODEL
+// ONLY — PRISM distributes nothing, holds no pool, pays no
+// holder, and guarantees nothing; a real design must disclose
+// its minimum, who is eligible for it, the snapshot of balances
+// it is priced on, and what happens to the undistributed
+// remainder, exactly as modeled.
+export function modelMinimumHolderDistribution(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const pool = toUnits(input.pool === undefined ? '0' : input.pool, decimals); // Validates pool + decimals.
+  if (pool <= 0n) throw new Error('Distribution pool must be greater than zero.');
+  if (input.minimum !== undefined && String(input.minimum).trim().startsWith('-')) throw new Error('Per-holder minimum cannot be negative.'); // Checked before toUnits, whose amount layer would otherwise refuse a negative with its generic message.
+  const minimum = toUnits(input.minimum === undefined ? '0' : input.minimum, decimals); // Validates minimum in the same units; zero is allowed.
+  if (minimum < 0n) throw new Error('Per-holder minimum cannot be negative.');
+  const list = input.holders;
+  if (!Array.isArray(list) || list.length === 0) throw new Error('At least one holder is required to model a holder distribution.');
+  if (list.length > 5) throw new Error('A holder distribution models at most five holders at a time.');
+  const seen = new Set();
+  const holders = list.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') throw new Error(`Holder ${index + 1} needs its own label and balance.`);
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    if (!label) throw new Error(`Holder ${index + 1} needs a label so its share can be told apart from the others.`);
+    const key = label.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate holder label: ${label}. Each holder in the distribution needs its own label.`);
+    seen.add(key);
+    const balance = toUnits(entry.balance === undefined ? '0' : entry.balance, decimals); // Zero is allowed: a zero-balance holder receives zero and is guaranteed nothing.
+    return { label, balance };
+  });
+  const totalBalances = holders.reduce((sum, entry) => sum + entry.balance, 0n);
+  if (totalBalances <= 0n) throw new Error('Total holder balance must be greater than zero.');
+  const eligibleCount = holders.filter(entry => entry.balance > 0n).length;
+  const guaranteeTotal = minimum * BigInt(eligibleCount); // Reserved first, before any pro-rata division.
+  if (guaranteeTotal > pool) throw new Error('Per-holder minimum times the eligible holder count exceeds the pool.');
+  const remainderPool = pool - guaranteeTotal;
+  const priced = holders.map(entry => {
+    const eligible = entry.balance > 0n;
+    const guaranteed = eligible ? minimum : 0n;
+    const proRata = eligible ? remainderPool * entry.balance / totalBalances : 0n; // BigInt floor, priced on the remainder over the total balance exactly as the uncapped division.
+    const hundredths = entry.balance * 1000000n / totalBalances;
+    return { label: entry.label, balance: entry.balance, eligible, guaranteed, proRata, receives: guaranteed + proRata, holdingShareBpsText: `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}` };
+  });
+  const distributed = priced.reduce((sum, entry) => sum + entry.receives, 0n);
+  const undistributed = pool - distributed; // Floor dust from the remainder division only; < eligibleCount in base units when eligibleCount > 0.
+  return {
+    decimals,
+    pool,
+    minimum,
+    totalBalances,
+    holders: priced,
+    eligibleCount,
+    guaranteeTotal,
+    remainderPool,
+    distributed,
+    undistributed,
   };
 }
