@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.156): the profit mandate names staking
+// Staking rewards dev fee (v1.157): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.156): PRISM designs programmable tokens
+// Token vesting schedule (v1.157): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.156): the vesting schedule model
+// Vesting revocation model (v1.157): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.156): the vesting schedule model
+// Vesting acceleration model (v1.157): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.156): a distribution to a
+// Pro-rata holder distribution model (v1.157): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.156): the holder
+// Capped pro-rata holder distribution model (v1.157): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.156): the holder
+// Minimum-guarantee holder distribution model (v1.157): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.156): a real
+// Capped-and-floored holder distribution model (v1.157): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9835,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.156): the
+// Holder distribution claim-window model (v1.157): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9905,7 +9905,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.156): one destination
+// Holder distribution redistribution model (v1.157): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -9957,7 +9957,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.156): the
+// Holder distribution second claim window model (v1.157): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10021,7 +10021,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.156): the final
+// Holder distribution treasury sweep model (v1.157): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10083,7 +10083,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.156): the other final
+// Holder distribution burn model (v1.157): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10143,7 +10143,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.156): the profit mandate's
+// Constant-product AMM swap model (v1.157): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10222,7 +10222,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.156): the swap
+// Constant-product AMM liquidity deposit model (v1.157): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10309,7 +10309,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.156): the
+// Constant-product AMM liquidity withdrawal model (v1.157): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -10390,5 +10390,96 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
     fullWithdrawal: lpBurn === lpSupply,
     partialWithdrawal: lpBurn !== lpSupply,
     noDustLeft: remainderInNumerator === 0n && remainderOutNumerator === 0n,
+  };
+}
+
+// Lending liquidation model (v1.157): switching axes after the
+// swap axis closed (trade, deposit, withdrawal) — a lending
+// position is the other place a programmable token's value is at
+// risk, and PRISM priced no liquidation. This model prices one
+// liquidation of an undercollateralised position exactly in
+// BigInt, with every amount stated in a common value unit (the
+// design states both the collateral's value and the debt in the
+// same unit; an oracle price is an input to a real design, not
+// something this model invents). A position is liquidatable only
+// when its debt exceeds the most debt its collateral may carry:
+// maxDebt = floor(collateralValue x liquidationThresholdBps /
+// 10000). Liquidating a position inside its threshold is refused
+// outright — that refusal is this model's own, and it is the
+// borrower's protection stated as code. When a liquidation does
+// proceed, the liquidator repays a stated part of the debt and
+// seizes collateral worth the repayment plus the liquidation
+// penalty: seized = floor(repayAmount x (10000 +
+// liquidationPenaltyBps) / 10000) — the penalty is a share OF THE
+// REPAYMENT, never of the whole collateral or the whole debt,
+// and stating that base is the feature. The seizure can never
+// exceed the collateral that exists: when the exact seizure
+// would pass it, the liquidator takes the whole collateral, the
+// penalty actually paid is only what the collateral covers, and
+// any debt left behind with no collateral under it is stated as
+// bad debt, never quietly dropped. Identities: debtAfter ===
+// debtValue - repayAmount; collateralAfter === collateralValue -
+// seized; seized === repayAmount + penaltyAmount whenever the
+// collateral covers the seizure. The health of the position and
+// every share are derived from the AMOUNTS (the threshold-priced
+// collateral over the debt; the seized collateral over the
+// collateral; the repaid debt over the debt), never from the
+// entered rates alone. Local simulation only — PRISM lends
+// nothing, holds no collateral, repays no debt, and seizes
+// nothing; a real design must disclose its liquidation threshold,
+// its penalty and the base that penalty is charged on, and what
+// happens to bad debt, before any position is opened.
+export function modelLendingLiquidation(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const collateralValue = toUnits(input.collateralValue === undefined ? '0' : input.collateralValue, decimals);
+  if (collateralValue <= 0n) throw new Error('Collateral value must be greater than zero.');
+  const debtValue = toUnits(input.debtValue === undefined ? '0' : input.debtValue, decimals);
+  if (debtValue <= 0n) throw new Error('Debt value must be greater than zero.');
+  const liquidationThresholdBps = input.liquidationThresholdBps === undefined ? 8000 : Number(input.liquidationThresholdBps);
+  if (!Number.isInteger(liquidationThresholdBps) || liquidationThresholdBps <= 0 || liquidationThresholdBps > 10000) throw new Error('Liquidation threshold must be a whole number of basis points between 1 and 10,000.');
+  const liquidationPenaltyBps = input.liquidationPenaltyBps === undefined ? 1000 : Number(input.liquidationPenaltyBps);
+  if (!Number.isInteger(liquidationPenaltyBps) || liquidationPenaltyBps < 0 || liquidationPenaltyBps > 10000) throw new Error('Liquidation penalty must be a whole number of basis points between 0 and 10,000.');
+  const maxDebt = collateralValue * BigInt(liquidationThresholdBps) / 10000n;
+  if (debtValue <= maxDebt) throw new Error('This position is not liquidatable: its debt is within the liquidation threshold for its collateral.');
+  const repayAmount = toUnits(input.repayAmount === undefined ? '0' : input.repayAmount, decimals);
+  if (repayAmount <= 0n) throw new Error('Repayment amount must be greater than zero.');
+  if (repayAmount > debtValue) throw new Error('Cannot repay more than the outstanding debt.');
+  const seizedExact = repayAmount * (10000n + BigInt(liquidationPenaltyBps)) / 10000n;
+  const collateralExhausted = seizedExact > collateralValue;
+  const seized = collateralExhausted ? collateralValue : seizedExact;
+  const penaltyAmount = seized > repayAmount ? seized - repayAmount : 0n;
+  const liquidatorShortfall = repayAmount > seized ? repayAmount - seized : 0n;
+  const debtAfter = debtValue - repayAmount;
+  const collateralAfter = collateralValue - seized;
+  const maxDebtAfter = collateralAfter * BigInt(liquidationThresholdBps) / 10000n;
+  const rateText = (part, base) => {
+    if (base === 0n) return '0.00';
+    const hundredths = part * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals,
+    collateralValue,
+    debtValue,
+    liquidationThresholdBps,
+    liquidationPenaltyBps,
+    maxDebt,
+    repayAmount,
+    seizedExact,
+    seized,
+    penaltyAmount,
+    liquidatorShortfall,
+    debtAfter,
+    collateralAfter,
+    maxDebtAfter,
+    healthBpsText: rateText(collateralValue * BigInt(liquidationThresholdBps), debtValue * 10000n),
+    seizedShareBpsText: rateText(seized, collateralValue),
+    repaidShareBpsText: rateText(repayAmount, debtValue),
+    liquidatable: true,
+    collateralExhausted,
+    fullyRepaid: debtAfter === 0n,
+    stillLiquidatableAfter: debtAfter > maxDebtAfter,
+    badDebt: collateralAfter === 0n && debtAfter > 0n,
+    noPenalty: liquidationPenaltyBps === 0,
   };
 }
