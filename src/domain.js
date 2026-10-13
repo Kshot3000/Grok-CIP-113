@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.153): the profit mandate names staking
+// Staking rewards dev fee (v1.154): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.153): PRISM designs programmable tokens
+// Token vesting schedule (v1.154): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.153): the vesting schedule model
+// Vesting revocation model (v1.154): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.153): the vesting schedule model
+// Vesting acceleration model (v1.154): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.153): a distribution to a
+// Pro-rata holder distribution model (v1.154): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.153): the holder
+// Capped pro-rata holder distribution model (v1.154): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.153): the holder
+// Minimum-guarantee holder distribution model (v1.154): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.153): a real
+// Capped-and-floored holder distribution model (v1.154): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9835,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.153): the
+// Holder distribution claim-window model (v1.154): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9905,7 +9905,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.153): one destination
+// Holder distribution redistribution model (v1.154): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -9957,7 +9957,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.153): the
+// Holder distribution second claim window model (v1.154): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10021,7 +10021,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.153): the final
+// Holder distribution treasury sweep model (v1.154): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10083,7 +10083,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.153): the other final
+// Holder distribution burn model (v1.154): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10142,3 +10142,83 @@ export function modelHolderDistributionBurn(input = {}) {
     stillUnclaimedCount: second.stillUnclaimedCount,
   };
 }
+
+// Constant-product AMM swap model (v1.154): the profit mandate's
+// first priority is a swap interface with a disclosed fee, and the
+// fee models (v1.133 family) price fees on transfers, but PRISM
+// priced no SWAP itself. A constant-product pool holds two
+// reserves whose product k = reserveIn x reserveOut is the pricing
+// rule: a trader's amount in, after the swap fee, buys
+// floor(amountInAfterFee x reserveOut / (reserveIn +
+// amountInAfterFee)) out, exactly in BigInt, so the price moves
+// against larger trades and that movement is stated as a price
+// impact derived from the AMOUNTS, never from entered rates. The
+// swap fee itself is split two ways, and both shares state their
+// base: the protocol fee is floor(totalFee x protocolFeeShareBps /
+// 10000) — a share OF THE SWAP FEE, never of the amount in — and
+// the LP fee is the remainder (totalFee - protocolFee, never
+// independently floored, so the split sums to the total fee
+// exactly). Only the protocol fee leaves the pool: the reserve in
+// after the swap is reserveIn + amountIn - protocolFee, and the
+// LP fee staying in the pool grows k, so kAfter >= kBefore always,
+// even when the protocol share is the whole fee. A swap fee that
+// would take the whole amount in is refused, and a trade too
+// small to buy even one base unit out at the pool's reserves is
+// refused as dust. Local simulation only — PRISM runs no pool,
+// holds no liquidity, executes no swap, routes no fee; a real
+// design must disclose both fees, their bases, and where the
+// protocol fee goes before any swap.
+export function modelAmmSwap(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const reserveIn = toUnits(input.reserveIn === undefined ? '0' : input.reserveIn, decimals);
+  if (reserveIn <= 0n) throw new Error('Pool reserve in must be greater than zero.');
+  const reserveOut = toUnits(input.reserveOut === undefined ? '0' : input.reserveOut, decimals);
+  if (reserveOut <= 0n) throw new Error('Pool reserve out must be greater than zero.');
+  const amountIn = toUnits(input.amountIn === undefined ? '0' : input.amountIn, decimals);
+  if (amountIn <= 0n) throw new Error('Swap amount in must be greater than zero.');
+  const swapFeeBps = input.swapFeeBps === undefined ? 30 : Number(input.swapFeeBps);
+  if (!Number.isInteger(swapFeeBps) || swapFeeBps < 0 || swapFeeBps > 10000) throw new Error('Swap fee must be a whole number of basis points between 0 and 10,000.');
+  const protocolFeeShareBps = input.protocolFeeShareBps === undefined ? 2000 : Number(input.protocolFeeShareBps);
+  if (!Number.isInteger(protocolFeeShareBps) || protocolFeeShareBps < 0 || protocolFeeShareBps > 10000) throw new Error('Protocol fee share must be a whole number of basis points between 0 and 10,000.');
+  const totalFee = amountIn * BigInt(swapFeeBps) / 10000n;
+  if (amountIn > 0n && totalFee >= amountIn) throw new Error('The swap fee would take the whole amount in — the trader would receive nothing. Lower the swap fee rate.');
+  const protocolFee = totalFee * BigInt(protocolFeeShareBps) / 10000n;
+  const lpFee = totalFee - protocolFee; // The remainder, never independently floored: protocolFee + lpFee === totalFee exactly.
+  const amountInAfterFee = amountIn - totalFee;
+  const amountOut = amountInAfterFee * reserveOut / (reserveIn + amountInAfterFee);
+  if (amountOut <= 0n) throw new Error('The amount in is too small to buy even one base unit out at this pool\'s reserves.');
+  const reserveInAfter = reserveIn + amountInAfterFee + lpFee; // === reserveIn + amountIn - protocolFee: only the protocol fee leaves the pool.
+  const reserveOutAfter = reserveOut - amountOut;
+  const kBefore = reserveIn * reserveOut;
+  const kAfter = reserveInAfter * reserveOutAfter;
+  const rateText = (part, base) => {
+    if (base === 0n) return '0.00';
+    const hundredths = part * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const priceImpactBase = amountInAfterFee * reserveOut;
+  const priceImpactBpsText = priceImpactBase === 0n ? '0.00' : rateText(priceImpactBase - amountOut * reserveIn, priceImpactBase); // Impact = 1 - (amountOut x reserveIn) / (amountInAfterFee x reserveOut), derived from the amounts.
+  return {
+    decimals,
+    reserveIn,
+    reserveOut,
+    amountIn,
+    swapFeeBps,
+    protocolFeeShareBps,
+    totalFee,
+    protocolFee,
+    lpFee,
+    amountInAfterFee,
+    amountOut,
+    reserveInAfter,
+    reserveOutAfter,
+    kBefore,
+    kAfter,
+    priceImpactBpsText,
+    protocolFeeShareOfFeeBpsText: rateText(protocolFee, totalFee),
+    feeFree: swapFeeBps === 0,
+    noProtocolFee: protocolFee === 0n,
+    allFeeToProtocol: protocolFeeShareBps === 10000 && totalFee > 0n,
+  };
+}
+
