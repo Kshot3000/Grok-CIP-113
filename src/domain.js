@@ -8827,3 +8827,85 @@ export function modelMarketplaceSale(input = {}) {
     rows: MARKETPLACE_ROYALTY_LEVELS.map(level => { const r = royaltyOn(level); return { royaltyBps: level, royalty: r, sellerNet: gross - split.fee - r, takesAll: split.fee + r >= gross }; }),
   };
 }
+
+export const LAUNCHPAD_SUBSCRIPTION_LEVELS = Object.freeze([2500, 5000, 7500, 10000, 15000, 20000]);
+
+// Launchpad sale model — a capped raise, a fee on what filled.
+// The marketplace model states the deductions on one sale; a launch
+// is a different lifecycle: the issuer offers a raise up to a HARD
+// CAP, subscribers commit amounts, and only the part of the
+// subscriptions that fits under the cap is actually sold — the rest
+// was never the issuer’s to keep. This model states the launch’s
+// three outcomes in base units. The FILL is the smaller of the
+// subscriptions and the cap. The platform fee is charged on the
+// FILLED amount only, computed by reusing modelServiceFee on it, so
+// its validation and refusals — including the takes-all refusal,
+// judged on the filled amount, not on the larger subscribed figure —
+// propagate unchanged: a launchpad that charged its fee on the full
+// subscriptions would be charging for a raise that never happened.
+// The OVERSUBSCRIPTION is refunded in full and charged nothing —
+// the escrow model’s disclosed rule, for the same reason: a fee on
+// refunded money would charge for a service never completed. The
+// issuer receives the filled amount minus the fee, and the
+// accounting identity holds on every launch: platformFee +
+// issuerNet + refunded === subscribed. The fill rate and the
+// subscription rate are derived from the BigInt amounts, never the
+// entered figures — the subscription rate can pass 10,000 basis
+// points when a launch is oversubscribed, and it is stated as
+// computed. The subscription-level rows explore other subscription
+// totals as shares of the cap at the same fee and FLAG a level whose
+// fee would take its whole fill instead of refusing it (the ladder
+// treatment: rows explore fills the main input did not enter).
+// Volume held as entered: the model prices a launch, not a demand
+// forecast. LOCAL MODEL ONLY: PRISM runs no launchpad, sells no
+// tokens, and takes no subscriptions; the amounts are the designer’s
+// own entered figures, no feed is read, and no raise is promised —
+// and a real design must disclose the fee’s base (the filled amount),
+// the refund rule (in full, fee-free), and the fee’s recipient to
+// its subscribers exactly as modeled.
+export function modelLaunchpadSale(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const hardCap = toUnits(input.hardCap === undefined ? '0' : input.hardCap, decimals); // Validates cap + decimals.
+  if (hardCap <= 0n) throw new Error('Hard cap must be greater than zero.');
+  const subscribed = toUnits(input.subscribed === undefined ? '0' : input.subscribed, decimals); // Validates subscriptions + decimals.
+  if (subscribed <= 0n) throw new Error('Subscribed amount must be greater than zero.');
+  const filled = subscribed < hardCap ? subscribed : hardCap;
+  const refunded = subscribed - filled;
+  const split = modelServiceFee({ amount: formatUnits(filled, decimals), decimals, feeBps: input.feeBps, fixedFee: input.fixedFee, maxFee: input.maxFee, transfersPerMonth: 1 }); // Fee on the FILLED amount; its refusals (incl. takes-all on the fill) propagate.
+  const issuerNet = filled - split.fee;
+  const rateText = (amount, base) => {
+    const hundredths = amount * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const feeAt = fill => {
+    const uncapped = fill * BigInt(split.feeBps) / 10000n + split.fixedFee;
+    const fee = split.maxFee !== null && uncapped > split.maxFee ? split.maxFee : uncapped;
+    return { fee, takesAll: fee >= fill };
+  };
+  return {
+    decimals: split.decimals,
+    hardCap,
+    subscribed,
+    filled,
+    refunded,
+    unsoldCap: hardCap - filled,
+    oversubscribed: subscribed > hardCap,
+    feeBps: split.feeBps,
+    fixedFee: split.fixedFee,
+    maxFee: split.maxFee,
+    platformFee: split.fee,
+    platformUncappedFee: split.uncappedFee,
+    capApplied: split.capApplied,
+    issuerNet,
+    net: issuerNet,
+    fillRateBpsText: rateText(filled, subscribed),
+    subscriptionRateBpsText: rateText(subscribed, hardCap),
+    feeEffectiveBpsText: split.effectiveBpsText,
+    rows: LAUNCHPAD_SUBSCRIPTION_LEVELS.map(level => {
+      const at = hardCap * BigInt(level) / 10000n;
+      const fill = at < hardCap ? at : hardCap;
+      const f = feeAt(fill);
+      return { levelBps: level, subscribed: at, filled: fill, refunded: at - fill, platformFee: f.fee, issuerNet: fill - f.fee, takesAll: f.takesAll };
+    }),
+  };
+}
