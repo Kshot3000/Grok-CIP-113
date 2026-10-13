@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.149): the profit mandate names staking
+// Staking rewards dev fee (v1.150): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.149): PRISM designs programmable tokens
+// Token vesting schedule (v1.150): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.149): the vesting schedule model
+// Vesting revocation model (v1.150): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.149): the vesting schedule model
+// Vesting acceleration model (v1.150): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.149): a distribution to a
+// Pro-rata holder distribution model (v1.150): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.149): the holder
+// Capped pro-rata holder distribution model (v1.150): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.149): the holder
+// Minimum-guarantee holder distribution model (v1.150): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.149): a real
+// Capped-and-floored holder distribution model (v1.150): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9835,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.149): the
+// Holder distribution claim-window model (v1.150): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9902,5 +9902,57 @@ export function modelHolderDistributionClaims(input = {}) {
     noneClaimed: claimedTotal === 0n && base.distributed > 0n, // A real distribution went entirely unclaimed.
     claimedCount: holders.filter(entry => entry.claimed).length,
     unclaimedCount: holders.filter(entry => !entry.claimed).length,
+  };
+}
+
+// Holder distribution redistribution model (v1.150): one destination
+// a design can choose for the unclaimed allocations the claim-window
+// model (v1.149) states — redistribute them to the holders who DID
+// claim. The claim-window model is composed unchanged: its
+// allocation, claim split, validation, and refusals are this
+// model's. The unclaimed total becomes a second pool, divided among
+// the claimants pro-rata by their ALLOCATIONS (never by holder
+// counts, and never by balances a second time — the allocation is
+// already the balance priced once): each claimant's redistribution
+// share is floor(unclaimedTotal x allocated / claimedTotal) in
+// BigInt, so the second division leaves its own floor dust, which
+// stays unclaimed beside the first division's dust. A holder who
+// did not claim receives no redistribution; a claimant allocated
+// nothing has no base and receives none. When nobody claimed there
+// is no one to redistribute to, and when everybody claimed there
+// is nothing to redistribute — both are stated, not refused.
+// Identities: finalPaidTotal + remainingUnclaimed + undistributed
+// (the first division's dust) === pool always, and redistributedTotal
+// + remainingUnclaimed === unclaimedTotal always. The redistributed
+// share is derived from the amounts, never from holder counts.
+export function modelHolderDistributionRedistribution(input = {}) {
+  const claims = modelHolderDistributionClaims(input); // Composed unchanged: its validation, refusals, allocation, and claim split are this model's.
+  const holders = claims.holders.map((entry) => {
+    const redistribution = entry.claimed && claims.claimedTotal > 0n ? claims.unclaimedTotal * entry.allocated / claims.claimedTotal : 0n; // BigInt division floors, exactly as the base division floors.
+    return { label: entry.label, balance: entry.balance, allocated: entry.allocated, claimed: entry.claimed, paidOut: entry.paidOut, unclaimedAmount: entry.unclaimedAmount, redistribution, finalPaid: entry.paidOut + redistribution, holdingShareBpsText: entry.holdingShareBpsText };
+  });
+  const redistributedTotal = holders.reduce((sum, entry) => sum + entry.redistribution, 0n);
+  const remainingUnclaimed = claims.unclaimedTotal - redistributedTotal; // The second division's floor dust: unclaimed still, claimed by nobody in this model.
+  const finalPaidTotal = claims.claimedTotal + redistributedTotal;
+  const hundredths = claims.unclaimedTotal > 0n ? redistributedTotal * 1000000n / claims.unclaimedTotal : 0n; // Derived from the amounts, never from holder counts.
+  return {
+    decimals: claims.decimals,
+    pool: claims.pool,
+    totalBalances: claims.totalBalances,
+    holders,
+    distributed: claims.distributed,
+    claimedTotal: claims.claimedTotal,
+    unclaimedTotal: claims.unclaimedTotal,
+    redistributedTotal,
+    remainingUnclaimed,
+    finalPaidTotal,
+    undistributed: claims.undistributed,
+    redistributedShareBpsText: `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`,
+    allClaimed: claims.allClaimed,
+    noneClaimed: claims.noneClaimed,
+    redistributionHappened: redistributedTotal > 0n, // A real second division paid something out.
+    noClaimants: claims.claimedTotal === 0n && claims.unclaimedTotal > 0n, // Unclaimed allocations exist but nobody claimed, so there is no one to redistribute to.
+    claimedCount: claims.claimedCount,
+    unclaimedCount: claims.unclaimedCount,
   };
 }
