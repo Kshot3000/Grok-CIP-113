@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelVestingSchedule, vestingMilestonePeriods } from '../src/domain.js';
 
-// Token vesting schedule model (v1.155): an allocation unlocks over
+// Token vesting schedule model (v1.156): an allocation unlocks over
 // time behind a cliff, priced by the cumulative-floor method — the
 // cumulative vested at period n is floor(total × n ÷ duration) once
 // the cliff is reached, 0 before it, and exactly the total at the
@@ -154,6 +154,6 @@ test('wiring: app.js imports the model, renders a vesting panel, and the README 
   assert.match(app, /modelVestingSchedule/);
   assert.match(app, /data-vest/);
   assert.match(app, /vesting-output/);
-  assert.match(app, /v1\.155/);
+  assert.match(app, /v1\.156/);
   assert.match(readme, /Vesting schedule model/);
 });
