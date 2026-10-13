@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.151): the profit mandate names staking
+// Staking rewards dev fee (v1.152): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.151): PRISM designs programmable tokens
+// Token vesting schedule (v1.152): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.151): the vesting schedule model
+// Vesting revocation model (v1.152): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.151): the vesting schedule model
+// Vesting acceleration model (v1.152): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.151): a distribution to a
+// Pro-rata holder distribution model (v1.152): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.151): the holder
+// Capped pro-rata holder distribution model (v1.152): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.151): the holder
+// Minimum-guarantee holder distribution model (v1.152): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.151): a real
+// Capped-and-floored holder distribution model (v1.152): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9835,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.151): the
+// Holder distribution claim-window model (v1.152): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9905,7 +9905,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.151): one destination
+// Holder distribution redistribution model (v1.152): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -9957,7 +9957,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.151): the
+// Holder distribution second claim window model (v1.152): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10018,5 +10018,67 @@ export function modelHolderDistributionSecondWindow(input = {}) {
     lateClaimedCount: holders.filter(entry => entry.lateClaimed).length,
     finalClaimedCount: holders.filter(entry => entry.claimed || entry.lateClaimed).length,
     stillUnclaimedCount: holders.filter(entry => !(entry.claimed || entry.lateClaimed)).length,
+  };
+}
+
+// Holder distribution treasury sweep model (v1.152): the final
+// disposition the second-window model (v1.151) names for the
+// allocations still unclaimed after BOTH claim windows — the
+// design sweeps them to its treasury. The second-window model is
+// composed unchanged: its allocation, both claim splits, every
+// validation, and every refusal are this model's. What neither
+// window paid out does not vanish and is not redistributed: the
+// whole still-unclaimed total moves to the treasury, on top of a
+// treasury balance the design states, so the treasury's final
+// balance is part of the accounting — treasuryAfter ===
+// treasuryBefore + sweptTotal always. Each still-unclaimed
+// holder's allocation is swept in full; a holder who claimed in
+// either window has nothing swept. The base division's floor dust
+// is NOT swept: it was never allocated to anyone, so it is no
+// holder's unclaimed allocation — it stays undistributed beside
+// the sweep, stated separately. Identities: finalPaidTotal +
+// sweptTotal + undistributed (the base division's dust) === pool
+// always, and sweptTotal === the second window's
+// stillUnclaimedTotal exactly. The swept share is derived from
+// the AMOUNTS swept over the amount distributed, never from
+// holder counts, and the sweep's share of the treasury's final
+// balance is likewise derived from the amounts. LOCAL MODEL
+// ONLY — PRISM distributes nothing, holds no pool, pays no
+// claim, runs no claim window, and sweeps nothing to any
+// treasury; a real design must disclose the sweep before the
+// first window opens — that unclaimed allocations go to the
+// treasury, which treasury, and that the dust is not part of it.
+export function modelHolderDistributionTreasurySweep(input = {}) {
+  const second = modelHolderDistributionSecondWindow(input); // Composed unchanged: its validation, refusals, allocation, and both claim splits are this model's.
+  const treasuryBefore = toUnits(input.treasuryBefore === undefined ? '0' : input.treasuryBefore, second.decimals); // The treasury's stated balance before the sweep; zero is allowed — the sweep may be its first funds.
+  const sweptTotal = second.stillUnclaimedTotal; // The whole amount neither window paid out — swept in full, never divided.
+  const treasuryAfter = treasuryBefore + sweptTotal;
+  const holders = second.holders.map((entry) => ({ label: entry.label, balance: entry.balance, allocated: entry.allocated, claimed: entry.claimed, claimedSecond: entry.claimedSecond, lateClaimed: entry.lateClaimed, paidOut: entry.paidOut, latePaid: entry.latePaid, finalPaid: entry.finalPaid, sweptAmount: entry.stillUnclaimedAmount, holdingShareBpsText: entry.holdingShareBpsText }));
+  const sweptHundredths = second.distributed > 0n ? sweptTotal * 1000000n / second.distributed : 0n; // Derived from the amounts, never from holder counts.
+  const treasuryHundredths = treasuryAfter > 0n ? sweptTotal * 1000000n / treasuryAfter : 0n; // What fraction of the treasury's final balance this sweep supplied.
+  return {
+    decimals: second.decimals,
+    pool: second.pool,
+    totalBalances: second.totalBalances,
+    holders,
+    distributed: second.distributed,
+    firstWindowTotal: second.firstWindowTotal,
+    secondWindowTotal: second.secondWindowTotal,
+    finalPaidTotal: second.finalPaidTotal,
+    unclaimedTotal: second.unclaimedTotal,
+    stillUnclaimedTotal: second.stillUnclaimedTotal,
+    sweptTotal,
+    treasuryBefore,
+    treasuryAfter,
+    undistributed: second.undistributed,
+    sweptShareBpsText: `${sweptHundredths / 100n}.${String(sweptHundredths % 100n).padStart(2, '0')}`,
+    treasurySweepShareBpsText: `${treasuryHundredths / 100n}.${String(treasuryHundredths % 100n).padStart(2, '0')}`,
+    allFinallyClaimed: second.allFinallyClaimed,
+    sweepHappened: sweptTotal > 0n, // A real amount moved to the treasury.
+    nothingToSweep: sweptTotal === 0n && second.distributed > 0n, // Every allocated holder claimed in one of the windows, so nothing was left to sweep.
+    allSweptToTreasury: second.finalPaidTotal === 0n && second.distributed > 0n, // Nobody claimed in either window: the whole distributed amount was swept.
+    finalClaimedCount: second.finalClaimedCount,
+    sweptCount: holders.filter(entry => entry.sweptAmount > 0n).length,
+    stillUnclaimedCount: second.stillUnclaimedCount,
   };
 }
