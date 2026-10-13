@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.154): the profit mandate names staking
+// Staking rewards dev fee (v1.155): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.154): PRISM designs programmable tokens
+// Token vesting schedule (v1.155): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.154): the vesting schedule model
+// Vesting revocation model (v1.155): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.154): the vesting schedule model
+// Vesting acceleration model (v1.155): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.154): a distribution to a
+// Pro-rata holder distribution model (v1.155): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.154): the holder
+// Capped pro-rata holder distribution model (v1.155): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.154): the holder
+// Minimum-guarantee holder distribution model (v1.155): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.154): a real
+// Capped-and-floored holder distribution model (v1.155): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9835,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.154): the
+// Holder distribution claim-window model (v1.155): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9905,7 +9905,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.154): one destination
+// Holder distribution redistribution model (v1.155): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -9957,7 +9957,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.154): the
+// Holder distribution second claim window model (v1.155): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10021,7 +10021,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.154): the final
+// Holder distribution treasury sweep model (v1.155): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10083,7 +10083,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.154): the other final
+// Holder distribution burn model (v1.155): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10143,7 +10143,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.154): the profit mandate's
+// Constant-product AMM swap model (v1.155): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10222,3 +10222,89 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
+// Constant-product AMM liquidity deposit model (v1.155): the swap
+// model (v1.154) prices trades against a pool, but a pool holds
+// nothing until someone deposits both assets, and PRISM modeled no
+// deposit. This model prices a deposit into an EXISTING pool — the
+// first, ratio-setting deposit into an empty pool is a different
+// question and is not modeled here, which is why the reserves and
+// the existing LP supply must both be greater than zero. Both
+// deposit amounts enter the reserves in full, and the LP tokens
+// minted are governed by the LIMITING side: lpFromIn =
+// floor(depositIn x lpSupply / reserveIn) and lpFromOut =
+// floor(depositOut x lpSupply / reserveOut), and lpMinted is the
+// smaller of the two — never the larger, and never an average. Any
+// amount of the non-limiting asset beyond what pairs with the
+// limiting amount at the pool's ratio (the excess) is deposited
+// but mints no extra LP tokens: it deepens the pool for everyone
+// and rewards the depositor with nothing, which is exactly why a
+// real design must disclose it before any deposit. Identities:
+// reserveInAfter === reserveIn + depositIn; reserveOutAfter ===
+// reserveOut + depositOut; lpSupplyAfter === lpSupply + lpMinted;
+// kAfter >= kBefore always, because both reserves only grow. The
+// provider's share of the pool after the deposit is derived from
+// the AMOUNTS (lpMinted over lpSupplyAfter), never from the
+// deposit amounts alone. A deposit too small to mint even one base
+// unit of LP token is refused as dust. Local simulation only —
+// PRISM runs no pool, holds no liquidity, takes no deposit, and
+// mints no LP token; a real design must disclose that deposits are
+// taken in full, that LP tokens are minted on the limiting side,
+// and that any excess over the pool's ratio mints nothing extra,
+// before any deposit is taken.
+export function modelAmmLiquidityDeposit(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const reserveIn = toUnits(input.reserveIn === undefined ? '0' : input.reserveIn, decimals);
+  if (reserveIn <= 0n) throw new Error('Pool reserve in must be greater than zero.');
+  const reserveOut = toUnits(input.reserveOut === undefined ? '0' : input.reserveOut, decimals);
+  if (reserveOut <= 0n) throw new Error('Pool reserve out must be greater than zero.');
+  const lpSupply = toUnits(input.lpSupply === undefined ? '0' : input.lpSupply, decimals);
+  if (lpSupply <= 0n) throw new Error('Existing LP supply must be greater than zero.');
+  const depositIn = toUnits(input.depositIn === undefined ? '0' : input.depositIn, decimals);
+  if (depositIn <= 0n) throw new Error('Deposit in must be greater than zero.');
+  const depositOut = toUnits(input.depositOut === undefined ? '0' : input.depositOut, decimals);
+  if (depositOut <= 0n) throw new Error('Deposit out must be greater than zero.');
+  const lpFromIn = depositIn * lpSupply / reserveIn;
+  const lpFromOut = depositOut * lpSupply / reserveOut;
+  const lpMinted = lpFromIn < lpFromOut ? lpFromIn : lpFromOut;
+  if (lpMinted <= 0n) throw new Error('The deposit is too small to mint even one base unit of LP token at this pool\'s reserves and supply.');
+  const pairedOut = depositIn * reserveOut / reserveIn; // The out amount that pairs exactly with the full deposit in at the pool's ratio.
+  const pairedIn = depositOut * reserveIn / reserveOut; // The in amount that pairs exactly with the full deposit out at the pool's ratio.
+  const excessOut = depositOut > pairedOut ? depositOut - pairedOut : 0n;
+  const excessIn = depositIn > pairedIn ? depositIn - pairedIn : 0n;
+  const reserveInAfter = reserveIn + depositIn;
+  const reserveOutAfter = reserveOut + depositOut;
+  const lpSupplyAfter = lpSupply + lpMinted;
+  const kBefore = reserveIn * reserveOut;
+  const kAfter = reserveInAfter * reserveOutAfter;
+  const rateText = (part, base) => {
+    if (base === 0n) return '0.00';
+    const hundredths = part * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const limitingSide = lpFromIn === lpFromOut ? 'balanced' : (lpFromIn < lpFromOut ? 'in' : 'out');
+  return {
+    decimals,
+    reserveIn,
+    reserveOut,
+    lpSupply,
+    depositIn,
+    depositOut,
+    lpFromIn,
+    lpFromOut,
+    lpMinted,
+    pairedIn,
+    pairedOut,
+    excessIn,
+    excessOut,
+    reserveInAfter,
+    reserveOutAfter,
+    lpSupplyAfter,
+    kBefore,
+    kAfter,
+    providerShareBpsText: rateText(lpMinted, lpSupplyAfter),
+    limitingSide,
+    balanced: limitingSide === 'balanced',
+    inLimited: limitingSide === 'in',
+    outLimited: limitingSide === 'out',
+  };
+}
