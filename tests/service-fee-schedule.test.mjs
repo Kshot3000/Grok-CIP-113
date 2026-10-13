@@ -138,5 +138,5 @@ test('panel wiring: the schedule renders in app.js with its time fields', async 
   assert.match(app, /data-fee="initialMonths"/);
   assert.match(app, /data-fee="horizonMonths"/);
   assert.match(app, /schedule-fee-table/);
-  assert.match(app, /v1\.147/);
+  assert.match(app, /v1\.148/);
 });

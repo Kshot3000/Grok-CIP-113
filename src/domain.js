@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.147): the profit mandate names staking
+// Staking rewards dev fee (v1.148): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.147): PRISM designs programmable tokens
+// Token vesting schedule (v1.148): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.147): the vesting schedule model
+// Vesting revocation model (v1.148): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.147): the vesting schedule model
+// Vesting acceleration model (v1.148): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.147): a distribution to a
+// Pro-rata holder distribution model (v1.148): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.147): the holder
+// Capped pro-rata holder distribution model (v1.148): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.147): the holder
+// Minimum-guarantee holder distribution model (v1.148): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9700,5 +9700,137 @@ export function modelMinimumHolderDistribution(input = {}) {
     remainderPool,
     distributed,
     undistributed,
+  };
+}
+
+// Capped-and-floored holder distribution model (v1.148): a real
+// design often carries BOTH bounds of the distribution family at
+// once — the minimum guarantee of the floored model (v1.147) so
+// small holders are not dusted out, AND the per-holder cap of the
+// capped model (v1.146) so no large holder takes the pool. The
+// combination is a new model, not two knobs on one division,
+// because the bounds INTERACT: the guarantees are reserved first
+// (exactly as the floored model reserves them), and the remainder
+// is then water-filled under each holder's CAP ROOM — cap minus
+// minimum — never under the whole cap, because the minimum is
+// already part of what the holder receives and a remainder share
+// priced against the whole cap would let a holder receive
+// minimum + cap. The interaction also creates a refusal neither
+// bound has alone: a cap below the minimum is contradictory (a
+// holder cannot be guaranteed more than they may receive), so it
+// is refused with its own message. Division: guaranteeTotal =
+// minimum × eligibleCount is reserved first and must fit in the
+// pool, as in the floored model; remainderPool = pool −
+// guaranteeTotal is divided in ROUNDS among eligible holders
+// exactly as the capped model divides — floor(roundPool ×
+// balance ÷ totalActiveBalance) in BigInt, a holder whose share
+// passes their remaining cap room receives only that room, is
+// capped, and leaves the active set, and what they did not take
+// is priced again among the rest. Each eligible holder receives
+// minimum + their remainder share, so every eligible holder
+// receives at least the minimum and at most the cap, and
+// distributed + undistributed === pool always. The remainder's
+// meaning follows the capped model: when every eligible holder
+// is at the cap (allCapped), the undistributed remainder is
+// cap-blocked, not dust — the guarantees were paid, and the rest
+// cannot move under the cap; otherwise it is floor dust from the
+// final round. The bounds degenerate honestly: a minimum of zero
+// reproduces the capped model exactly, and a cap no remainder
+// share can reach reproduces the floored model exactly; a cap
+// equal to the minimum pays each eligible holder exactly the
+// minimum and leaves the whole remainder cap-blocked. Only
+// holders who actually hold are eligible — a zero-balance holder
+// receives zero, is guaranteed nothing, and is capped at nothing.
+// Each holder's holding share is still derived from the BALANCE
+// amounts, never from the receives. Holders are told apart by
+// label exactly as in the uncapped model — required, trimmed,
+// duplicates refused case-insensitively. All figures are the
+// designer's own entered pool, minimum, cap, and balances: no
+// chain state is read, no snapshot is taken, and no balance is
+// verified. LOCAL MODEL ONLY — PRISM distributes nothing, holds
+// no pool, pays no holder, guarantees nothing, and enforces no
+// cap; a real design must disclose its minimum, its cap, who is
+// eligible for the guarantee, the snapshot of balances a
+// distribution is priced on, and what happens to any remainder
+// the cap leaves undistributed, exactly as modeled.
+export function modelCappedFlooredHolderDistribution(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const pool = toUnits(input.pool === undefined ? '0' : input.pool, decimals); // Validates pool + decimals.
+  if (pool <= 0n) throw new Error('Distribution pool must be greater than zero.');
+  if (input.minimum !== undefined && String(input.minimum).trim().startsWith('-')) throw new Error('Per-holder minimum cannot be negative.'); // Checked before toUnits, whose amount layer would otherwise mask it, as in the floored model.
+  const minimum = toUnits(input.minimum === undefined ? '0' : input.minimum, decimals); // Validates minimum in the same units; zero is allowed.
+  if (minimum < 0n) throw new Error('Per-holder minimum cannot be negative.');
+  const cap = toUnits(input.cap === undefined ? '0' : input.cap, decimals); // Validates cap in the same units.
+  if (cap <= 0n) throw new Error('Per-holder cap must be greater than zero.');
+  if (cap < minimum) throw new Error('Per-holder cap cannot be less than the per-holder minimum.');
+  const list = input.holders;
+  if (!Array.isArray(list) || list.length === 0) throw new Error('At least one holder is required to model a holder distribution.');
+  if (list.length > 5) throw new Error('A holder distribution models at most five holders at a time.');
+  const seen = new Set();
+  const holders = list.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') throw new Error(`Holder ${index + 1} needs its own label and balance.`);
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    if (!label) throw new Error(`Holder ${index + 1} needs a label so its share can be told apart from the others.`);
+    const key = label.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate holder label: ${label}. Each holder in the distribution needs its own label.`);
+    seen.add(key);
+    const balance = toUnits(entry.balance === undefined ? '0' : entry.balance, decimals); // Zero is allowed: a zero-balance holder receives zero and is guaranteed nothing.
+    return { label, balance };
+  });
+  const totalBalances = holders.reduce((sum, entry) => sum + entry.balance, 0n);
+  if (totalBalances <= 0n) throw new Error('Total holder balance must be greater than zero.');
+  const eligibleCount = holders.filter(entry => entry.balance > 0n).length;
+  const guaranteeTotal = minimum * BigInt(eligibleCount); // Reserved first, before any pro-rata division, as in the floored model.
+  if (guaranteeTotal > pool) throw new Error('Per-holder minimum times the eligible holder count exceeds the pool.');
+  const remainderPool = pool - guaranteeTotal;
+  const room = cap - minimum; // The most of the remainder any one holder may take: their receive is minimum + remainder share, capped at the cap.
+  const proRata = holders.map(() => 0n);
+  let remaining = remainderPool;
+  let rounds = 0;
+  let active = holders.map((entry, index) => index).filter(index => holders[index].balance > 0n);
+  while (remaining > 0n && active.length > 0) {
+    rounds++;
+    const roundPool = remaining;
+    const totalActive = active.reduce((sum, index) => sum + holders[index].balance, 0n);
+    let granted = 0n;
+    let cappedAny = false;
+    const stillActive = [];
+    for (const index of active) {
+      const share = roundPool * holders[index].balance / totalActive; // BigInt floor, priced on this round's remaining remainder and the still-active balances.
+      const headroom = room - proRata[index];
+      const grant = share < headroom ? share : headroom;
+      if (share > headroom) cappedAny = true; // The cap room held this holder back this round: what they did not take is priced again among the rest.
+      proRata[index] += grant;
+      granted += grant;
+      if (proRata[index] < room) stillActive.push(index);
+    }
+    remaining -= granted;
+    if (!cappedAny) break; // Nobody was capped: the leftover is floor dust from this round's flooring, and the division is done.
+    active = stillActive; // At least one holder reached their cap room this round, so the active set shrank and the loop terminates.
+  }
+  const priced = holders.map((entry, index) => {
+    const eligible = entry.balance > 0n;
+    const guaranteed = eligible ? minimum : 0n;
+    const receives = eligible ? guaranteed + proRata[index] : 0n;
+    const hundredths = entry.balance * 1000000n / totalBalances;
+    return { label: entry.label, balance: entry.balance, eligible, guaranteed, proRata: eligible ? proRata[index] : 0n, receives, holdingShareBpsText: `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`, capped: eligible && receives === cap };
+  });
+  const distributed = priced.reduce((sum, entry) => sum + entry.receives, 0n);
+  const undistributed = pool - distributed; // Floor dust when the cap never binds everyone; cap-blocked remainder when it does — allCapped says which.
+  return {
+    decimals,
+    pool,
+    minimum,
+    cap,
+    totalBalances,
+    holders: priced,
+    eligibleCount,
+    guaranteeTotal,
+    remainderPool,
+    distributed,
+    undistributed,
+    cappedCount: priced.filter(entry => entry.capped).length,
+    allCapped: priced.filter(entry => entry.balance > 0n).every(entry => entry.capped), // Every holder who holds anything is at the cap, so nothing more can be distributed under it.
+    rounds,
   };
 }
