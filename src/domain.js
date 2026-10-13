@@ -8749,3 +8749,81 @@ export function modelEscrow(input = {}) {
     },
   };
 }
+
+export const MARKETPLACE_ROYALTY_LEVELS = Object.freeze([0, 250, 500, 750, 1000]);
+
+// Marketplace sale model — two deductions from one price.
+// The fee family prices what one disclosed fee takes from a transfer,
+// and the escrow model states a locked amount’s outcomes, but a
+// marketplace sale carries TWO deductions from the same price at the
+// same moment: the platform fee (the service-fee split — floor
+// percentage part plus fixed fee, bounded by the cap) and a creator
+// royalty. Two deductions raise a question neither single-fee model
+// answers: what base is each computed on, and what happens when
+// together they reach the whole price? This model states both
+// plainly. The platform fee is computed by reusing modelServiceFee
+// on the full price, so its validation and refusals — including the
+// takes-all refusal when the platform fee alone would take the whole
+// price — propagate unchanged. The royalty is a share OF THE SALE:
+// floor(gross × royaltyBps ÷ 10,000) on the FULL price, never on the
+// after-fee remainder, because a royalty is a share of what the item
+// sold for, not of what the platform leaves; that base is disclosed
+// here, in the panel, and in the README, and it means a cap on the
+// platform fee changes the platform fee and the seller’s net but
+// never the royalty. The seller receives what remains, and the
+// accounting identity holds on every sale: platformFee + royalty +
+// sellerNet === gross. If the two deductions TOGETHER would take the
+// whole price — each modest alone, ruinous together — the sale is
+// REFUSED with its own message, never modeled with a negative or
+// zero seller: a design whose deductions leave the seller nothing is
+// not a sale split, it is a confiscation schedule, and it must be
+// redesigned, not priced. The royalty-level rows explore other
+// royalty rates at the same platform fee and FLAG a takes-all level
+// instead of refusing it (the ladder treatment: rows explore rates
+// the main input would refuse). Monthly figures are the per-sale
+// figures at the designer’s entered monthly sales count, computed
+// from the totals. All figures are the designer’s own entered price
+// and rates: no feed is read and no revenue is promised. LOCAL MODEL
+// ONLY: PRISM runs no marketplace, lists nothing, and executes no
+// sale; the sale modeled belongs to the design being priced, and its
+// deductions — their bases, their rounding, and their recipients —
+// must be disclosed to its users exactly as modeled.
+export function modelMarketplaceSale(input = {}) {
+  const sales = input.salesPerMonth === undefined ? 20 : Number(input.salesPerMonth);
+  if (!Number.isInteger(sales) || sales < 1 || sales > 1000000) throw new Error('Monthly sales must be a whole number between 1 and 1,000,000.');
+  const royaltyBps = input.royaltyBps === undefined ? 250 : Number(input.royaltyBps);
+  if (!Number.isInteger(royaltyBps) || royaltyBps < 0 || royaltyBps > 10000) throw new Error('Royalty must be a whole number of basis points between 0 and 10,000.');
+  const split = modelServiceFee({ ...input, transfersPerMonth: sales }); // Validates price/fee inputs on the FULL price; its refusals (incl. platform takes-all) propagate.
+  const gross = split.gross;
+  const royaltyOn = bps => gross * BigInt(bps) / 10000n;
+  const royalty = royaltyOn(royaltyBps);
+  const combined = split.fee + royalty;
+  if (combined >= gross) throw new Error('The platform fee and the royalty together would take the whole price — the seller would receive nothing. Lower the fee rate, the fixed fee, the cap, or the royalty, or raise the price.');
+  const sellerNet = gross - combined;
+  const rateText = amount => {
+    const hundredths = amount * 1000000n / gross;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const count = BigInt(sales);
+  return {
+    decimals: split.decimals,
+    gross,
+    feeBps: split.feeBps,
+    fixedFee: split.fixedFee,
+    maxFee: split.maxFee,
+    royaltyBps,
+    salesPerMonth: sales,
+    platformFee: split.fee,
+    platformUncappedFee: split.uncappedFee,
+    capApplied: split.capApplied,
+    royalty,
+    sellerNet,
+    net: sellerNet,
+    combinedDeductions: combined,
+    platformEffectiveBpsText: split.effectiveBpsText,
+    royaltyEffectiveBpsText: rateText(royalty),
+    combinedEffectiveBpsText: rateText(combined),
+    monthly: { gross: gross * count, platformFee: split.fee * count, royalty: royalty * count, sellerNet: sellerNet * count },
+    rows: MARKETPLACE_ROYALTY_LEVELS.map(level => { const r = royaltyOn(level); return { royaltyBps: level, royalty: r, sellerNet: gross - split.fee - r, takesAll: split.fee + r >= gross }; }),
+  };
+}
