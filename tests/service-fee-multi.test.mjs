@@ -125,5 +125,5 @@ test('panel wiring: the multi-asset model renders in app.js', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /multiAssetServiceFee\(/);
   assert.match(app, /data-fee2/);
-  assert.match(app, /v1\.145/);
+  assert.match(app, /v1\.146/);
 });
