@@ -9143,3 +9143,91 @@ export function modelMarketplaceEscrow(input = {}) {
     }),
   };
 }
+
+// Staking rewards dev fee (v1.141): the profit mandate names staking
+// tools with a dev fee, and PRISM modeled no staking at all. A staking
+// lifecycle has two different kinds of money in it — the staker's
+// principal, which was theirs before the tool did anything, and the
+// rewards the staking earns — and an honest dev fee may be charged
+// ONLY on the second. New modelStakingRewards states that base
+// discipline exactly: the dev fee is floor(totalRewards × devFeeBps ÷
+// 10,000), the principal is returned whole in every outcome, and a
+// dev fee that would take ALL the rewards is refused (at zero
+// rewards the fee is zero and nothing is refused — nothing was
+// earned, so nothing can be taken). Rewards are priced two ways,
+// stated as entered: SIMPLE, a constant per-period reward of
+// floor(principal × rewardBps ÷ 10,000); and COMPOUND, where each
+// period's reward is floored on the balance of principal plus the
+// rewards already accrued, so later periods earn on more. Every
+// period's reward floors — rounding never favours the fee or the
+// rewards. The effective dev share and the total reward rate are
+// derived from the BigInt amounts, never from the entered rates.
+// Horizon rows price the same design at 1, 6, 12, 24, and 36 periods
+// under the same mode. All figures are the designer's own entered
+// principal and rates: no yield feed is read and no return is
+// promised. LOCAL MODEL ONLY: PRISM stakes nothing, holds no stake,
+// and pays no rewards; the dev fee modeled belongs to the design
+// being priced, and its base — the rewards only, never the
+// principal — must be disclosed to its stakers exactly as modeled.
+export const STAKING_HORIZON_PERIODS = Object.freeze([1, 6, 12, 24, 36]);
+export const STAKING_MODES = Object.freeze(['simple', 'compound']);
+export function modelStakingRewards(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const principal = toUnits(input.amount === undefined ? '0' : input.amount, decimals); // Validates amount + decimals.
+  if (principal <= 0n) throw new Error('Staked principal must be greater than zero.');
+  const rewardBps = input.rewardBps === undefined ? 500 : Number(input.rewardBps);
+  if (!Number.isInteger(rewardBps) || rewardBps < 0 || rewardBps > 10000) throw new Error('Reward rate must be a whole number of basis points between 0 and 10,000.');
+  const periods = input.periods === undefined ? 12 : Number(input.periods);
+  if (!Number.isInteger(periods) || periods < 1 || periods > 120) throw new Error('Periods must be a whole number between 1 and 120.');
+  const devFeeBps = input.devFeeBps === undefined ? 1000 : Number(input.devFeeBps);
+  if (!Number.isInteger(devFeeBps) || devFeeBps < 0 || devFeeBps > 10000) throw new Error('Dev fee must be a whole number of basis points between 0 and 10,000.');
+  const mode = input.mode === undefined ? 'simple' : String(input.mode);
+  if (!STAKING_MODES.includes(mode)) throw new Error('Mode must be simple or compound.');
+  const rewardsThrough = n => {
+    const schedule = [];
+    let balance = principal;
+    for (let i = 0; i < n; i++) {
+      const base = mode === 'compound' ? balance : principal;
+      const reward = base * BigInt(rewardBps) / 10000n;
+      schedule.push(reward);
+      balance += reward;
+    }
+    return { schedule, totalRewards: balance - principal, finalBalance: balance };
+  };
+  const rateText = (part, base) => {
+    if (base === 0n) return '0.00';
+    const hundredths = part * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const main = rewardsThrough(periods);
+  const totalRewards = main.totalRewards;
+  const devFee = totalRewards * BigInt(devFeeBps) / 10000n;
+  if (totalRewards > 0n && devFee >= totalRewards) throw new Error('The dev fee would take all the rewards — the staker would earn nothing. Lower the dev fee rate.');
+  const stakerRewardsNet = totalRewards - devFee;
+  const stakerFinal = principal + stakerRewardsNet;
+  return {
+    decimals,
+    principal,
+    amount: principal,
+    rewardBps,
+    periods,
+    devFeeBps,
+    mode,
+    schedule: main.schedule,
+    perPeriodReward: main.schedule[0] ?? 0n,
+    firstPeriodReward: main.schedule[0] ?? 0n,
+    lastPeriodReward: main.schedule[main.schedule.length - 1] ?? 0n,
+    totalRewards,
+    devFee,
+    stakerRewardsNet,
+    stakerFinal,
+    principalReturned: principal, // The principal is never the fee's base: it returns whole in every outcome.
+    devFeeShareBpsText: rateText(devFee, totalRewards),
+    totalRewardRateBpsText: rateText(totalRewards, principal),
+    rows: STAKING_HORIZON_PERIODS.map(n => {
+      const h = rewardsThrough(n);
+      const fee = h.totalRewards * BigInt(devFeeBps) / 10000n;
+      return { periods: n, totalRewards: h.totalRewards, devFee: fee, takesAll: h.totalRewards > 0n && fee >= h.totalRewards, stakerRewardsNet: h.totalRewards - fee, stakerFinal: principal + (h.totalRewards - fee) };
+    }),
+  };
+}
