@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.141): the profit mandate names staking
+// Staking rewards dev fee (v1.142): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9228,6 +9228,75 @@ export function modelStakingRewards(input = {}) {
       const h = rewardsThrough(n);
       const fee = h.totalRewards * BigInt(devFeeBps) / 10000n;
       return { periods: n, totalRewards: h.totalRewards, devFee: fee, takesAll: h.totalRewards > 0n && fee >= h.totalRewards, stakerRewardsNet: h.totalRewards - fee, stakerFinal: principal + (h.totalRewards - fee) };
+    }),
+  };
+}
+
+// Token vesting schedule (v1.142): PRISM designs programmable tokens
+// but modeled no vesting, yet nearly every real allocation — team,
+// treasury, investor — unlocks over time behind a cliff. New
+// modelVestingSchedule prices one allocation's schedule exactly, by
+// the cumulative-floor method: the cumulative vested amount at period
+// n is 0 while n <= 0 or n < cliffPeriods, and floor(total × n ÷
+// vestingPeriods) at n >= cliffPeriods. Cliff semantics are stated
+// plainly: nothing vests before the cliff, and at the cliff period
+// the whole accrued share — floor(total × cliff ÷ vestingPeriods) —
+// releases at once. Each period's release is cumulative[n] −
+// cumulative[n−1], so the schedule's releases sum to the total
+// EXACTLY: at n = vestingPeriods the cumulative is floor(total × D ÷
+// D), the total itself, and the final period takes whatever remainder
+// the floors left — the cumulative-floor method leaves no dust. At
+// the elapsed point being priced, vested + locked === total always,
+// and the vested share is derived from the BigInt amounts (hundredths
+// of a basis point over the total), never from period ratios.
+// Milestone rows price the same schedule at the distinct sorted
+// periods 0, the cliff, the midpoint (ceil of half the duration), and
+// the full duration. All figures are the designer's own entered
+// allocation and periods: no chain state is read and no release date
+// is promised. LOCAL MODEL ONLY: PRISM vests nothing, holds no
+// allocation, and releases no tokens; a real design must disclose its
+// cliff, its duration, and its release schedule to its holders
+// exactly as modeled.
+export function vestingMilestonePeriods(cliffPeriods, vestingPeriods) {
+  return [...new Set([0, cliffPeriods, Math.ceil(vestingPeriods / 2), vestingPeriods])].sort((a, b) => a - b);
+}
+export function modelVestingSchedule(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const total = toUnits(input.amount === undefined ? '0' : input.amount, decimals); // Validates amount + decimals.
+  if (total <= 0n) throw new Error('Vesting amount must be greater than zero.');
+  const cliffPeriods = input.cliffPeriods === undefined ? 0 : Number(input.cliffPeriods);
+  if (!Number.isInteger(cliffPeriods) || cliffPeriods < 0 || cliffPeriods > 120) throw new Error('Cliff periods must be a whole number between 0 and 120.');
+  const vestingPeriods = input.vestingPeriods === undefined ? 1 : Number(input.vestingPeriods);
+  if (!Number.isInteger(vestingPeriods) || vestingPeriods < 1 || vestingPeriods > 120) throw new Error('Vesting periods must be a whole number between 1 and 120.');
+  if (cliffPeriods > vestingPeriods) throw new Error('Cliff periods cannot exceed the vesting periods.');
+  const elapsedPeriods = input.elapsedPeriods === undefined ? cliffPeriods : Number(input.elapsedPeriods);
+  if (!Number.isInteger(elapsedPeriods) || elapsedPeriods < 0 || elapsedPeriods > vestingPeriods) throw new Error('Elapsed periods must be a whole number between 0 and the vesting periods.');
+  const cumulativeAt = n => (n <= 0 || n < cliffPeriods ? 0n : total * BigInt(n) / BigInt(vestingPeriods));
+  const schedule = [];
+  let previous = 0n;
+  for (let period = 1; period <= vestingPeriods; period++) {
+    const cumulative = cumulativeAt(period);
+    schedule.push({ period, released: cumulative - previous, cumulative });
+    previous = cumulative;
+  }
+  const vested = cumulativeAt(elapsedPeriods);
+  const locked = total - vested;
+  const hundredths = vested * 1000000n / total;
+  return {
+    decimals,
+    total,
+    amount: total,
+    cliffPeriods,
+    vestingPeriods,
+    elapsedPeriods,
+    schedule,
+    vested,
+    locked,
+    vestedShareBpsText: `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`,
+    cliffRelease: cumulativeAt(cliffPeriods), // The whole accrued share that releases at once at the cliff period (0 when the cliff is period 0).
+    rows: vestingMilestonePeriods(cliffPeriods, vestingPeriods).map(n => {
+      const rowVested = cumulativeAt(n);
+      return { periods: n, vested: rowVested, locked: total - rowVested };
     }),
   };
 }
