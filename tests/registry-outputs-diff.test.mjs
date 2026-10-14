@@ -254,7 +254,7 @@ test('the comparison’s two sides are the checker’s own verdicts', () => {
   assert.deepEqual(d.after, checkRegistryInsertOutputs(JSON.parse(JSON.stringify(after))));
 });
 
-test('app wires the registry insert outputs impact comparison: panel, verdicts, honest boundary, v1.167', async () => {
+test('app wires the registry insert outputs impact comparison: panel, verdicts, honest boundary, v1.168', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /diffRegistryInsertOutputs/);
   assert.match(app, /registry-outputs-diff-after-policy/);
@@ -263,7 +263,7 @@ test('app wires the registry insert outputs impact comparison: panel, verdicts, 
   assert.match(app, /REGISTRY INSERT OUTPUTS IMPACT · LOCAL MODEL/);
   assert.match(app, /BECAME NOT CONFORMING/);
   assert.match(app, /REQUIREMENT CHANGED/);
-  assert.match(app, /v1\.167/);
+  assert.match(app, /v1\.168/);
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.match(readme, /Registry insertion outputs impact/);
 });
