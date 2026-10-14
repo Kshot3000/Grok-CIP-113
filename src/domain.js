@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.163): the profit mandate names staking
+// Staking rewards dev fee (v1.164): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.163): the staking rewards model
+// Staking early-exit model (v1.164): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.163): the staking rewards model
+// Staking rollover model (v1.164): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.163): PRISM designs programmable tokens
+// Token vesting schedule (v1.164): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.163): the vesting schedule model
+// Vesting revocation model (v1.164): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.163): the vesting schedule model
+// Vesting acceleration model (v1.164): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.163): the vesting schedule model
+// Vesting claim model (v1.164): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.163): a programmable token can
+// Tokenised bond coupon model (v1.164): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,121 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.163): a distribution to a
+// Tokenised bond secondary-sale model (v1.164): the bond coupon
+// model (v1.163) prices a bond held to maturity, but a holder can
+// sell before maturity, and a sale between coupon dates raises
+// the classic dispute this model prices: the current period's
+// coupon has partly elapsed while the SELLER held the bond, yet
+// the BUYER will receive that coupon whole when the period ends.
+// The settlement is stated in two parts, never merged. FIRST, the
+// clean price: what the buyer pays for the bond itself, stated
+// against the face exactly as the coupon model states a price
+// (below face a discount, above it a premium) — the accrued
+// coupon never enters the clean price. SECOND, the accrued
+// coupon: floor(couponPerPeriod × accruedBps ÷ 10,000), the
+// elapsed share of the current period's coupon, paid by the
+// buyer to the seller ON TOP of the clean price, so the amount
+// the buyer actually pays (the dirty price) is clean + accrued,
+// always. The seller's account is then whole: the coupons of the
+// periods already paid (periodsElapsed × couponPerPeriod) plus
+// the dirty price, against what the seller originally paid —
+// stated signed, so a sale can show a loss. The buyer's account
+// is the mirror: they will receive the remaining coupons —
+// INCLUDING the current period's coupon whole, which is exactly
+// why they compensated the seller for its elapsed share — plus
+// the face at maturity, against the dirty price they paid, also
+// signed. A sale exactly on a coupon date accrues nothing; a
+// sale after the whole current period has elapsed accrues the
+// full coupon; a zero-coupon bond accrues nothing ever, so its
+// dirty price is its clean price. An accrued share above zero
+// whose amount floors to zero on a small face at low decimals
+// is stated as accruedFloorsToZero. A sale at or after maturity
+// is refused: the bond has been redeemed and there is nothing
+// left to sell. Identities: dirtyPrice === cleanPrice +
+// accruedCoupon; priorCoupons + remainingCoupons ===
+// totalCoupons; sellerTotal === priorCoupons + dirtyPrice;
+// buyerFuture === remainingCoupons + face. The accrued share of
+// the current coupon and both parties' return rates are derived
+// from the AMOUNTS (hundredths of a basis point), never from the
+// entered shares. All figures are the designer's own entered
+// face, rate, periods, prices, elapsed periods, and elapsed
+// share: no market price is read and no sale is settled.
+// LOCAL MODEL ONLY — PRISM sells no bond, settles no sale, and
+// pays no accrued coupon; a real design must disclose whether
+// its quoted price is clean or dirty, how the accrued share of
+// a period is measured, and that the buyer receives the current
+// period's coupon whole, before the first secondary sale,
+// exactly as modeled.
+export function modelBondSecondarySale(input = {}) {
+  const base = modelBondCoupon({ amount: input.amount, decimals: input.decimals, couponBps: input.couponBps, periods: input.periods, price: input.price }); // Composes the coupon model unchanged: its coupon on the face, schedule, validation, and refusals propagate; its price is what the seller originally paid.
+  const decimals = base.decimals;
+  const periodsElapsed = input.periodsElapsed === undefined ? 0 : Number(input.periodsElapsed);
+  if (!Number.isInteger(periodsElapsed) || periodsElapsed < 0 || periodsElapsed >= base.periods) throw new Error('Periods already paid before the sale must be a whole number from 0 up to one less than the periods to maturity — a sale at or after maturity has nothing left to sell.');
+  const accruedBps = input.accruedBps === undefined ? 0 : Number(input.accruedBps);
+  if (!Number.isInteger(accruedBps) || accruedBps < 0 || accruedBps > 10000) throw new Error('Accrued share of the current period must be a whole number of basis points between 0 and 10,000.');
+  const cleanPrice = input.salePrice === undefined ? base.face : toUnits(input.salePrice, decimals); // An unstated sale price is par: the clean price is the face exactly.
+  if (cleanPrice <= 0n) throw new Error('Bond sale price must be greater than zero.');
+  const couponPerPeriod = base.couponPerPeriod;
+  const priorCoupons = couponPerPeriod * BigInt(periodsElapsed); // Coupons of the periods already ended — the seller received these before the sale.
+  const remainingPeriods = base.periods - periodsElapsed;
+  const remainingCoupons = couponPerPeriod * BigInt(remainingPeriods); // Includes the current period's coupon whole: the buyer receives it at the period's end.
+  const accruedCoupon = couponPerPeriod * BigInt(accruedBps) / 10000n; // The elapsed share of the current period's coupon, floored — the buyer compensates the seller for it.
+  const dirtyPrice = cleanPrice + accruedCoupon; // What the buyer actually pays: the clean price plus the accrued coupon, never merged in the statement.
+  const sellerTotal = priorCoupons + dirtyPrice; // Everything the seller receives over their holding: the coupons already paid plus the sale settlement.
+  const sellerReturn = sellerTotal - base.price; // Signed: against what the seller originally paid.
+  const buyerFuture = remainingCoupons + base.face; // Everything the buyer will receive: the remaining coupons plus the face at maturity.
+  const buyerReturn = buyerFuture - dirtyPrice; // Signed: a dirty price above everything left to receive is a stated loss.
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const signedShareText = (part, baseAmount) => part < 0n ? `-${shareText(-part, baseAmount)}` : shareText(part, baseAmount);
+  return {
+    decimals,
+    face: base.face,
+    amount: base.face,
+    couponBps: base.couponBps,
+    periods: base.periods,
+    purchasePrice: base.price,
+    price: base.price,
+    couponPerPeriod,
+    totalCoupons: base.totalCoupons,
+    periodsElapsed,
+    remainingPeriods,
+    accruedBps,
+    cleanPrice,
+    salePrice: cleanPrice,
+    accruedCoupon,
+    dirtyPrice,
+    priorCoupons,
+    remainingCoupons,
+    sellerTotal,
+    sellerReturn,
+    buyerFuture,
+    buyerReturn,
+    accruedShareBpsText: shareText(accruedCoupon, couponPerPeriod),
+    cleanPriceShareBpsText: shareText(cleanPrice, base.face),
+    sellerReturnRateBpsText: signedShareText(sellerReturn, base.price),
+    buyerReturnRateBpsText: signedShareText(buyerReturn, dirtyPrice),
+    atCouponDate: accruedBps === 0, // The sale falls on a coupon date: nothing of the current period has elapsed.
+    accruedFullPeriod: accruedBps === 10000, // The whole current period had elapsed: the accrued coupon is that period's coupon whole.
+    noAccrued: accruedCoupon === 0n, // Nothing is added to the clean price.
+    zeroCoupon: base.zeroCoupon, // No coupon is promised, so nothing can accrue.
+    accruedFloorsToZero: accruedBps > 0 && couponPerPeriod > 0n && accruedCoupon === 0n, // A stated elapsed share whose accrued amount floors away on this face — stated, never presented as compensation that exists.
+    cleanAtPar: cleanPrice === base.face,
+    cleanAtDiscount: cleanPrice < base.face,
+    cleanAtPremium: cleanPrice > base.face,
+    sellerNegativeReturn: sellerReturn < 0n,
+    sellerZeroReturn: sellerReturn === 0n,
+    sellerPositiveReturn: sellerReturn > 0n,
+    buyerNegativeReturn: buyerReturn < 0n,
+    buyerZeroReturn: buyerReturn === 0n,
+    buyerPositiveReturn: buyerReturn > 0n,
+  };
+}
+
+// Pro-rata holder distribution model (v1.164): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9922,7 +10036,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.163): the holder
+// Capped pro-rata holder distribution model (v1.164): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10023,7 +10137,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.163): the holder
+// Minimum-guarantee holder distribution model (v1.164): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10106,7 +10220,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.163): a real
+// Capped-and-floored holder distribution model (v1.164): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10238,7 +10352,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.163): the
+// Holder distribution claim-window model (v1.164): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10308,7 +10422,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.163): one destination
+// Holder distribution redistribution model (v1.164): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10360,7 +10474,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.163): the
+// Holder distribution second claim window model (v1.164): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10424,7 +10538,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.163): the final
+// Holder distribution treasury sweep model (v1.164): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10486,7 +10600,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.163): the other final
+// Holder distribution burn model (v1.164): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10546,7 +10660,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.163): the profit mandate's
+// Constant-product AMM swap model (v1.164): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10625,7 +10739,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.163): the swap
+// Constant-product AMM liquidity deposit model (v1.164): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10712,7 +10826,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.163): the
+// Constant-product AMM liquidity withdrawal model (v1.164): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -10796,7 +10910,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.163): switching axes after the
+// Lending liquidation model (v1.164): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -10887,7 +11001,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.163): the liquidation model
+// Lending health stress model (v1.164): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -10970,7 +11084,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.163): the liquidation model (v1.157)
+// Lending interest model (v1.164): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
