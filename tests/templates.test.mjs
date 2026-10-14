@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { TEMPLATES } from '../src/config.js';
 import { fromTemplate, validateDesign, simulateTransfer, makeManifest, parseManifest, toUnits } from '../src/domain.js';
 
-// v1.7 added the carbon-credit and event-ticket templates. These tests pin the
+// v1.7 added the carbon-credit and event-ticket templates; v1.175 added the
+// governance template. These tests pin the
 // whole catalog: every template must produce a valid design, ship a real icon
 // and a real accent style (icon() silently falls back to a box and an unknown
 // accent class renders unstyled — both failures are invisible without a test),
@@ -14,11 +15,11 @@ import { fromTemplate, validateDesign, simulateTransfer, makeManifest, parseMani
 const iconsSource = readFileSync(new URL('../src/icons.js', import.meta.url), 'utf8');
 const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
-test('catalog has six templates with unique ids and tickers', () => {
-  assert.equal(TEMPLATES.length, 6);
-  assert.equal(new Set(TEMPLATES.map(t => t.id)).size, 6);
-  assert.equal(new Set(TEMPLATES.map(t => t.ticker)).size, 6);
-  assert.deepEqual(TEMPLATES.map(t => t.id), ['rwa', 'credit', 'stable', 'community', 'carbon', 'ticket']);
+test('catalog has seven templates with unique ids and tickers', () => {
+  assert.equal(TEMPLATES.length, 7);
+  assert.equal(new Set(TEMPLATES.map(t => t.id)).size, 7);
+  assert.equal(new Set(TEMPLATES.map(t => t.ticker)).size, 7);
+  assert.deepEqual(TEMPLATES.map(t => t.id), ['rwa', 'credit', 'stable', 'community', 'carbon', 'ticket', 'governance']);
 });
 
 test('every template builds a design that validates with zero errors', () => {
@@ -36,8 +37,8 @@ test('every template icon exists and every non-default accent has template-icon 
   }
 });
 
-test('carbon and ticket manifests round-trip exactly', () => {
-  for (const id of ['carbon', 'ticket']) {
+test('carbon, ticket, and governance manifests round-trip exactly', () => {
+  for (const id of ['carbon', 'ticket', 'governance']) {
     const m = makeManifest(fromTemplate(id), 'preview');
     assert.deepEqual(parseManifest(JSON.stringify(m)), { design: fromTemplate(id), network: 'preview' });
   }
@@ -86,4 +87,33 @@ test('event ticket: open access, four-per-transfer anti-scalping cap, whole tick
   const half = simulateTransfer(d, { recipient: 'approved', amount: '0.5' });
   assert.equal(half.allowed, false);
   assert.equal(half.invalid, true);
+});
+
+test('governance token: open voting power, no issuer pause, 1%-of-supply per-transfer cap', () => {
+  const d = fromTemplate('governance');
+  assert.equal(d.decimals, 6);
+  assert.equal(d.allowlist, false);
+  assert.equal(d.pausable, false);
+  assert.equal(d.identity, false);
+  assert.equal(d.substandard, 'generic');
+  assert.equal(toUnits(d.supply, d.decimals), 10000000000000n);
+  assert.equal(toUnits(d.limit, d.decimals) * 100n, toUnits(d.supply, d.decimals)); // The cap is exactly 1% of supply.
+  // Open access: even the pending participant (no allowlist, no credential) can receive voting power.
+  const ok = simulateTransfer(d, { recipient: 'pending', amount: '100000' });
+  assert.equal(ok.allowed, true, JSON.stringify(ok.checks));
+  // One base unit over 1% of the supply is denied by the transfer-limit check alone.
+  const over = simulateTransfer(d, { recipient: 'approved', amount: '100000.000001' });
+  assert.equal(over.allowed, false);
+  assert.equal(over.checks.find(c => c.name === 'Transfer limit').pass, false);
+  assert.ok(over.checks.filter(c => !c.pass).length === 1);
+  // Issuer controls are off, so even a design carrying the paused flag cannot
+  // be halted by the issuer in this model — the pause check passes because
+  // the control itself is disabled, which is the template's promise.
+  const paused = simulateTransfer({ ...d, paused: true }, { recipient: 'approved', amount: '1' });
+  assert.equal(paused.allowed, true, JSON.stringify(paused.checks));
+  assert.equal(paused.checks.find(c => c.name === 'Issuer controls').pass, true);
+  // A frozen participant is likewise not blocked: with controls off there is
+  // no freeze mechanism to apply.
+  const frozen = simulateTransfer(d, { recipient: 'blocked', amount: '1' });
+  assert.equal(frozen.allowed, true, JSON.stringify(frozen.checks));
 });

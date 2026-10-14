@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelVaultShareRedemption } from '../src/domain.js';
 
-// Vault share redemption model (v1.174): redeeming shares from a
+// Vault share redemption model (v1.175): redeeming shares from a
 // share-based vault burns them at the price before the redemption; the
 // gross value is floored, the disclosed exit fee is floored on that
 // gross value, and the redeemer receives the rest.
@@ -145,6 +145,6 @@ test('wiring: app.js imports the model, renders a vault share redemption panel, 
   assert.match(app, /modelVaultShareRedemption/);
   assert.match(app, /data-vaultred/);
   assert.match(app, /vaultred-output/);
-  assert.match(app, /v1\.174/);
+  assert.match(app, /v1\.175/);
   assert.match(readme, /Vault share redemption model/);
 });
