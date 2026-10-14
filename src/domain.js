@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.164): the profit mandate names staking
+// Staking rewards dev fee (v1.165): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.164): the staking rewards model
+// Staking early-exit model (v1.165): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.164): the staking rewards model
+// Staking rollover model (v1.165): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.164): PRISM designs programmable tokens
+// Token vesting schedule (v1.165): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.164): the vesting schedule model
+// Vesting revocation model (v1.165): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.164): the vesting schedule model
+// Vesting acceleration model (v1.165): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.164): the vesting schedule model
+// Vesting claim model (v1.165): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.164): a programmable token can
+// Tokenised bond coupon model (v1.165): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.164): the bond coupon
+// Tokenised bond secondary-sale model (v1.165): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -9961,7 +9961,120 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.164): a distribution to a
+// Tokenised bond early-redemption (call) model (v1.165): the
+// bond coupon model (v1.163) prices a bond held to maturity and
+// the secondary-sale model (v1.164) prices a sale between
+// holders, but an ISSUER can also end a bond early — a call —
+// and PRISM priced no call. A call is stated on a coupon date,
+// after a stated number of whole periods have already been paid
+// (periodsElapsed): the issuer pays the CALL PRICE to redeem
+// the bond, and the remaining periods never run, so their
+// coupons are never paid (foregoneCoupons). The call price is
+// stated against the face exactly as the coupon model states a
+// price: above the face is a call premium, below it a discount,
+// and that signed difference is the whole compensation question
+// — the premium is what the issuer pays the holder for ending
+// the bond early, set against the coupons the holder will now
+// never receive. The holder's account is whole: the coupons of
+// the periods already paid plus the call price, against what
+// they originally paid, stated signed, so a call at a low price
+// can show a loss. The issuer's account is the same amounts
+// from the other side: what it pays if it calls (the prior
+// coupons plus the call price) against what it would pay to
+// maturity (every coupon plus the face), also signed — calling
+// usually saves the foregone coupons minus the premium, but a
+// premium larger than the foregone coupons makes the call COST
+// more than running to maturity, and that is stated, never
+// hidden. The holder's difference against holding to maturity
+// is exactly the negative of the issuer's saving: one side's
+// saving is the other side's foregone receipts, stated both
+// ways so neither account is presented alone. A call at or
+// after maturity is refused: that payment is the redemption
+// itself, not a call. A zero-coupon bond foregoes no coupons,
+// so its call is a pure face-versus-call-price question.
+// Identities: priorCoupons + foregoneCoupons === totalCoupons;
+// holderTotal === priorCoupons + callPrice; issuerSaving ===
+// foregoneCoupons − callPremium; holderVsMaturity ===
+// −issuerSaving. The call price's share of the face, the
+// foregone share of the total coupons, and both signed rates
+// are derived from the AMOUNTS (hundredths of a basis point),
+// never from the entered rates. All figures are the designer's
+// own entered face, rate, periods, prices, and elapsed periods:
+// no market price is read and no bond is called.
+// LOCAL MODEL ONLY — PRISM issues no bond, calls nothing, and
+// pays no call price; a real design must disclose whether the
+// issuer may call the bond, from when, at what call price, and
+// that the remaining coupons are never paid once it does,
+// before the first sale, exactly as modeled.
+export function modelBondCall(input = {}) {
+  const base = modelBondCoupon({ amount: input.amount, decimals: input.decimals, couponBps: input.couponBps, periods: input.periods, price: input.price }); // Composes the coupon model unchanged: its coupon on the face, schedule, validation, and refusals propagate; its price is what the holder originally paid.
+  const decimals = base.decimals;
+  const periodsElapsed = input.periodsElapsed === undefined ? 0 : Number(input.periodsElapsed);
+  if (!Number.isInteger(periodsElapsed) || periodsElapsed < 0 || periodsElapsed >= base.periods) throw new Error('Periods already paid before the call must be a whole number from 0 up to one less than the periods to maturity — a call at or after maturity is not a call, it is the redemption itself.');
+  const callPrice = input.callPrice === undefined ? base.face : toUnits(input.callPrice, decimals); // An unstated call price is par: the issuer redeems at the face exactly.
+  if (callPrice <= 0n) throw new Error('Bond call price must be greater than zero.');
+  const couponPerPeriod = base.couponPerPeriod;
+  const priorCoupons = couponPerPeriod * BigInt(periodsElapsed); // Coupons of the periods already ended — the holder received these before the call.
+  const remainingPeriods = base.periods - periodsElapsed;
+  const foregoneCoupons = couponPerPeriod * BigInt(remainingPeriods); // The coupons of the periods that will now never run — never paid to anyone.
+  const callPremium = callPrice - base.face; // Signed: positive at a premium over the face, negative at a discount.
+  const holderTotal = priorCoupons + callPrice; // Everything the holder receives: the coupons already paid plus the call price.
+  const holderReturn = holderTotal - base.price; // Signed: against what the holder originally paid.
+  const issuerTotalIfCalled = holderTotal; // The issuer pays exactly what the holder receives.
+  const issuerTotalToMaturity = base.totalPaid; // Every coupon plus the face, if the bond ran its whole term.
+  const issuerSaving = issuerTotalToMaturity - issuerTotalIfCalled; // Signed: foregoneCoupons − callPremium — a premium larger than the foregone coupons makes the call cost more than maturity.
+  const holderVsMaturity = holderTotal - issuerTotalToMaturity; // Signed: exactly −issuerSaving — what the holder gives up against holding to maturity.
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const signedShareText = (part, baseAmount) => part < 0n ? `-${shareText(-part, baseAmount)}` : shareText(part, baseAmount);
+  return {
+    decimals,
+    face: base.face,
+    amount: base.face,
+    couponBps: base.couponBps,
+    periods: base.periods,
+    purchasePrice: base.price,
+    price: base.price,
+    couponPerPeriod,
+    totalCoupons: base.totalCoupons,
+    periodsElapsed,
+    remainingPeriods,
+    callPrice,
+    callPremium,
+    premiumAmount: callPremium > 0n ? callPremium : 0n, // What the issuer pays over the face to end the bond early.
+    discountAmount: callPremium < 0n ? -callPremium : 0n, // What the issuer pays under the face.
+    priorCoupons,
+    foregoneCoupons,
+    holderTotal,
+    holderReturn,
+    issuerTotalIfCalled,
+    issuerTotalToMaturity,
+    issuerSaving,
+    holderVsMaturity,
+    callPriceShareBpsText: shareText(callPrice, base.face),
+    foregoneShareBpsText: shareText(foregoneCoupons, base.totalCoupons),
+    holderReturnRateBpsText: signedShareText(holderReturn, base.price),
+    issuerSavingShareBpsText: signedShareText(issuerSaving, issuerTotalToMaturity),
+    callAtPar: callPrice === base.face, // Redeemed at the face exactly: no premium compensates the foregone coupons.
+    callAtPremium: callPrice > base.face, // The issuer pays over the face for ending the bond early.
+    callAtDiscount: callPrice < base.face, // The issuer redeems under the face.
+    calledAtIssue: periodsElapsed === 0, // No coupon had been paid yet when the call came.
+    callInFinalPeriod: remainingPeriods === 1, // Only the final period's coupon is foregone.
+    zeroCoupon: base.zeroCoupon, // No coupon is promised, so no coupon can be foregone.
+    noForegoneCoupons: foregoneCoupons === 0n, // The call foregoes no coupon payment.
+    holderNegativeReturn: holderReturn < 0n,
+    holderZeroReturn: holderReturn === 0n,
+    holderPositiveReturn: holderReturn > 0n,
+    issuerSaves: issuerSaving > 0n, // Calling costs the issuer less than running to maturity.
+    issuerSavingZero: issuerSaving === 0n, // The premium exactly equals the foregone coupons.
+    issuerCallCostsMore: issuerSaving < 0n, // The premium exceeds the foregone coupons: the call costs more than maturity would have.
+  };
+}
+
+// Pro-rata holder distribution model (v1.165): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10036,7 +10149,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.164): the holder
+// Capped pro-rata holder distribution model (v1.165): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10137,7 +10250,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.164): the holder
+// Minimum-guarantee holder distribution model (v1.165): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10220,7 +10333,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.164): a real
+// Capped-and-floored holder distribution model (v1.165): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10352,7 +10465,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.164): the
+// Holder distribution claim-window model (v1.165): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10422,7 +10535,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.164): one destination
+// Holder distribution redistribution model (v1.165): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10474,7 +10587,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.164): the
+// Holder distribution second claim window model (v1.165): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10538,7 +10651,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.164): the final
+// Holder distribution treasury sweep model (v1.165): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10600,7 +10713,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.164): the other final
+// Holder distribution burn model (v1.165): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10660,7 +10773,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.164): the profit mandate's
+// Constant-product AMM swap model (v1.165): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10739,7 +10852,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.164): the swap
+// Constant-product AMM liquidity deposit model (v1.165): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10826,7 +10939,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.164): the
+// Constant-product AMM liquidity withdrawal model (v1.165): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -10910,7 +11023,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.164): switching axes after the
+// Lending liquidation model (v1.165): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11001,7 +11114,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.164): the liquidation model
+// Lending health stress model (v1.165): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11084,7 +11197,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.164): the liquidation model (v1.157)
+// Lending interest model (v1.165): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
