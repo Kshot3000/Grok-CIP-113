@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.157): the profit mandate names staking
+// Staking rewards dev fee (v1.158): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.157): PRISM designs programmable tokens
+// Token vesting schedule (v1.158): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9301,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.157): the vesting schedule model
+// Vesting revocation model (v1.158): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9363,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.157): the vesting schedule model
+// Vesting acceleration model (v1.158): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9444,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.157): a distribution to a
+// Pro-rata holder distribution model (v1.158): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9519,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.157): the holder
+// Capped pro-rata holder distribution model (v1.158): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9620,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.157): the holder
+// Minimum-guarantee holder distribution model (v1.158): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9703,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.157): a real
+// Capped-and-floored holder distribution model (v1.158): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9835,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.157): the
+// Holder distribution claim-window model (v1.158): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9905,7 +9905,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.157): one destination
+// Holder distribution redistribution model (v1.158): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -9957,7 +9957,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.157): the
+// Holder distribution second claim window model (v1.158): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10021,7 +10021,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.157): the final
+// Holder distribution treasury sweep model (v1.158): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10083,7 +10083,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.157): the other final
+// Holder distribution burn model (v1.158): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10143,7 +10143,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.157): the profit mandate's
+// Constant-product AMM swap model (v1.158): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10222,7 +10222,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.157): the swap
+// Constant-product AMM liquidity deposit model (v1.158): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10309,7 +10309,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.157): the
+// Constant-product AMM liquidity withdrawal model (v1.158): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -10393,7 +10393,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.157): switching axes after the
+// Lending liquidation model (v1.158): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -10481,5 +10481,88 @@ export function modelLendingLiquidation(input = {}) {
     stillLiquidatableAfter: debtAfter > maxDebtAfter,
     badDebt: collateralAfter === 0n && debtAfter > 0n,
     noPenalty: liquidationPenaltyBps === 0,
+  };
+}
+
+// Lending health stress model (v1.158): the liquidation model
+// (v1.157) prices a liquidation once a position is already under
+// water, but a borrower meets the price move first — and PRISM
+// priced no move. This model reprices one lending position after
+// a stated move in its collateral's price, exactly in BigInt,
+// with collateral and debt stated in a common value unit (an
+// oracle price is a real design's input, stated here, not
+// invented here). The move is signed basis points of the
+// collateral's value: collateralAfter = floor(collateralValue x
+// (10000 + priceMoveBps) / 10000), floored like every division
+// in this family, so a fall can leave a fraction of a base unit
+// behind in the stated value. Health before and after is derived
+// from the AMOUNTS (the threshold-priced collateral over the
+// debt), never from the entered move alone. The model also states
+// the position's distance from liquidation BEFORE the move: the
+// least collateral that still carries the debt at the threshold
+// is minSafeCollateral = ceil(debtValue x 10000 / thresholdBps)
+// (the smallest value whose floored max debt still covers the
+// debt), and the share of the collateral that can be lost before
+// that point is derived from those amounts — a position already
+// liquidatable has no such buffer and states none. Crossing is
+// stated, not hidden: a move that takes a healthy position past
+// its threshold, a move that restores an underwater position, and
+// a move that wipes the collateral out entirely are three
+// different outcomes and are flagged separately. Identities:
+// collateralAfter - collateralValue === collateralChange (signed);
+// maxDebtAfter === floor(collateralAfter x thresholdBps / 10000);
+// headroomAfter and shortfallAfter are never both positive.
+// Local simulation only — PRISM lends nothing, holds no
+// collateral, observes no price, and liquidates nothing; a real
+// design must disclose its liquidation threshold, how its oracle
+// price is sourced, and how close a position may drift to
+// liquidation before any position is opened.
+export function modelLendingHealthStress(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const collateralValue = toUnits(input.collateralValue === undefined ? '0' : input.collateralValue, decimals);
+  if (collateralValue <= 0n) throw new Error('Collateral value must be greater than zero.');
+  const debtValue = toUnits(input.debtValue === undefined ? '0' : input.debtValue, decimals);
+  if (debtValue <= 0n) throw new Error('Debt value must be greater than zero.');
+  const liquidationThresholdBps = input.liquidationThresholdBps === undefined ? 8000 : Number(input.liquidationThresholdBps);
+  if (!Number.isInteger(liquidationThresholdBps) || liquidationThresholdBps <= 0 || liquidationThresholdBps > 10000) throw new Error('Liquidation threshold must be a whole number of basis points between 1 and 10,000.');
+  const priceMoveBps = input.priceMoveBps === undefined ? 0 : Number(input.priceMoveBps);
+  if (!Number.isInteger(priceMoveBps) || priceMoveBps < -10000 || priceMoveBps > 10000) throw new Error('Price move must be a whole number of basis points between -10,000 and 10,000.');
+  const thr = BigInt(liquidationThresholdBps);
+  const maxDebtBefore = collateralValue * thr / 10000n;
+  const liquidatableBefore = debtValue > maxDebtBefore;
+  const collateralAfter = collateralValue * BigInt(10000 + priceMoveBps) / 10000n;
+  const collateralChange = collateralAfter - collateralValue;
+  const maxDebtAfter = collateralAfter * thr / 10000n;
+  const liquidatableAfter = debtValue > maxDebtAfter;
+  const minSafeCollateral = (debtValue * 10000n + thr - 1n) / thr;
+  const rateText = (part, base) => {
+    if (base === 0n) return '0.00';
+    const hundredths = part * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals,
+    collateralValue,
+    debtValue,
+    liquidationThresholdBps,
+    priceMoveBps,
+    collateralAfter,
+    collateralChange,
+    maxDebtBefore,
+    maxDebtAfter,
+    minSafeCollateral,
+    healthBeforeBpsText: rateText(collateralValue * thr, debtValue * 10000n),
+    healthAfterBpsText: rateText(collateralAfter * thr, debtValue * 10000n),
+    safeFallShareBpsText: liquidatableBefore ? '0.00' : rateText(collateralValue - minSafeCollateral, collateralValue),
+    headroomAfter: maxDebtAfter > debtValue ? maxDebtAfter - debtValue : 0n,
+    shortfallAfter: debtValue > maxDebtAfter ? debtValue - maxDebtAfter : 0n,
+    liquidatableBefore,
+    liquidatableAfter,
+    crossedIntoLiquidation: !liquidatableBefore && liquidatableAfter,
+    recoveredFromLiquidation: liquidatableBefore && !liquidatableAfter,
+    collateralWipedOut: collateralAfter === 0n,
+    noChange: priceMoveBps === 0,
+    priceRise: priceMoveBps > 0,
+    priceFall: priceMoveBps < 0,
   };
 }
