@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelPaymentStream } from '../src/domain.js';
 
-// Payment stream model (v1.178): a deposit streams linearly to a
+// Payment stream model (v1.179): a deposit streams linearly to a
 // recipient over a stated number of periods. The streamed amount is
 // floor(total x elapsed / duration) — never rounded up, because that
 // would make more withdrawable than the elapsed share. The platform
