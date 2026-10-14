@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.161): the profit mandate names staking
+// Staking rewards dev fee (v1.162): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.161): the staking rewards model
+// Staking early-exit model (v1.162): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.161): the staking rewards model
+// Staking rollover model (v1.162): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.161): PRISM designs programmable tokens
+// Token vesting schedule (v1.162): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.161): the vesting schedule model
+// Vesting revocation model (v1.162): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.161): the vesting schedule model
+// Vesting acceleration model (v1.162): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9643,7 +9643,104 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.161): a distribution to a
+
+// Vesting claim model (v1.162): the vesting schedule model
+// (v1.142) prices what has VESTED by a period, the revocation
+// model (v1.143) prices ending a schedule, and the acceleration
+// model prices releasing more of it at once — but vesting is not
+// claiming. A recipient typically CLAIMS the vested amount in
+// separate steps, so at any moment some of what has vested may
+// already have been claimed and some may still sit unclaimed,
+// and what a claim may take was priced nowhere. New
+// modelVestingClaim composes modelVestingSchedule UNCHANGED at
+// the claim period as its elapsed point, so its cumulative-floor
+// schedule, validation, and refusals propagate exactly, and it
+// prices one claim on top of what was already claimed. The
+// claim's ceiling is stated exactly: claimable === vested −
+// alreadyClaimed — what had vested by the claim period and had
+// not yet been claimed. Locked tokens are never claimable (they
+// have not vested), and already-claimed tokens are never
+// claimable twice. The composition's own refusals are the two
+// ways a claim history can break that ceiling, neither visible
+// to the schedule alone: an already-claimed amount larger than
+// what had vested by the claim period is refused (a recipient
+// cannot have claimed more than had vested), and a claim larger
+// than the claimable amount is refused (a claim cannot take
+// locked tokens, or tokens already claimed). A claim amount of
+// undefined claims the whole claimable amount. Identities:
+// claimedAfter + unclaimedVested + locked === total always,
+// with claimedAfter === alreadyClaimed + thisClaim and
+// unclaimedVested the vested amount this claim leaves behind.
+// The claimed, unclaimed, and locked shares are derived from
+// the AMOUNTS (hundredths of a basis point over the total),
+// never from period ratios. Milestone rows reuse the schedule's
+// own milestone periods, each stating the vested amount and the
+// claimable amount at that period against the same
+// already-claimed figure (floored at zero where the
+// already-claimed amount exceeds what had vested that early —
+// a state this model refuses at the claim period itself, stated
+// in the rows only to show when the history becomes possible).
+// All figures are the designer's own entered allocation,
+// periods, and claim amounts: no chain state is read and no
+// claim is executed. LOCAL MODEL ONLY — PRISM claims nothing,
+// holds no allocation, and releases no tokens; a real design
+// must disclose that vested and claimed are different states,
+// what a claim may take and when, and that locked tokens cannot
+// be claimed early, before the first claim, exactly as modeled.
+export function modelVestingClaim(input = {}) {
+  const claimPeriod = input.claimPeriod === undefined ? Number(input.cliffPeriods ?? 0) : Number(input.claimPeriod);
+  if (!Number.isInteger(claimPeriod) || claimPeriod < 0) throw new Error('Claim period must be a whole number between 0 and the vesting periods.');
+  let base;
+  try {
+    base = modelVestingSchedule({ amount: input.amount, decimals: input.decimals, cliffPeriods: input.cliffPeriods, vestingPeriods: input.vestingPeriods, elapsedPeriods: claimPeriod }); // Composed unchanged: its validation propagates, judged at the claim point.
+  } catch (err) {
+    if (err.message.startsWith('Elapsed periods')) throw new Error('Claim period must be a whole number between 0 and the vesting periods.'); // The base judges the claim point as its elapsed point; a point past the duration is this model's own refusal.
+    throw err;
+  }
+  if (claimPeriod > base.vestingPeriods) throw new Error('Claim period must be a whole number between 0 and the vesting periods.');
+  const total = base.total;
+  const vested = base.vested;
+  const locked = total - vested;
+  const alreadyClaimed = toUnits(input.alreadyClaimed === undefined ? '0' : input.alreadyClaimed, base.decimals); // Validates the already-claimed amount on the same decimals.
+  if (alreadyClaimed > vested) throw new Error('Already claimed exceeds what had vested by the claim period — a recipient cannot have claimed more than had vested.');
+  const claimable = vested - alreadyClaimed; // The claim's ceiling: vested and not yet claimed. Locked tokens are never in it.
+  const thisClaim = input.claimAmount === undefined ? claimable : toUnits(input.claimAmount, base.decimals); // An unstated claim takes the whole claimable amount.
+  if (thisClaim > claimable) throw new Error('Claim amount exceeds what had vested and not yet been claimed by the claim period — a claim cannot take locked tokens or tokens already claimed.');
+  const claimedAfter = alreadyClaimed + thisClaim;
+  const unclaimedVested = vested - claimedAfter;
+  const shareText = amount => {
+    const hundredths = amount * 1000000n / total;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals: base.decimals,
+    total,
+    amount: total,
+    cliffPeriods: base.cliffPeriods,
+    vestingPeriods: base.vestingPeriods,
+    claimPeriod,
+    vested,
+    locked,
+    alreadyClaimed,
+    claimable,
+    thisClaim,
+    claimedAfter,
+    unclaimedVested,
+    claimedShareBpsText: shareText(claimedAfter),
+    unclaimedShareBpsText: shareText(unclaimedVested),
+    lockedShareBpsText: shareText(locked),
+    beforeCliff: claimPeriod < base.cliffPeriods, // Claiming before the cliff: nothing had vested, so nothing is claimable.
+    nothingVested: vested === 0n, // Nothing had vested by the claim period, so there is nothing to claim.
+    nothingToClaim: claimable === 0n, // Everything vested had already been claimed (or nothing had vested).
+    zeroClaim: thisClaim === 0n, // This claim takes nothing — stated, so a zero claim is never mistaken for a full one.
+    fullClaim: claimable > 0n && thisClaim === claimable, // This claim takes the whole claimable amount.
+    partialClaim: thisClaim > 0n && thisClaim < claimable, // This claim leaves some vested amount still unclaimed.
+    fullyClaimedAfter: vested > 0n && unclaimedVested === 0n, // After this claim, everything vested has been claimed.
+    rows: base.rows.map(row => ({ periods: row.periods, vested: row.vested, locked: row.locked, claimable: row.vested > alreadyClaimed ? row.vested - alreadyClaimed : 0n })),
+  };
+}
+
+// Pro-rata holder distribution model (v1.162): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9718,7 +9815,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.161): the holder
+// Capped pro-rata holder distribution model (v1.162): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9819,7 +9916,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.161): the holder
+// Minimum-guarantee holder distribution model (v1.162): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9902,7 +9999,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.161): a real
+// Capped-and-floored holder distribution model (v1.162): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10034,7 +10131,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.161): the
+// Holder distribution claim-window model (v1.162): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10104,7 +10201,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.161): one destination
+// Holder distribution redistribution model (v1.162): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10156,7 +10253,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.161): the
+// Holder distribution second claim window model (v1.162): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10220,7 +10317,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.161): the final
+// Holder distribution treasury sweep model (v1.162): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10282,7 +10379,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.161): the other final
+// Holder distribution burn model (v1.162): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10342,7 +10439,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.161): the profit mandate's
+// Constant-product AMM swap model (v1.162): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10421,7 +10518,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.161): the swap
+// Constant-product AMM liquidity deposit model (v1.162): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10508,7 +10605,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.161): the
+// Constant-product AMM liquidity withdrawal model (v1.162): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -10592,7 +10689,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.161): switching axes after the
+// Lending liquidation model (v1.162): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -10683,7 +10780,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.161): the liquidation model
+// Lending health stress model (v1.162): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -10766,7 +10863,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.161): the liquidation model (v1.157)
+// Lending interest model (v1.162): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelVestingAcceleration } from '../src/domain.js';
 
-// Vesting acceleration model (v1.161): a schedule that accelerates
+// Vesting acceleration model (v1.162): a schedule that accelerates
 // on a stated event releases the entered share of the UNVESTED
 // remainder at the acceleration period, priced on the vesting
 // schedule model (v1.142) composed unchanged — the same schedule
@@ -185,6 +185,6 @@ test('wiring: app.js imports the model, renders an acceleration panel, and the R
   assert.match(app, /modelVestingAcceleration/);
   assert.match(app, /data-accel/);
   assert.match(app, /acceleration-output/);
-  assert.match(app, /v1\.161/);
+  assert.match(app, /v1\.162/);
   assert.match(readme, /Vesting acceleration model/);
 });
