@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.171): the profit mandate names staking
+// Staking rewards dev fee (v1.172): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.171): the staking rewards model
+// Staking early-exit model (v1.172): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.171): the staking rewards model
+// Staking rollover model (v1.172): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.171): PRISM designs programmable tokens
+// Token vesting schedule (v1.172): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.171): the vesting schedule model
+// Vesting revocation model (v1.172): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.171): the vesting schedule model
+// Vesting acceleration model (v1.172): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.171): the vesting schedule model
+// Vesting claim model (v1.172): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.171): a programmable token can
+// Tokenised bond coupon model (v1.172): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.171): the bond coupon
+// Tokenised bond secondary-sale model (v1.172): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -9961,7 +9961,7 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Tokenised bond early-redemption (call) model (v1.171): the
+// Tokenised bond early-redemption (call) model (v1.172): the
 // bond coupon model (v1.163) prices a bond held to maturity and
 // the secondary-sale model (v1.164) prices a sale between
 // holders, but an ISSUER can also end a bond early — a call —
@@ -10074,7 +10074,7 @@ export function modelBondCall(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.171): a distribution to a
+// Pro-rata holder distribution model (v1.172): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10149,7 +10149,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.171): the holder
+// Capped pro-rata holder distribution model (v1.172): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10250,7 +10250,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.171): the holder
+// Minimum-guarantee holder distribution model (v1.172): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10333,7 +10333,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.171): a real
+// Capped-and-floored holder distribution model (v1.172): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10465,7 +10465,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.171): the
+// Holder distribution claim-window model (v1.172): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10535,7 +10535,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.171): one destination
+// Holder distribution redistribution model (v1.172): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10587,7 +10587,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.171): the
+// Holder distribution second claim window model (v1.172): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10651,7 +10651,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.171): the final
+// Holder distribution treasury sweep model (v1.172): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10713,7 +10713,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.171): the other final
+// Holder distribution burn model (v1.172): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10773,7 +10773,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.171): the profit mandate's
+// Constant-product AMM swap model (v1.172): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10852,7 +10852,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.171): the swap
+// Constant-product AMM liquidity deposit model (v1.172): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10939,7 +10939,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.171): the
+// Constant-product AMM liquidity withdrawal model (v1.172): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -11023,7 +11023,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.171): switching axes after the
+// Lending liquidation model (v1.172): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11114,7 +11114,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.171): the liquidation model
+// Lending health stress model (v1.172): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11197,7 +11197,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.171): the liquidation model (v1.157)
+// Lending interest model (v1.172): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
@@ -11290,7 +11290,7 @@ export function modelLendingInterest(input = {}) {
   };
 }
 
-// Recurring subscription pull model (v1.171): a programmable
+// Recurring subscription pull model (v1.172): a programmable
 // token can carry a SUBSCRIPTION — a subscriber authorises a
 // merchant to pull a fixed amount once per period, up to a
 // stated number of periods and a stated ALLOWANCE CAP on the
@@ -11421,8 +11421,8 @@ export function modelSubscriptionPull(input = {}) {
   };
 }
 
-// Subscription cancellation model (v1.171): the subscription pull model
-// (v1.171) prices an authorisation, but a subscriber can end one early, and
+// Subscription cancellation model (v1.172): the subscription pull model
+// (v1.172) prices an authorisation, but a subscriber can end one early, and
 // cancelling is not free of consequence in either direction: pulls already
 // made are not refunded by cancelling, pulls during a notice period still
 // happen, and only what remains after notice is actually revoked. This model
@@ -11487,7 +11487,7 @@ export function modelSubscriptionCancellation(input = {}) {
   };
 }
 
-// Subscription failed-pull model (v1.171): the pull model (v1.166) prices
+// Subscription failed-pull model (v1.172): the pull model (v1.166) prices
 // an authorisation and the cancellation model (v1.167) prices ending one,
 // but a pull can also FAIL — the subscriber's balance or the authorisation
 // check is not there when the merchant tries — and PRISM priced no failure.
@@ -11550,7 +11550,7 @@ export function modelSubscriptionFailedPull(input = {}) {
   };
 }
 
-// Crowdfund raise model (v1.171): a programmable token can be sold in an
+// Crowdfund raise model (v1.172): a programmable token can be sold in an
 // ALL-OR-NOTHING raise — contributors commit toward a stated GOAL, and
 // either the goal is reached and the project is paid, or it is missed and
 // every contribution is refunded. This is not the launchpad model: a
@@ -11611,7 +11611,7 @@ export function modelCrowdfundRaise(input = {}) {
   };
 }
 
-// Crowdfund withdrawal model (v1.171): the raise model (v1.169) prices a
+// Crowdfund withdrawal model (v1.172): the raise model (v1.169) prices a
 // raise at its outcome, but before the deadline a contributor can usually
 // WITHDRAW some or all of what they committed, and PRISM priced no
 // withdrawal. A withdrawal is stated exactly: the withdrawn amount is
@@ -11675,7 +11675,7 @@ export function modelCrowdfundWithdrawal(input = {}) {
   };
 }
 
-// Vault share deposit model (v1.171): PRISM priced deposits into pools
+// Vault share deposit model (v1.172): PRISM priced deposits into pools
 // and raises, but a share-based VAULT — where a depositor receives
 // shares representing a pro-rata claim on everything the vault holds,
 // and the share price moves as the vault gains or loses value — was
@@ -11735,5 +11735,72 @@ export function modelVaultShareDeposit(input = {}) {
     mintsNothing: deposit > 0n && sharesMinted === 0n, // A real deposit that buys no share at all at this price — the whole amount would stay in the vault for the existing holders.
     mintFloors: sharesMinted > 0n && mintingDust > 0n, // The flooring cost the depositor part of the deposit: the minted shares are worth less, at the old price, than was deposited.
     noDust: mintingDust === 0n, // The deposit divided exactly at the pre-deposit price: the minted shares are worth exactly what was deposited.
+  };
+}
+// Vault share redemption model (v1.172): the deposit model (v1.172)
+// prices entering a share-based vault, but a holder leaves by REDEEMING
+// shares, and PRISM priced no redemption. A redemption is stated
+// exactly in BigInt: the shares redeemed are burned, and their gross
+// value is floored on the price BEFORE the redemption,
+// floor(sharesRedeemed x totalAssets / totalShares), never rounded up
+// — rounding up would pay out more than the shares claim and take it
+// from the holders who remain. The disclosed exit fee is floored on
+// that gross value — stated on what is redeemed, never on the shares
+// or on what the vault still holds — and the redeemer receives the
+// rest, so netPayout + exitFee === grossValue exactly, and the gross
+// value is what leaves the vault in total. A fee that would take the
+// whole redemption is refused: a holder who burns shares and receives
+// nothing was not redeemed. Redeeming more shares than are outstanding
+// is refused, and the two priceless vault states are refused for the
+// same reason as on deposit: a vault holding assets but no shares, and
+// a vault with shares outstanding but no assets, has no price to
+// redeem against. A full redemption empties the vault exactly at this
+// price (the gross value is the whole assets held, with no flooring),
+// leaving no shares and no assets. Identities: totalAssetsAfter ===
+// totalAssets - grossValue; totalSharesAfter === totalShares -
+// sharesRedeemed; netPayout + exitFee === grossValue.
+export function modelVaultShareRedemption(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const totalAssets = toUnits(input.totalAssets === undefined ? '0' : input.totalAssets, decimals); // Validates assets + decimals. Zero is a real state: an empty (or emptied) vault.
+  const totalShares = toUnits(input.totalShares === undefined ? '0' : input.totalShares, decimals); // Shares are stated in the same decimal scale as the panel enters them.
+  const sharesRedeemed = toUnits(input.sharesRedeemed === undefined ? '0' : input.sharesRedeemed, decimals); // Zero is a real state: no redemption made.
+  const exitFeeBps = input.exitFeeBps === undefined ? 100 : Number(input.exitFeeBps);
+  if (!Number.isInteger(exitFeeBps) || exitFeeBps < 0 || exitFeeBps > 10000) throw new Error('Exit fee must be a whole number of basis points between 0 and 10,000.');
+  if (totalShares === 0n && totalAssets > 0n) throw new Error('A vault holding assets but no shares has no share price to redeem against: its assets belong to no share.');
+  if (totalAssets === 0n && totalShares > 0n) throw new Error('A vault with shares outstanding but no assets has no share price to redeem against: its shares claim nothing.');
+  if (sharesRedeemed > totalShares) throw new Error('Shares redeemed must not exceed the shares outstanding: nobody can redeem a share that was never issued.');
+  const grossValue = totalShares === 0n ? 0n : sharesRedeemed * totalAssets / totalShares; // Floored on the pre-redemption price — never rounded up at the remaining holders' expense.
+  const exitFee = grossValue * BigInt(exitFeeBps) / 10000n; // Floored on the gross redemption value — the fee is stated on what is redeemed.
+  if (grossValue > 0n && exitFee >= grossValue) throw new Error('Exit fee must not take the whole redemption.');
+  const netPayout = grossValue - exitFee; // What the redeemer actually receives.
+  const totalAssetsAfter = totalAssets - grossValue; // The gross value leaves the vault in total: net to the redeemer, the fee out as charged.
+  const totalSharesAfter = totalShares - sharesRedeemed; // The redeemed shares are burned, never reissued by this redemption.
+  const redemptionFloors = totalShares > 0n && (sharesRedeemed * totalAssets) % totalShares !== 0n; // The exact claim does not divide: the floored gross pays less than the exact fraction, and the fraction stays in the vault for the remaining holders.
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals,
+    totalAssets,
+    totalShares,
+    sharesRedeemed,
+    exitFeeBps,
+    grossValue,
+    exitFee,
+    netPayout,
+    totalAssetsAfter,
+    totalSharesAfter,
+    redeemedShareBpsText: shareText(sharesRedeemed, totalShares), // The redeemed shares measured against the shares outstanding, derived from the share amounts.
+    remainingShareBpsText: shareText(totalSharesAfter, totalShares), // What the remaining holders still own between them after the redemption.
+    netPayoutShareBpsText: shareText(netPayout, totalAssets), // What the redeemer actually receives, measured against what the vault held — derived from the amounts, so the fee and the flooring move it away from the redeemed share share.
+    exitFeeShareBpsText: shareText(exitFee, grossValue), // The fee measured against the gross value it was charged on.
+    noRedemption: sharesRedeemed === 0n, // Nothing was redeemed: nothing is burned, nothing is paid, and nothing changes.
+    fullRedemption: totalShares > 0n && sharesRedeemed === totalShares, // Every share is redeemed: the vault empties of shares and, at this price, of assets exactly.
+    partialRedemption: sharesRedeemed > 0n && sharesRedeemed < totalShares, // Some shares remain outstanding and the vault continues for the remaining holders.
+    noFee: exitFeeBps === 0, // No exit fee is charged on this redemption.
+    feeFloorsToZero: exitFeeBps > 0 && grossValue > 0n && exitFee === 0n, // A stated fee whose amount floors away on this redemption — stated, never presented as a fee that is taken.
+    redemptionFloors, // The flooring left part of the exact claim in the vault for the remaining holders.
   };
 }
