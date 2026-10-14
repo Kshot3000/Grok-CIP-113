@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.168): the profit mandate names staking
+// Staking rewards dev fee (v1.169): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.168): the staking rewards model
+// Staking early-exit model (v1.169): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.168): the staking rewards model
+// Staking rollover model (v1.169): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.168): PRISM designs programmable tokens
+// Token vesting schedule (v1.169): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.168): the vesting schedule model
+// Vesting revocation model (v1.169): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.168): the vesting schedule model
+// Vesting acceleration model (v1.169): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.168): the vesting schedule model
+// Vesting claim model (v1.169): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.168): a programmable token can
+// Tokenised bond coupon model (v1.169): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.168): the bond coupon
+// Tokenised bond secondary-sale model (v1.169): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -9961,7 +9961,7 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Tokenised bond early-redemption (call) model (v1.168): the
+// Tokenised bond early-redemption (call) model (v1.169): the
 // bond coupon model (v1.163) prices a bond held to maturity and
 // the secondary-sale model (v1.164) prices a sale between
 // holders, but an ISSUER can also end a bond early — a call —
@@ -10074,7 +10074,7 @@ export function modelBondCall(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.168): a distribution to a
+// Pro-rata holder distribution model (v1.169): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10149,7 +10149,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.168): the holder
+// Capped pro-rata holder distribution model (v1.169): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10250,7 +10250,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.168): the holder
+// Minimum-guarantee holder distribution model (v1.169): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10333,7 +10333,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.168): a real
+// Capped-and-floored holder distribution model (v1.169): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10465,7 +10465,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.168): the
+// Holder distribution claim-window model (v1.169): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10535,7 +10535,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.168): one destination
+// Holder distribution redistribution model (v1.169): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10587,7 +10587,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.168): the
+// Holder distribution second claim window model (v1.169): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10651,7 +10651,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.168): the final
+// Holder distribution treasury sweep model (v1.169): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10713,7 +10713,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.168): the other final
+// Holder distribution burn model (v1.169): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10773,7 +10773,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.168): the profit mandate's
+// Constant-product AMM swap model (v1.169): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10852,7 +10852,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.168): the swap
+// Constant-product AMM liquidity deposit model (v1.169): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10939,7 +10939,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.168): the
+// Constant-product AMM liquidity withdrawal model (v1.169): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -11023,7 +11023,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.168): switching axes after the
+// Lending liquidation model (v1.169): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11114,7 +11114,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.168): the liquidation model
+// Lending health stress model (v1.169): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11197,7 +11197,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.168): the liquidation model (v1.157)
+// Lending interest model (v1.169): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
@@ -11290,7 +11290,7 @@ export function modelLendingInterest(input = {}) {
   };
 }
 
-// Recurring subscription pull model (v1.168): a programmable
+// Recurring subscription pull model (v1.169): a programmable
 // token can carry a SUBSCRIPTION — a subscriber authorises a
 // merchant to pull a fixed amount once per period, up to a
 // stated number of periods and a stated ALLOWANCE CAP on the
@@ -11421,8 +11421,8 @@ export function modelSubscriptionPull(input = {}) {
   };
 }
 
-// Subscription cancellation model (v1.168): the subscription pull model
-// (v1.168) prices an authorisation, but a subscriber can end one early, and
+// Subscription cancellation model (v1.169): the subscription pull model
+// (v1.169) prices an authorisation, but a subscriber can end one early, and
 // cancelling is not free of consequence in either direction: pulls already
 // made are not refunded by cancelling, pulls during a notice period still
 // happen, and only what remains after notice is actually revoked. This model
@@ -11487,7 +11487,7 @@ export function modelSubscriptionCancellation(input = {}) {
   };
 }
 
-// Subscription failed-pull model (v1.168): the pull model (v1.166) prices
+// Subscription failed-pull model (v1.169): the pull model (v1.166) prices
 // an authorisation and the cancellation model (v1.167) prices ending one,
 // but a pull can also FAIL — the subscriber's balance or the authorisation
 // check is not there when the merchant tries — and PRISM priced no failure.
@@ -11547,5 +11547,66 @@ export function modelSubscriptionFailedPull(input = {}) {
     noFailures: consecutiveFailures === 0, // No pull has failed: nothing attempted, nothing lapsed.
     stillActive: consecutiveFailures > 0 && !lapsed && base.remainingTotal > 0n, // Failures happened, but the limit is not reached and authorisation remains.
     failureMoot: base.remainingTotal === 0n, // Nothing remained to pull, so there was no pull left to fail.
+  };
+}
+
+// Crowdfund raise model (v1.169): a programmable token can be sold in an
+// ALL-OR-NOTHING raise — contributors commit toward a stated GOAL, and
+// either the goal is reached and the project is paid, or it is missed and
+// every contribution is refunded. This is not the launchpad model: a
+// launch has a hard cap and refunds only the oversubscription, while a
+// crowdfund has no cap — overfunding above the goal is kept whole — and
+// refunds EVERYTHING when the goal is missed. The disclosed platform fee
+// is charged ONLY on a funded raise, floored on the total raised: a fee
+// on a missed raise would charge for a raise that never happened, on
+// money that is being handed back. On a funded raise the fee is stated
+// separately from what the project receives, and a fee that would take
+// the whole raise is refused — a project that reached its goal and
+// received nothing was not funded. Identities: platformFee +
+// projectReceives + refundedTotal === raised, in both outcomes.
+export function modelCrowdfundRaise(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const goal = toUnits(input.goal === undefined ? '0' : input.goal, decimals); // Validates goal + decimals.
+  if (goal <= 0n) throw new Error('Crowdfund goal must be greater than zero.');
+  const raised = toUnits(input.raised === undefined ? '0' : input.raised, decimals); // Zero is a real state: nothing contributed yet.
+  const platformFeeBps = input.platformFeeBps === undefined ? 250 : Number(input.platformFeeBps);
+  if (!Number.isInteger(platformFeeBps) || platformFeeBps < 0 || platformFeeBps > 10000) throw new Error('Platform fee must be a whole number of basis points between 0 and 10,000.');
+  const feeWouldBe = raised * BigInt(platformFeeBps) / 10000n; // Floored on the total raised — the fee a funded raise of this size would carry.
+  const funded = raised >= goal; // All-or-nothing: reaching the goal exactly funds the raise.
+  if (funded && feeWouldBe >= raised && raised > 0n) throw new Error('Platform fee must not take the whole crowdfund raise.');
+  const platformFee = funded ? feeWouldBe : 0n; // Charged only on success.
+  const projectReceives = funded ? raised - platformFee : 0n; // A missed raise pays the project nothing.
+  const refundedTotal = funded ? 0n : raised; // A missed raise refunds every contribution in full.
+  const feeNotCharged = funded ? 0n : feeWouldBe; // The fee a raise this size would have carried, stated as never charged when the goal is missed.
+  const shortfall = funded ? 0n : goal - raised; // What the raise still needs; the whole goal when nothing has been contributed.
+  const excessOverGoal = funded ? raised - goal : 0n; // Kept whole by the project: there is no cap, so nothing above the goal is refunded.
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals,
+    goal,
+    raised,
+    platformFeeBps,
+    feeWouldBe,
+    funded,
+    platformFee,
+    projectReceives,
+    refundedTotal,
+    feeNotCharged,
+    shortfall,
+    excessOverGoal,
+    fundedShareBpsText: shareText(raised, goal),
+    feeShareBpsText: shareText(platformFee, raised),
+    projectShareBpsText: shareText(projectReceives, raised),
+    refundedShareBpsText: shareText(refundedTotal, raised),
+    goalMissed: !funded, // The goal was not reached: everything is refunded and no fee is charged.
+    exactlyFunded: raised === goal, // Reaching the goal exactly funds the raise, with no excess.
+    overfunded: raised > goal, // More than the goal was raised, and the excess is kept, never refunded.
+    noContributions: raised === 0n, // Nothing has been contributed yet: nothing to pay out and nothing to refund.
+    noFee: platformFeeBps === 0, // No platform fee is charged even on a funded raise.
+    feeFloorsToZero: platformFeeBps > 0 && feeWouldBe === 0n && raised > 0n, // A stated fee whose amount floors away on this raise — stated, never presented as a fee that is taken.
   };
 }
