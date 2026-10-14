@@ -144,5 +144,5 @@ test('panel wiring: the revenue split renders in app.js with its recipient field
   assert.match(app, /data-split-a="label"/);
   assert.match(app, /data-split-b="shareBps"/);
   assert.match(app, /data-split-c="shareBps"/);
-  assert.match(app, /v1\.169/);
+  assert.match(app, /v1\.170/);
 });
