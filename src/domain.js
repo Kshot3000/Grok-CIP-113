@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.159): the profit mandate names staking
+// Staking rewards dev fee (v1.160): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,105 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.159): PRISM designs programmable tokens
+// Staking early-exit model (v1.160): the staking rewards model
+// (v1.141) prices a position held to its full term, but a staker
+// can usually leave early — and what leaving early costs was
+// priced nowhere. Exiting early costs two DIFFERENT things, and
+// this model states them separately because a design that merges
+// them hides one of them. FIRST, the rewards that had not yet
+// accrued by the exit are simply never earned: unaccruedRewards
+// is the term's total rewards minus what had accrued, an amount
+// nobody takes — it was never the staker's. SECOND, an exit
+// penalty is charged on what HAD accrued: penalty =
+// floor(accruedRewards × exitPenaltyBps ÷ 10,000) — a share of
+// the accrued rewards only, never of the principal (which
+// returns whole, as in every staking outcome here) and never of
+// the unaccrued rewards (a penalty on money never earned would
+// charge for a reward that does not exist). The dev fee likewise
+// applies to the accrued rewards only, exactly as the base model
+// charges it — exiting early does not grow its base. The model
+// composes modelStakingRewards UNCHANGED twice (at the full term
+// and at the exit period), so its validation and refusals —
+// including the dev fee taking all the accrued rewards —
+// propagate. Its own refusal is the combination: when the dev
+// fee and the penalty TOGETHER would take all the accrued
+// rewards, the exit is refused, never priced with the staker
+// keeping none of what the staking earned. Exiting at the full
+// term is not early: the penalty is zero whatever rate was
+// entered, stated as atTerm. Exiting at period 0 accrues nothing,
+// so the fee and the penalty are both zero and the principal
+// returns alone, stated as noAccrual. Identities:
+// devFee + penalty + stakerRewardsNet === accruedRewards and
+// stakerFinal === principal + stakerRewardsNet always. The
+// penalty share and the combined share are derived from the
+// AMOUNTS (hundredths of a basis point over the accrued
+// rewards), never from the entered rates. Exit-point rows price
+// the same design at period 0, the term's midpoint (ceil), the
+// entered exit, and the full term, each FLAGING a takes-all
+// combination instead of refusing it (the ladder treatment).
+// All figures are the designer's own entered principal, rates,
+// and periods: no yield feed is read, no return is promised,
+// and where the forfeited penalty goes is the design's stated
+// choice (a pool, an issuer, a burn) — this model states the
+// amount only. LOCAL MODEL ONLY — PRISM stakes nothing, holds
+// no stake, pays no rewards, and exits no position; a real
+// design must disclose whether early exit is allowed, its
+// penalty rate AND that penalty's base (the accrued rewards
+// only), and the penalty's destination, before any stake is
+// opened, exactly as modeled.
+export function modelStakingExit(input = {}) {
+  const exitPeriod = input.exitPeriod === undefined ? (input.periods === undefined ? 12 : Number(input.periods)) : Number(input.exitPeriod);
+  if (!Number.isInteger(exitPeriod) || exitPeriod < 0) throw new Error('Exit period must be a whole number between 0 and the staking periods.');
+  const exitPenaltyBps = input.exitPenaltyBps === undefined ? 2500 : Number(input.exitPenaltyBps);
+  if (!Number.isInteger(exitPenaltyBps) || exitPenaltyBps < 0 || exitPenaltyBps > 10000) throw new Error('Exit penalty must be a whole number of basis points between 0 and 10,000.');
+  const term = modelStakingRewards(input); // Composed unchanged: validates principal, rates, term, dev fee, mode.
+  if (exitPeriod > term.periods) throw new Error('Exit period must be a whole number between 0 and the staking periods.');
+  const priceAt = n => {
+    if (n === 0) return { periods: n, accruedRewards: 0n, devFee: 0n, penalty: 0n, stakerRewardsNet: 0n, stakerFinal: term.principal, takesAll: false };
+    const at = modelStakingRewards({ ...input, periods: n }); // Accrual and dev fee at this exit point, on the accrued rewards only.
+    const accruedRewards = at.totalRewards;
+    const penalty = n < term.periods ? accruedRewards * BigInt(exitPenaltyBps) / 10000n : 0n; // At the term an exit is not early, whatever rate was entered.
+    const takesAll = accruedRewards > 0n && at.devFee + penalty >= accruedRewards;
+    return { periods: n, accruedRewards, devFee: at.devFee, penalty, stakerRewardsNet: accruedRewards - at.devFee - penalty, stakerFinal: term.principal + (accruedRewards - at.devFee - penalty), takesAll };
+  };
+  const priced = priceAt(exitPeriod);
+  if (priced.takesAll) throw new Error('The dev fee and the exit penalty together would take all the rewards accrued by the exit — the staker would keep none of what the staking earned. Lower the dev fee rate or the exit penalty, or exit later.');
+  const shareText = amount => {
+    if (priced.accruedRewards === 0n) return '0.00';
+    const hundredths = amount * 1000000n / priced.accruedRewards;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const exitPoints = [...new Set([0, Math.ceil(term.periods / 2), exitPeriod, term.periods])].sort((a, b) => a - b);
+  return {
+    decimals: term.decimals,
+    principal: term.principal,
+    amount: term.principal,
+    rewardBps: term.rewardBps,
+    periods: term.periods,
+    devFeeBps: term.devFeeBps,
+    mode: term.mode,
+    exitPeriod,
+    exitPenaltyBps,
+    accruedRewards: priced.accruedRewards,
+    termRewards: term.totalRewards,
+    unaccruedRewards: term.totalRewards - priced.accruedRewards, // Never earned by anyone: stated apart from the penalty, which is taken from what was earned.
+    devFee: priced.devFee,
+    penalty: priced.penalty,
+    forfeitedPenalty: priced.penalty,
+    stakerRewardsNet: priced.stakerRewardsNet,
+    stakerFinal: priced.stakerFinal,
+    principalReturned: term.principal, // The principal is never the penalty's base either: it returns whole in every outcome.
+    earlyExit: exitPeriod < term.periods,
+    atTerm: exitPeriod >= term.periods, // Not an early exit: no penalty, whatever rate was entered.
+    noAccrual: priced.accruedRewards === 0n, // Nothing had accrued, so there is nothing for a fee or a penalty to be charged on.
+    zeroPenalty: priced.penalty === 0n,
+    penaltyShareBpsText: shareText(priced.penalty),
+    combinedShareBpsText: shareText(priced.devFee + priced.penalty),
+    rows: exitPoints.map(n => priceAt(n)),
+  };
+}
+
+// Token vesting schedule (v1.160): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9301,7 +9399,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.159): the vesting schedule model
+// Vesting revocation model (v1.160): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9363,7 +9461,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.159): the vesting schedule model
+// Vesting acceleration model (v1.160): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9444,7 +9542,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.159): a distribution to a
+// Pro-rata holder distribution model (v1.160): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9519,7 +9617,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.159): the holder
+// Capped pro-rata holder distribution model (v1.160): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9620,7 +9718,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.159): the holder
+// Minimum-guarantee holder distribution model (v1.160): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9703,7 +9801,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.159): a real
+// Capped-and-floored holder distribution model (v1.160): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9835,7 +9933,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.159): the
+// Holder distribution claim-window model (v1.160): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -9905,7 +10003,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.159): one destination
+// Holder distribution redistribution model (v1.160): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -9957,7 +10055,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.159): the
+// Holder distribution second claim window model (v1.160): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10021,7 +10119,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.159): the final
+// Holder distribution treasury sweep model (v1.160): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10083,7 +10181,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.159): the other final
+// Holder distribution burn model (v1.160): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10143,7 +10241,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.159): the profit mandate's
+// Constant-product AMM swap model (v1.160): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10222,7 +10320,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.159): the swap
+// Constant-product AMM liquidity deposit model (v1.160): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10309,7 +10407,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.159): the
+// Constant-product AMM liquidity withdrawal model (v1.160): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -10393,7 +10491,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.159): switching axes after the
+// Lending liquidation model (v1.160): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -10484,7 +10582,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.159): the liquidation model
+// Lending health stress model (v1.160): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -10567,7 +10665,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.159): the liquidation model (v1.157)
+// Lending interest model (v1.160): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and

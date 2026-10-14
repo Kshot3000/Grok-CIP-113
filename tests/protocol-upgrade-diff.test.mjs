@@ -175,5 +175,5 @@ test('app wiring: the comparison is live in the upgrade panel', () => {
   assert.match(app, /protocolUpgradeDiffExample/);
   assert.match(app, /upgrade-diff-current/);
   assert.match(app, /upgrade-diff-result/);
-  assert.match(app, /v1\.159/);
+  assert.match(app, /v1\.160/);
 });

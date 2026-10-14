@@ -162,11 +162,11 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the global dispatch checker: panel, verdicts, honest boundary, v1.159', async () => {
+test('app wires the global dispatch checker: panel, verdicts, honest boundary, v1.160', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkGlobalDispatch/);
   assert.match(app, /global-dispatch-withdrawals/);
   assert.match(app, /GLOBAL DISPATCH · LOCAL MODEL/);
   assert.match(app, /NO VERDICT/);
-  assert.match(app, /v1\.159/);
+  assert.match(app, /v1\.160/);
 });
