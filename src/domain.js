@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.160): the profit mandate names staking
+// Staking rewards dev fee (v1.161): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.160): the staking rewards model
+// Staking early-exit model (v1.161): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,108 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.160): PRISM designs programmable tokens
+// Staking rollover model (v1.161): the staking rewards model
+// (v1.141) prices one term held to its end and the early-exit
+// model (v1.160) prices leaving one, but a finished position is
+// usually offered a ROLLOVER — the staker restakes everything
+// they received into a new term — and what a rollover actually
+// earns was priced nowhere. This model composes
+// modelStakingRewards UNCHANGED twice on the SAME entered terms
+// (reward rate, dev fee, mode): a first term at the entered
+// periods, then a second term at the entered rollover periods
+// whose principal is the first term's staker final — the
+// original principal PLUS the first term's rewards NET of the
+// first dev fee. That is the rollover's whole mechanism, stated
+// exactly: the second term earns on more than the first did
+// (in simple mode the rollover point is the only moment the
+// earnings compound at all), and the dev fee is charged AGAIN
+// on the second term's rewards — on those rewards only, never
+// on the rolled principal, which includes the staker's own
+// original principal and must never become the fee's base by
+// being restaked. The model also prices the honest comparison:
+// ONE uninterrupted term of the two lengths added together, on
+// the same terms (stated only when that total is within the
+// base model's 120-period bound, otherwise null). Neither
+// answer is assumed better. In simple mode the rollover's
+// second term earns on the enlarged principal from its first
+// period, so the rollover finishes ahead; in compound mode the
+// uninterrupted term compounds on rewards the rollover had
+// already skimmed a fee from, so the rollover can finish
+// BEHIND — and the signed difference is stated either way,
+// because a design that presents a rollover as free
+// compounding hides the second fee. Identities:
+// rolloverPrincipal === principal + firstRewardsNet;
+// stakerFinal === rolloverPrincipal + secondRewardsNet;
+// totalDevFee + totalNet === totalRewards, with totalNet the
+// sum of the two terms' net rewards. The total dev-fee share
+// and the second term's share of the total net are derived
+// from the AMOUNTS, never from the entered rates. Rows price
+// the second term at the staking family's horizon lengths
+// under the same terms. All figures are the designer's own
+// entered principal, rates, and periods: no yield feed is
+// read and no return is promised. LOCAL MODEL ONLY — PRISM
+// stakes nothing, holds no stake, pays no rewards, and rolls
+// no position over; a real design must disclose that a
+// rollover restakes the principal plus the net rewards on the
+// stated terms, that the dev fee is charged again on the new
+// term's rewards only, and whether the staker may decline the
+// rollover, before the first term is opened, exactly as
+// modeled.
+export function modelStakingRollover(input = {}) {
+  const rolloverPeriods = input.rolloverPeriods === undefined ? (input.periods === undefined ? 12 : Number(input.periods)) : Number(input.rolloverPeriods);
+  if (!Number.isInteger(rolloverPeriods) || rolloverPeriods < 1 || rolloverPeriods > 120) throw new Error('Rollover periods must be a whole number between 1 and 120.');
+  const first = modelStakingRewards(input); // Composed unchanged: validates principal, rates, first term, dev fee, mode.
+  const priceSecond = n => {
+    const second = modelStakingRewards({ ...input, amount: formatUnits(first.stakerFinal, first.decimals), periods: n }); // The rolled principal is the first term's final, stated exactly.
+    return { rolloverPeriods: n, secondRewards: second.totalRewards, secondDevFee: second.devFee, secondRewardsNet: second.stakerRewardsNet, stakerFinal: second.stakerFinal };
+  };
+  const priced = priceSecond(rolloverPeriods);
+  const totalRewards = first.totalRewards + priced.secondRewards;
+  const totalDevFee = first.devFee + priced.secondDevFee;
+  const totalNet = first.stakerRewardsNet + priced.secondRewardsNet;
+  const shareText = (part, base) => {
+    if (base === 0n) return '0.00';
+    const hundredths = part * 1000000n / base;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  const totalPeriods = first.periods + rolloverPeriods;
+  const single = totalPeriods <= 120 ? modelStakingRewards({ ...input, periods: totalPeriods }) : null; // The uninterrupted comparison, only where the base model can price it.
+  return {
+    decimals: first.decimals,
+    principal: first.principal,
+    amount: first.principal,
+    rewardBps: first.rewardBps,
+    periods: first.periods,
+    devFeeBps: first.devFeeBps,
+    mode: first.mode,
+    rolloverPeriods,
+    firstRewards: first.totalRewards,
+    firstDevFee: first.devFee,
+    firstRewardsNet: first.stakerRewardsNet,
+    rolloverPrincipal: first.stakerFinal, // Principal plus the first term's NET rewards: the fee already left before anything was restaked.
+    secondRewards: priced.secondRewards,
+    secondDevFee: priced.secondDevFee,
+    secondRewardsNet: priced.secondRewardsNet,
+    stakerFinal: priced.stakerFinal,
+    totalRewards,
+    totalDevFee,
+    totalNet,
+    totalPeriods,
+    singleTermRewards: single ? single.totalRewards : null,
+    singleTermDevFee: single ? single.devFee : null,
+    singleTermFinal: single ? single.stakerFinal : null,
+    rolloverDifference: single ? priced.stakerFinal - single.stakerFinal : null, // Signed: ahead in simple mode, possibly behind in compound mode once the mid-way fee is skimmed.
+    rolloverAhead: single ? priced.stakerFinal > single.stakerFinal : null,
+    rolloverBehind: single ? priced.stakerFinal < single.stakerFinal : null,
+    noFirstRewards: first.totalRewards === 0n, // Nothing was earned to roll: the second term stakes the principal alone.
+    noSecondRewards: priced.secondRewards === 0n,
+    totalDevFeeShareBpsText: shareText(totalDevFee, totalRewards),
+    secondShareBpsText: shareText(priced.secondRewardsNet, totalNet),
+    rows: STAKING_HORIZON_PERIODS.map(n => priceSecond(n)),
+  };
+}
+
+// Token vesting schedule (v1.161): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9399,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.160): the vesting schedule model
+// Vesting revocation model (v1.161): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9461,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.160): the vesting schedule model
+// Vesting acceleration model (v1.161): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9542,7 +9643,7 @@ export function modelVestingAcceleration(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.160): a distribution to a
+// Pro-rata holder distribution model (v1.161): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -9617,7 +9718,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.160): the holder
+// Capped pro-rata holder distribution model (v1.161): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -9718,7 +9819,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.160): the holder
+// Minimum-guarantee holder distribution model (v1.161): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -9801,7 +9902,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.160): a real
+// Capped-and-floored holder distribution model (v1.161): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -9933,7 +10034,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.160): the
+// Holder distribution claim-window model (v1.161): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10003,7 +10104,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.160): one destination
+// Holder distribution redistribution model (v1.161): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10055,7 +10156,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.160): the
+// Holder distribution second claim window model (v1.161): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10119,7 +10220,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.160): the final
+// Holder distribution treasury sweep model (v1.161): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10181,7 +10282,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.160): the other final
+// Holder distribution burn model (v1.161): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10241,7 +10342,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.160): the profit mandate's
+// Constant-product AMM swap model (v1.161): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10320,7 +10421,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.160): the swap
+// Constant-product AMM liquidity deposit model (v1.161): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10407,7 +10508,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.160): the
+// Constant-product AMM liquidity withdrawal model (v1.161): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -10491,7 +10592,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.160): switching axes after the
+// Lending liquidation model (v1.161): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -10582,7 +10683,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.160): the liquidation model
+// Lending health stress model (v1.161): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -10665,7 +10766,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.160): the liquidation model (v1.157)
+// Lending interest model (v1.161): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
