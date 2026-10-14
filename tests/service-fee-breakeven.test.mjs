@@ -107,5 +107,5 @@ test('panel wiring: the cost field and break-even render are in app.js', async (
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /data-fee="monthlyCost"/);
   assert.match(app, /serviceFeeBreakEven\(/);
-  assert.match(app, /v1\.170/);
+  assert.match(app, /v1\.171/);
 });
