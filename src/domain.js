@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.166): the profit mandate names staking
+// Staking rewards dev fee (v1.167): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.166): the staking rewards model
+// Staking early-exit model (v1.167): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.166): the staking rewards model
+// Staking rollover model (v1.167): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.166): PRISM designs programmable tokens
+// Token vesting schedule (v1.167): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.166): the vesting schedule model
+// Vesting revocation model (v1.167): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.166): the vesting schedule model
+// Vesting acceleration model (v1.167): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.166): the vesting schedule model
+// Vesting claim model (v1.167): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.166): a programmable token can
+// Tokenised bond coupon model (v1.167): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.166): the bond coupon
+// Tokenised bond secondary-sale model (v1.167): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -9961,7 +9961,7 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Tokenised bond early-redemption (call) model (v1.166): the
+// Tokenised bond early-redemption (call) model (v1.167): the
 // bond coupon model (v1.163) prices a bond held to maturity and
 // the secondary-sale model (v1.164) prices a sale between
 // holders, but an ISSUER can also end a bond early — a call —
@@ -10074,7 +10074,7 @@ export function modelBondCall(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.166): a distribution to a
+// Pro-rata holder distribution model (v1.167): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10149,7 +10149,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.166): the holder
+// Capped pro-rata holder distribution model (v1.167): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10250,7 +10250,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.166): the holder
+// Minimum-guarantee holder distribution model (v1.167): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10333,7 +10333,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.166): a real
+// Capped-and-floored holder distribution model (v1.167): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10465,7 +10465,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.166): the
+// Holder distribution claim-window model (v1.167): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10535,7 +10535,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.166): one destination
+// Holder distribution redistribution model (v1.167): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10587,7 +10587,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.166): the
+// Holder distribution second claim window model (v1.167): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10651,7 +10651,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.166): the final
+// Holder distribution treasury sweep model (v1.167): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10713,7 +10713,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.166): the other final
+// Holder distribution burn model (v1.167): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10773,7 +10773,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.166): the profit mandate's
+// Constant-product AMM swap model (v1.167): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10852,7 +10852,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.166): the swap
+// Constant-product AMM liquidity deposit model (v1.167): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10939,7 +10939,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.166): the
+// Constant-product AMM liquidity withdrawal model (v1.167): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -11023,7 +11023,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.166): switching axes after the
+// Lending liquidation model (v1.167): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11114,7 +11114,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.166): the liquidation model
+// Lending health stress model (v1.167): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11197,7 +11197,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.166): the liquidation model (v1.157)
+// Lending interest model (v1.167): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
@@ -11290,7 +11290,7 @@ export function modelLendingInterest(input = {}) {
   };
 }
 
-// Recurring subscription pull model (v1.166): a programmable
+// Recurring subscription pull model (v1.167): a programmable
 // token can carry a SUBSCRIPTION — a subscriber authorises a
 // merchant to pull a fixed amount once per period, up to a
 // stated number of periods and a stated ALLOWANCE CAP on the
@@ -11418,5 +11418,71 @@ export function modelSubscriptionPull(input = {}) {
     allowanceExhausted: remainingTotal === 0n, // Nothing remains under the lower ceiling.
     nextPullIsPartial: remainingTotal > 0n && remainingFullPulls === 0n, // The only pull left is the partial remainder.
     allPeriodsPulled: periodsElapsed === periods, // Every authorised period has been pulled.
+  };
+}
+
+// Subscription cancellation model (v1.167): the subscription pull model
+// (v1.167) prices an authorisation, but a subscriber can end one early, and
+// cancelling is not free of consequence in either direction: pulls already
+// made are not refunded by cancelling, pulls during a notice period still
+// happen, and only what remains after notice is actually revoked. This model
+// composes the pull model unchanged and states those three amounts
+// separately, never merged: what was already pulled stays pulled, what the
+// notice period still pulls is the cost of ending, and what is revoked is
+// the authorisation that will never be pulled. A cancellation requested
+// after the authorisation is already exhausted changes nothing, and a
+// notice period longer than what remains means the subscription ends
+// naturally during notice — the cancellation revokes nothing because
+// nothing was left to revoke, stated as moot rather than as a revocation.
+export function modelSubscriptionCancellation(input = {}) {
+  const base = modelSubscriptionPull(input); // Base validation and refusals propagate unchanged.
+  const noticePeriods = input.noticePeriods === undefined ? 0 : Number(input.noticePeriods);
+  if (!Number.isInteger(noticePeriods) || noticePeriods < 0 || noticePeriods > 120) throw new Error('Notice periods must be a whole number between 0 and 120.');
+  const feeOn = (a) => a * BigInt(base.serviceFeeBps) / 10000n;
+  const noticeRequested = base.amount * BigInt(noticePeriods); // What the notice period would pull if the authorisation lasted that long.
+  const noticePulled = noticeRequested < base.remainingTotal ? noticeRequested : base.remainingTotal; // Never more than remains under the lower ceiling.
+  const noticeFullPulls = noticePulled / base.amount;
+  const noticePartialAmount = noticePulled % base.amount; // Non-zero only when the ceiling's partial remainder is consumed during notice.
+  const noticePullCount = noticeFullPulls + (noticePartialAmount > 0n ? 1n : 0n);
+  const noticeFees = base.feePerPeriod * noticeFullPulls + feeOn(noticePartialAmount); // A partial notice pull's fee is floored on the partial amount.
+  const noticeMerchant = noticePulled - noticeFees;
+  const totalPaidAfterNotice = base.paidSoFar + noticePulled; // paidSoFar + noticePulled + revoked === effectiveTotal, always.
+  const revoked = base.remainingTotal - noticePulled; // The authorisation that will never be pulled.
+  const revokedFullPulls = revoked / base.amount;
+  const revokedPartialAmount = revoked % base.amount;
+  const revokedPullCount = revokedFullPulls + (revokedPartialAmount > 0n ? 1n : 0n);
+  const feesNeverCharged = base.remainingFees - noticeFees; // The fees on exactly the pulls that will now never happen.
+  const merchantNeverReceives = revoked - feesNeverCharged;
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    ...base,
+    noticePeriods,
+    noticeRequested,
+    noticePulled,
+    noticeFullPulls,
+    noticePartialAmount,
+    noticePullCount,
+    noticeFees,
+    noticeMerchant,
+    totalPaidAfterNotice,
+    revoked,
+    revokedFullPulls,
+    revokedPartialAmount,
+    revokedPullCount,
+    feesNeverCharged,
+    merchantNeverReceives,
+    revokedShareBpsText: shareText(revoked, base.effectiveTotal),
+    noticeShareBpsText: shareText(noticePulled, base.effectiveTotal),
+    paidAfterNoticeShareBpsText: shareText(totalPaidAfterNotice, base.effectiveTotal),
+    immediate: noticePeriods === 0, // No notice period: cancellation takes effect at once.
+    alreadyExhausted: base.remainingTotal === 0n, // Nothing remained when cancellation was requested: it changes nothing.
+    endsNaturallyDuringNotice: base.remainingTotal > 0n && BigInt(noticePeriods) >= base.remainingPullCount, // The authorisation runs out during notice, so the cancellation revokes nothing.
+    noticeEndsWithPartial: noticePartialAmount > 0n, // The last notice pull is the ceiling's smaller partial pull.
+    nothingRevoked: revoked === 0n, // Either already exhausted, or notice consumed everything that remained.
+    revokesAllRemaining: noticePulled === 0n && revoked > 0n, // An immediate cancellation with something left to revoke.
   };
 }

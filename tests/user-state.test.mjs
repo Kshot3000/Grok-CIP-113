@@ -147,7 +147,7 @@ test('the entered profile is carried through unchanged in the result', () => {
   assert.equal(v.stateQuery, 'nft');
 });
 
-test('app wires the user-state checker: panel, verdicts, query reported-never-scored, conditional grade, honest boundary, v1.166', async () => {
+test('app wires the user-state checker: panel, verdicts, query reported-never-scored, conditional grade, honest boundary, v1.167', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkUserStateReferences/);
   assert.match(app, /user-state-mode/);
@@ -156,5 +156,5 @@ test('app wires the user-state checker: panel, verdicts, query reported-never-sc
   assert.match(app, /CONDITIONAL ON THE SUBSTANDARD/);
   assert.match(app, /REPORTED, NEVER SCORED/);
   assert.match(app, /inspected no transfer, read no substandard, and no chain state/);
-  assert.match(app, /v1\.166/);
+  assert.match(app, /v1\.167/);
 });
