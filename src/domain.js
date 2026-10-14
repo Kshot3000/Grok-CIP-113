@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.165): the profit mandate names staking
+// Staking rewards dev fee (v1.166): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.165): the staking rewards model
+// Staking early-exit model (v1.166): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.165): the staking rewards model
+// Staking rollover model (v1.166): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.165): PRISM designs programmable tokens
+// Token vesting schedule (v1.166): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.165): the vesting schedule model
+// Vesting revocation model (v1.166): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.165): the vesting schedule model
+// Vesting acceleration model (v1.166): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.165): the vesting schedule model
+// Vesting claim model (v1.166): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.165): a programmable token can
+// Tokenised bond coupon model (v1.166): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.165): the bond coupon
+// Tokenised bond secondary-sale model (v1.166): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -9961,7 +9961,7 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Tokenised bond early-redemption (call) model (v1.165): the
+// Tokenised bond early-redemption (call) model (v1.166): the
 // bond coupon model (v1.163) prices a bond held to maturity and
 // the secondary-sale model (v1.164) prices a sale between
 // holders, but an ISSUER can also end a bond early — a call —
@@ -10074,7 +10074,7 @@ export function modelBondCall(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.165): a distribution to a
+// Pro-rata holder distribution model (v1.166): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10149,7 +10149,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.165): the holder
+// Capped pro-rata holder distribution model (v1.166): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10250,7 +10250,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.165): the holder
+// Minimum-guarantee holder distribution model (v1.166): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10333,7 +10333,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.165): a real
+// Capped-and-floored holder distribution model (v1.166): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10465,7 +10465,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.165): the
+// Holder distribution claim-window model (v1.166): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10535,7 +10535,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.165): one destination
+// Holder distribution redistribution model (v1.166): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10587,7 +10587,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.165): the
+// Holder distribution second claim window model (v1.166): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10651,7 +10651,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.165): the final
+// Holder distribution treasury sweep model (v1.166): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10713,7 +10713,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.165): the other final
+// Holder distribution burn model (v1.166): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10773,7 +10773,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.165): the profit mandate's
+// Constant-product AMM swap model (v1.166): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10852,7 +10852,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.165): the swap
+// Constant-product AMM liquidity deposit model (v1.166): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10939,7 +10939,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.165): the
+// Constant-product AMM liquidity withdrawal model (v1.166): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -11023,7 +11023,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.165): switching axes after the
+// Lending liquidation model (v1.166): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11114,7 +11114,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.165): the liquidation model
+// Lending health stress model (v1.166): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11197,7 +11197,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.165): the liquidation model (v1.157)
+// Lending interest model (v1.166): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
@@ -11287,5 +11287,136 @@ export function modelLendingInterest(input = {}) {
     crossedIntoLiquidation: !liquidatableBefore && liquidatableAfter,
     periodsToLiquidation,
     noGrowth: totalInterest === 0n,
+  };
+}
+
+// Recurring subscription pull model (v1.166): a programmable
+// token can carry a SUBSCRIPTION — a subscriber authorises a
+// merchant to pull a fixed amount once per period, up to a
+// stated number of periods and a stated ALLOWANCE CAP on the
+// total pulled — and PRISM priced no such authorisation. This
+// is a new axis: not a sale, not a loan, not a bond. The model's
+// first discipline is that TWO ceilings govern every pull, and
+// the lower one wins: the authorised total (amount per period
+// × authorised periods) and the allowance cap. The effective
+// total is the smaller of the two, stated as such — a cap above
+// the authorised total changes nothing and is flagged, never
+// silently treated as extra authorisation, and a cap below it
+// shortens the subscription: the pulls it allows are the whole
+// pulls that fit inside it, plus ONE final partial pull of the
+// remainder when the cap does not divide by the amount, stated
+// as a partial pull, never rounded up to a full one (rounding
+// up would pull more than the subscriber authorised). Each
+// pull carries a disclosed service fee charged on the PULL:
+// feePerPeriod = floor(amount × serviceFeeBps ÷ 10,000), the
+// merchant receives the rest, and a partial pull's fee is
+// floored on the partial amount, so merchant + fees === the
+// effective total exactly. A fee that would take the whole
+// pull is refused. The account of what has already happened is
+// whole: periods already pulled at the full amount, their fees
+// and what the merchant received, and the history itself is
+// checked against the ceilings — pulls already made totalling
+// more than the effective total are refused, because that
+// history could not have happened under this authorisation.
+// What remains is stated the same way: the remaining total,
+// the whole pulls and any partial pull left in it, the next
+// pull's amount, and the fees and merchant receipts still to
+// come. Shares are derived from the AMOUNTS (hundredths of a
+// basis point): the total fee share of the effective total,
+// the share already paid, and the effective total's share of
+// the authorised total — never from the entered fee rate or
+// period counts. All figures are the designer's own entered
+// amount, periods, cap, fee rate, and elapsed periods: no
+// wallet is read, no allowance is checked on chain, and no
+// pull is made. LOCAL MODEL ONLY — PRISM pulls nothing, holds
+// no allowance, and pays no merchant; a real design must
+// disclose the amount per period, the authorised periods, the
+// allowance cap and which ceiling is lower, its service fee
+// and that fee's base (each pull), and that a cap which does
+// not divide by the amount ends the subscription with a
+// smaller final pull, before the first pull, exactly as
+// modeled.
+export function modelSubscriptionPull(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const amount = toUnits(input.amount === undefined ? '0' : input.amount, decimals); // Validates amount + decimals.
+  if (amount <= 0n) throw new Error('Subscription amount per period must be greater than zero.');
+  const periods = input.periods === undefined ? 12 : Number(input.periods);
+  if (!Number.isInteger(periods) || periods < 1 || periods > 120) throw new Error('Authorised periods must be a whole number between 1 and 120.');
+  const serviceFeeBps = input.serviceFeeBps === undefined ? 250 : Number(input.serviceFeeBps);
+  if (!Number.isInteger(serviceFeeBps) || serviceFeeBps < 0 || serviceFeeBps > 10000) throw new Error('Service fee must be a whole number of basis points between 0 and 10,000.');
+  const authorisedTotal = amount * BigInt(periods); // The periods ceiling: what the full authorised run of pulls would total.
+  const allowanceCap = input.allowanceCap === undefined ? authorisedTotal : toUnits(input.allowanceCap, decimals); // An unstated cap is the authorised total itself: the periods are the only ceiling.
+  if (allowanceCap <= 0n) throw new Error('Allowance cap must be greater than zero.');
+  const feePerPeriod = amount * BigInt(serviceFeeBps) / 10000n; // On the pull, every pull: the amount is its base, floored per pull.
+  if (feePerPeriod >= amount) throw new Error('Service fee must not take the whole subscription pull.');
+  const cappedByAllowance = allowanceCap < authorisedTotal; // The cap is the lower ceiling.
+  const capAboveAuthorised = allowanceCap > authorisedTotal; // The cap changes nothing: the periods run out first.
+  const effectiveTotal = cappedByAllowance ? allowanceCap : authorisedTotal; // The lower ceiling wins.
+  const fullPulls = effectiveTotal / amount; // Whole pulls that fit inside the effective total.
+  const partialAmount = effectiveTotal % amount; // The remainder, if any: one final partial pull, never rounded up.
+  const pullCount = fullPulls + (partialAmount > 0n ? 1n : 0n);
+  const feeOn = (a) => a * BigInt(serviceFeeBps) / 10000n;
+  const totalFees = feePerPeriod * fullPulls + feeOn(partialAmount); // The partial pull's fee is floored on the partial amount.
+  const merchantTotal = effectiveTotal - totalFees; // Merchant + fees === effective total, always.
+  const periodsElapsed = input.periodsElapsed === undefined ? 0 : Number(input.periodsElapsed);
+  if (!Number.isInteger(periodsElapsed) || periodsElapsed < 0 || periodsElapsed > periods) throw new Error('Periods already pulled must be a whole number from 0 up to the authorised periods.');
+  const paidSoFar = amount * BigInt(periodsElapsed); // Pulls already made, each at the full amount.
+  if (paidSoFar > effectiveTotal) throw new Error('Periods already pulled exceed the effective authorised total: the pulls already made total more than the lower of the authorised total and the allowance cap allows.');
+  const feesPaidSoFar = feePerPeriod * BigInt(periodsElapsed);
+  const merchantReceivedSoFar = paidSoFar - feesPaidSoFar;
+  const remainingTotal = effectiveTotal - paidSoFar; // paidSoFar + remainingTotal === effectiveTotal, always.
+  const remainingFullPulls = remainingTotal / amount;
+  const remainingPartialAmount = remainingTotal % amount;
+  const remainingPullCount = remainingFullPulls + (remainingPartialAmount > 0n ? 1n : 0n);
+  const nextPullAmount = remainingTotal === 0n ? 0n : (remainingFullPulls > 0n ? amount : remainingPartialAmount); // A full pull while whole pulls remain; otherwise the partial remainder.
+  const remainingFees = totalFees - feesPaidSoFar; // The fees on exactly the pulls that remain.
+  const merchantRemaining = remainingTotal - remainingFees;
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals,
+    amount,
+    amountPerPeriod: amount,
+    periods,
+    authorisedTotal,
+    allowanceCap,
+    effectiveTotal,
+    cappedByAllowance,
+    capAboveAuthorised,
+    capEqualsAuthorised: allowanceCap === authorisedTotal, // Both ceilings are the same figure.
+    fullPulls,
+    partialAmount,
+    pullCount,
+    serviceFeeBps,
+    feePerPeriod,
+    merchantPerPeriod: amount - feePerPeriod, // What the merchant receives from one full pull.
+    feeOnPartial: feeOn(partialAmount),
+    totalFees,
+    merchantTotal,
+    periodsElapsed,
+    paidSoFar,
+    feesPaidSoFar,
+    merchantReceivedSoFar,
+    remainingTotal,
+    remainingFullPulls,
+    remainingPartialAmount,
+    remainingPullCount,
+    nextPullAmount,
+    remainingFees,
+    merchantRemaining,
+    totalFeeShareBpsText: shareText(totalFees, effectiveTotal),
+    paidShareBpsText: shareText(paidSoFar, effectiveTotal),
+    effectiveShareBpsText: shareText(effectiveTotal, authorisedTotal),
+    feeShareBpsText: shareText(feePerPeriod, amount),
+    noFee: serviceFeeBps === 0, // No service fee is charged on any pull.
+    feeFloorsToZero: serviceFeeBps > 0 && feePerPeriod === 0n, // A stated fee whose per-pull amount floors away on this amount — stated, never presented as a fee that is taken.
+    partialFinalPull: partialAmount > 0n, // The authorisation ends with a smaller final pull.
+    notStarted: periodsElapsed === 0, // No pull has been made yet.
+    allowanceExhausted: remainingTotal === 0n, // Nothing remains under the lower ceiling.
+    nextPullIsPartial: remainingTotal > 0n && remainingFullPulls === 0n, // The only pull left is the partial remainder.
+    allPeriodsPulled: periodsElapsed === periods, // Every authorised period has been pulled.
   };
 }
