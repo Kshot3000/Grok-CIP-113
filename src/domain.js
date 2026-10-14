@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.175): the profit mandate names staking
+// Staking rewards dev fee (v1.176): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.175): the staking rewards model
+// Staking early-exit model (v1.176): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.175): the staking rewards model
+// Staking rollover model (v1.176): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.175): PRISM designs programmable tokens
+// Token vesting schedule (v1.176): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.175): the vesting schedule model
+// Vesting revocation model (v1.176): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.175): the vesting schedule model
+// Vesting acceleration model (v1.176): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.175): the vesting schedule model
+// Vesting claim model (v1.176): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.175): a programmable token can
+// Tokenised bond coupon model (v1.176): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.175): the bond coupon
+// Tokenised bond secondary-sale model (v1.176): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -9961,7 +9961,7 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Tokenised bond early-redemption (call) model (v1.175): the
+// Tokenised bond early-redemption (call) model (v1.176): the
 // bond coupon model (v1.163) prices a bond held to maturity and
 // the secondary-sale model (v1.164) prices a sale between
 // holders, but an ISSUER can also end a bond early — a call —
@@ -10074,7 +10074,7 @@ export function modelBondCall(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.175): a distribution to a
+// Pro-rata holder distribution model (v1.176): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10149,7 +10149,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.175): the holder
+// Capped pro-rata holder distribution model (v1.176): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10250,7 +10250,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.175): the holder
+// Minimum-guarantee holder distribution model (v1.176): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10333,7 +10333,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.175): a real
+// Capped-and-floored holder distribution model (v1.176): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10465,7 +10465,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.175): the
+// Holder distribution claim-window model (v1.176): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10535,7 +10535,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.175): one destination
+// Holder distribution redistribution model (v1.176): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10587,7 +10587,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.175): the
+// Holder distribution second claim window model (v1.176): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10651,7 +10651,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.175): the final
+// Holder distribution treasury sweep model (v1.176): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10713,7 +10713,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.175): the other final
+// Holder distribution burn model (v1.176): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10773,7 +10773,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.175): the profit mandate's
+// Constant-product AMM swap model (v1.176): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10852,7 +10852,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.175): the swap
+// Constant-product AMM liquidity deposit model (v1.176): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10939,7 +10939,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.175): the
+// Constant-product AMM liquidity withdrawal model (v1.176): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -11023,7 +11023,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.175): switching axes after the
+// Lending liquidation model (v1.176): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11114,7 +11114,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.175): the liquidation model
+// Lending health stress model (v1.176): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11197,7 +11197,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.175): the liquidation model (v1.157)
+// Lending interest model (v1.176): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
@@ -11290,7 +11290,7 @@ export function modelLendingInterest(input = {}) {
   };
 }
 
-// Recurring subscription pull model (v1.175): a programmable
+// Recurring subscription pull model (v1.176): a programmable
 // token can carry a SUBSCRIPTION — a subscriber authorises a
 // merchant to pull a fixed amount once per period, up to a
 // stated number of periods and a stated ALLOWANCE CAP on the
@@ -11421,8 +11421,8 @@ export function modelSubscriptionPull(input = {}) {
   };
 }
 
-// Subscription cancellation model (v1.175): the subscription pull model
-// (v1.175) prices an authorisation, but a subscriber can end one early, and
+// Subscription cancellation model (v1.176): the subscription pull model
+// (v1.176) prices an authorisation, but a subscriber can end one early, and
 // cancelling is not free of consequence in either direction: pulls already
 // made are not refunded by cancelling, pulls during a notice period still
 // happen, and only what remains after notice is actually revoked. This model
@@ -11487,7 +11487,7 @@ export function modelSubscriptionCancellation(input = {}) {
   };
 }
 
-// Subscription failed-pull model (v1.175): the pull model (v1.166) prices
+// Subscription failed-pull model (v1.176): the pull model (v1.166) prices
 // an authorisation and the cancellation model (v1.167) prices ending one,
 // but a pull can also FAIL — the subscriber's balance or the authorisation
 // check is not there when the merchant tries — and PRISM priced no failure.
@@ -11550,7 +11550,7 @@ export function modelSubscriptionFailedPull(input = {}) {
   };
 }
 
-// Crowdfund raise model (v1.175): a programmable token can be sold in an
+// Crowdfund raise model (v1.176): a programmable token can be sold in an
 // ALL-OR-NOTHING raise — contributors commit toward a stated GOAL, and
 // either the goal is reached and the project is paid, or it is missed and
 // every contribution is refunded. This is not the launchpad model: a
@@ -11611,7 +11611,7 @@ export function modelCrowdfundRaise(input = {}) {
   };
 }
 
-// Crowdfund withdrawal model (v1.175): the raise model (v1.169) prices a
+// Crowdfund withdrawal model (v1.176): the raise model (v1.169) prices a
 // raise at its outcome, but before the deadline a contributor can usually
 // WITHDRAW some or all of what they committed, and PRISM priced no
 // withdrawal. A withdrawal is stated exactly: the withdrawn amount is
@@ -11675,7 +11675,7 @@ export function modelCrowdfundWithdrawal(input = {}) {
   };
 }
 
-// Vault share deposit model (v1.175): PRISM priced deposits into pools
+// Vault share deposit model (v1.176): PRISM priced deposits into pools
 // and raises, but a share-based VAULT — where a depositor receives
 // shares representing a pro-rata claim on everything the vault holds,
 // and the share price moves as the vault gains or loses value — was
@@ -11737,7 +11737,7 @@ export function modelVaultShareDeposit(input = {}) {
     noDust: mintingDust === 0n, // The deposit divided exactly at the pre-deposit price: the minted shares are worth exactly what was deposited.
   };
 }
-// Vault share redemption model (v1.175): the deposit model (v1.175)
+// Vault share redemption model (v1.176): the deposit model (v1.176)
 // prices entering a share-based vault, but a holder leaves by REDEEMING
 // shares, and PRISM priced no redemption. A redemption is stated
 // exactly in BigInt: the shares redeemed are burned, and their gross
@@ -11805,7 +11805,7 @@ export function modelVaultShareRedemption(input = {}) {
   };
 }
 
-// Invoice factoring model (v1.175): a new axis — the vault axis closed
+// Invoice factoring model (v1.176): a new axis — the vault axis closed
 // with its deposit and redemption moments, and PRISM priced no sale of
 // a RECEIVABLE. In factoring a seller assigns an invoice (a stated face
 // the debtor owes) to a factor, who pays most of it at once and the
@@ -11870,7 +11870,7 @@ export function modelInvoiceFactoring(input = {}) {
   };
 }
 
-// Invoice factoring shortfall model (v1.175): the factoring model
+// Invoice factoring shortfall model (v1.176): the factoring model
 // (v1.173) prices the full-collection case only, and states that a
 // shortfall is NOT priced there. This model prices it, composing
 // modelInvoiceFactoring UNCHANGED for the stated terms and stating
@@ -11945,5 +11945,91 @@ export function modelInvoiceFactoringShortfall(input = {}) {
     feeWipedOut: base.discountFee > 0n && absorbedByFee === base.discountFee && afterSecond > 0n, // The shortfall consumed the whole stated fee.
     advanceUnrecovered: unrecoveredAdvance > 0n, // The collection did not even repay the advance in full — the factor bears it under this non-recourse model.
     collectsNothing: collected === 0n, // The debtor paid nothing: no second payment, no fee kept, and the whole advance is unrecovered.
+  };
+}
+
+// Dutch auction sale model (v1.176): a programmable token can be
+// sold at a price that DESCENDS from a start price to a floor price
+// over a stated number of periods, and the first bid at the current
+// price clears the whole lot — a launch mechanism distinct from the
+// launchpad model (a fixed price under a hard cap) and from the
+// crowdfund model (all-or-nothing at a goal), and one PRISM priced
+// nowhere. The descent is stated exactly in BigInt: the drop is the
+// start minus the floor, and after e of N periods the price is the
+// start minus floor(drop x e / N) — the ELAPSED SHARE OF THE DROP IS
+// FLOORED, never rounded up. Flooring the drop means the price is
+// never BELOW the exact schedule (the un-dropped fraction of a base
+// unit stays in the price, by less than one base unit per token) and
+// never below the floor: at e = N the price is the floor exactly,
+// and at e = 0 it is the start exactly. The bidder pays the current
+// price for the whole lot: proceeds = floor(price x quantity) on
+// the panel's decimal scale, floored so the bidder is never charged
+// a fraction of a base unit the exact product does not reach — a
+// lot whose exact proceeds floor to zero raises nothing and is
+// stated as such, never as a sale. The disclosed platform fee is
+// floored on the proceeds, its stated base, and a fee taking the
+// whole proceeds is refused. Whether any bid arrives is NOT priced:
+// this model states the clearing price and proceeds IF a bid lands
+// in the stated period; an auction that reaches its floor with no
+// bid is unsold, which is a different outcome and is not priced
+// here. Identities: platformFee + sellerNet === proceeds; price
+// is always >= floor and <= start. Shares are derived from the
+// AMOUNTS, never from the elapsed-period ratio — flooring the drop
+// is exactly why the two can differ.
+export function modelDutchAuction(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const startPrice = toUnits(input.startPrice === undefined ? '0' : input.startPrice, decimals); // Validates start price + decimals.
+  if (startPrice <= 0n) throw new Error('Start price must be greater than zero.');
+  const floorPrice = toUnits(input.floorPrice === undefined ? '0' : input.floorPrice, decimals); // Validates the floor price in the same units.
+  if (floorPrice <= 0n) throw new Error('Floor price must be greater than zero.');
+  if (floorPrice > startPrice) throw new Error('Floor price must not exceed the start price: an auction descends from its start to its floor, never up.');
+  const quantity = toUnits(input.quantity === undefined ? '0' : input.quantity, decimals); // The whole lot, in the token's own units.
+  if (quantity <= 0n) throw new Error('Quantity offered must be greater than zero.');
+  const periods = input.periods === undefined ? 10 : Number(input.periods);
+  if (!Number.isInteger(periods) || periods < 1 || periods > 1000) throw new Error('Auction periods must be a whole number between 1 and 1,000.');
+  const elapsedPeriods = input.elapsedPeriods === undefined ? 0 : Number(input.elapsedPeriods);
+  if (!Number.isInteger(elapsedPeriods) || elapsedPeriods < 0 || elapsedPeriods > periods) throw new Error('Elapsed periods must be a whole number between 0 and the total periods: the auction has ended at its floor.');
+  const platformFeeBps = input.platformFeeBps === undefined ? 250 : Number(input.platformFeeBps);
+  if (!Number.isInteger(platformFeeBps) || platformFeeBps < 0 || platformFeeBps > 10000) throw new Error('Platform fee must be a whole number of basis points between 0 and 10,000.');
+  const drop = startPrice - floorPrice; // The whole descent, exactly — never negative by the check above.
+  const dropElapsed = drop * BigInt(elapsedPeriods) / BigInt(periods); // Floored: the elapsed share of the drop actually taken by now.
+  const priceNow = startPrice - dropElapsed; // At 0 elapsed the start exactly; at all periods the floor exactly; never below the floor.
+  const scale = 10n ** BigInt(decimals);
+  const proceeds = priceNow * quantity / scale; // Floored on the panel's decimal scale: the bidder is never charged a fraction of a base unit the exact product does not reach.
+  const platformFee = proceeds * BigInt(platformFeeBps) / 10000n; // Floored on the proceeds — the fee's stated base.
+  if (proceeds > 0n && platformFee === proceeds) throw new Error('Platform fee must not take the whole proceeds of the sale.');
+  const sellerNet = proceeds - platformFee; // What the seller receives when a bid clears the lot at the current price.
+  const discount = startPrice - priceNow; // How far the price has fallen from the start — the floored elapsed drop, exactly.
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals,
+    startPrice,
+    floorPrice,
+    quantity,
+    periods,
+    elapsedPeriods,
+    platformFeeBps,
+    drop,
+    priceNow,
+    proceeds,
+    platformFee,
+    sellerNet,
+    discount,
+    priceShareBpsText: shareText(priceNow, startPrice), // The current price measured against the start price, derived from the amounts.
+    discountShareBpsText: shareText(discount, startPrice), // The fall from the start measured against the start price, derived from the amounts — not the elapsed-period ratio.
+    feeShareBpsText: shareText(platformFee, proceeds), // The fee measured against the proceeds it was charged on, derived from the amounts.
+    sellerShareBpsText: shareText(sellerNet, proceeds), // What the seller receives, measured against the proceeds.
+    atStart: elapsedPeriods === 0, // No period has elapsed: a bid now pays the start price.
+    atFloor: elapsedPeriods === periods, // The descent is complete: the price is the floor exactly, and a bid now is the last chance before the lot is unsold.
+    noDescent: drop === 0n, // The floor equals the start: the price never descends and elapsed periods change nothing.
+    priceRoundsUp: (drop * BigInt(elapsedPeriods)) % BigInt(periods) !== 0n, // The exact elapsed drop does not divide: flooring it leaves the price above the exact schedule by less than one base unit per token.
+    proceedsFloor: (priceNow * quantity) % scale !== 0n, // The exact proceeds do not divide on this decimal scale: the floored proceeds are less than the exact product.
+    noProceeds: proceeds === 0n, // The exact proceeds floor to zero on this scale: a bid at this price for this quantity raises nothing.
+    noFee: platformFeeBps === 0, // No platform fee is charged: the seller receives the whole proceeds.
+    feeFloorsToZero: platformFeeBps > 0 && platformFee === 0n && proceeds > 0n, // A stated fee whose amount floors away on proceeds this small — stated, never presented as a fee that is taken.
   };
 }
