@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelSecurityDepositReturn } from '../src/domain.js';
 
-// Security deposit return model (v1.194): a deposit held against
+// Security deposit return model (v1.195): a deposit held against
 // stated deductions (unpaid amounts + repair costs). Deductions
 // are applied only against what the deposit holds — the return is
 // never negative — and deductions beyond the deposit are stated
