@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { TEMPLATES } from '../src/config.js';
 import { fromTemplate, validateDesign, simulateTransfer, makeManifest, parseManifest, toUnits } from '../src/domain.js';
 
-// v1.7 added the carbon-credit and event-ticket templates; v1.189 added the
+// v1.7 added the carbon-credit and event-ticket templates; v1.190 added the
 // governance template. These tests pin the
 // whole catalog: every template must produce a valid design, ship a real icon
 // and a real accent style (icon() silently falls back to a box and an unknown
