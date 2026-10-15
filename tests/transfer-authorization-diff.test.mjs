@@ -323,7 +323,7 @@ test('the comparison’s two sides are the checker’s own verdicts', () => {
   assert.deepEqual(d.after, checkTransferAuthorization(JSON.parse(JSON.stringify(after))));
 });
 
-test('app wires the transfer authorization impact comparison: panel, verdicts, honest boundary, v1.192', async () => {
+test('app wires the transfer authorization impact comparison: panel, verdicts, honest boundary, v1.193', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /diffTransferAuthorization/);
   assert.match(app, /transfer-auth-diff-after-tokens/);
@@ -331,7 +331,7 @@ test('app wires the transfer authorization impact comparison: panel, verdicts, h
   assert.match(app, /TRANSFER AUTHORIZATION IMPACT · LOCAL MODEL/);
   assert.match(app, /BECAME NOT CONFORMING/);
   assert.match(app, /REQUIREMENT CHANGED/);
-  assert.match(app, /v1\.192/);
+  assert.match(app, /v1\.193/);
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.match(readme, /Transfer authorization impact/);
 });
