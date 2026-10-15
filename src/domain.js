@@ -9144,7 +9144,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.182): the profit mandate names staking
+// Staking rewards dev fee (v1.183): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9232,7 +9232,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.182): the staking rewards model
+// Staking early-exit model (v1.183): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9330,7 +9330,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.182): the staking rewards model
+// Staking rollover model (v1.183): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9431,7 +9431,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.182): PRISM designs programmable tokens
+// Token vesting schedule (v1.183): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9500,7 +9500,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.182): the vesting schedule model
+// Vesting revocation model (v1.183): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9562,7 +9562,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.182): the vesting schedule model
+// Vesting acceleration model (v1.183): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -9644,7 +9644,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.182): the vesting schedule model
+// Vesting claim model (v1.183): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -9740,7 +9740,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.182): a programmable token can
+// Tokenised bond coupon model (v1.183): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -9847,7 +9847,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.182): the bond coupon
+// Tokenised bond secondary-sale model (v1.183): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -9961,7 +9961,7 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Tokenised bond early-redemption (call) model (v1.182): the
+// Tokenised bond early-redemption (call) model (v1.183): the
 // bond coupon model (v1.163) prices a bond held to maturity and
 // the secondary-sale model (v1.164) prices a sale between
 // holders, but an ISSUER can also end a bond early — a call —
@@ -10074,7 +10074,7 @@ export function modelBondCall(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.182): a distribution to a
+// Pro-rata holder distribution model (v1.183): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10149,7 +10149,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.182): the holder
+// Capped pro-rata holder distribution model (v1.183): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10250,7 +10250,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.182): the holder
+// Minimum-guarantee holder distribution model (v1.183): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10333,7 +10333,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.182): a real
+// Capped-and-floored holder distribution model (v1.183): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10465,7 +10465,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.182): the
+// Holder distribution claim-window model (v1.183): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10535,7 +10535,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.182): one destination
+// Holder distribution redistribution model (v1.183): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10587,7 +10587,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.182): the
+// Holder distribution second claim window model (v1.183): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -10651,7 +10651,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.182): the final
+// Holder distribution treasury sweep model (v1.183): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -10713,7 +10713,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.182): the other final
+// Holder distribution burn model (v1.183): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -10773,7 +10773,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.182): the profit mandate's
+// Constant-product AMM swap model (v1.183): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -10852,7 +10852,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.182): the swap
+// Constant-product AMM liquidity deposit model (v1.183): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -10939,7 +10939,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.182): the
+// Constant-product AMM liquidity withdrawal model (v1.183): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -11023,7 +11023,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.182): switching axes after the
+// Lending liquidation model (v1.183): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11114,7 +11114,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.182): the liquidation model
+// Lending health stress model (v1.183): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11197,7 +11197,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.182): the liquidation model (v1.157)
+// Lending interest model (v1.183): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
@@ -11290,7 +11290,7 @@ export function modelLendingInterest(input = {}) {
   };
 }
 
-// Recurring subscription pull model (v1.182): a programmable
+// Recurring subscription pull model (v1.183): a programmable
 // token can carry a SUBSCRIPTION — a subscriber authorises a
 // merchant to pull a fixed amount once per period, up to a
 // stated number of periods and a stated ALLOWANCE CAP on the
@@ -11421,8 +11421,8 @@ export function modelSubscriptionPull(input = {}) {
   };
 }
 
-// Subscription cancellation model (v1.182): the subscription pull model
-// (v1.182) prices an authorisation, but a subscriber can end one early, and
+// Subscription cancellation model (v1.183): the subscription pull model
+// (v1.183) prices an authorisation, but a subscriber can end one early, and
 // cancelling is not free of consequence in either direction: pulls already
 // made are not refunded by cancelling, pulls during a notice period still
 // happen, and only what remains after notice is actually revoked. This model
@@ -11487,7 +11487,7 @@ export function modelSubscriptionCancellation(input = {}) {
   };
 }
 
-// Subscription failed-pull model (v1.182): the pull model (v1.166) prices
+// Subscription failed-pull model (v1.183): the pull model (v1.166) prices
 // an authorisation and the cancellation model (v1.167) prices ending one,
 // but a pull can also FAIL — the subscriber's balance or the authorisation
 // check is not there when the merchant tries — and PRISM priced no failure.
@@ -11550,7 +11550,7 @@ export function modelSubscriptionFailedPull(input = {}) {
   };
 }
 
-// Crowdfund raise model (v1.182): a programmable token can be sold in an
+// Crowdfund raise model (v1.183): a programmable token can be sold in an
 // ALL-OR-NOTHING raise — contributors commit toward a stated GOAL, and
 // either the goal is reached and the project is paid, or it is missed and
 // every contribution is refunded. This is not the launchpad model: a
@@ -11611,7 +11611,7 @@ export function modelCrowdfundRaise(input = {}) {
   };
 }
 
-// Crowdfund withdrawal model (v1.182): the raise model (v1.169) prices a
+// Crowdfund withdrawal model (v1.183): the raise model (v1.169) prices a
 // raise at its outcome, but before the deadline a contributor can usually
 // WITHDRAW some or all of what they committed, and PRISM priced no
 // withdrawal. A withdrawal is stated exactly: the withdrawn amount is
@@ -11675,7 +11675,7 @@ export function modelCrowdfundWithdrawal(input = {}) {
   };
 }
 
-// Vault share deposit model (v1.182): PRISM priced deposits into pools
+// Vault share deposit model (v1.183): PRISM priced deposits into pools
 // and raises, but a share-based VAULT — where a depositor receives
 // shares representing a pro-rata claim on everything the vault holds,
 // and the share price moves as the vault gains or loses value — was
@@ -11737,7 +11737,7 @@ export function modelVaultShareDeposit(input = {}) {
     noDust: mintingDust === 0n, // The deposit divided exactly at the pre-deposit price: the minted shares are worth exactly what was deposited.
   };
 }
-// Vault share redemption model (v1.182): the deposit model (v1.182)
+// Vault share redemption model (v1.183): the deposit model (v1.183)
 // prices entering a share-based vault, but a holder leaves by REDEEMING
 // shares, and PRISM priced no redemption. A redemption is stated
 // exactly in BigInt: the shares redeemed are burned, and their gross
@@ -11805,7 +11805,7 @@ export function modelVaultShareRedemption(input = {}) {
   };
 }
 
-// Invoice factoring model (v1.182): a new axis — the vault axis closed
+// Invoice factoring model (v1.183): a new axis — the vault axis closed
 // with its deposit and redemption moments, and PRISM priced no sale of
 // a RECEIVABLE. In factoring a seller assigns an invoice (a stated face
 // the debtor owes) to a factor, who pays most of it at once and the
@@ -11870,7 +11870,7 @@ export function modelInvoiceFactoring(input = {}) {
   };
 }
 
-// Invoice factoring shortfall model (v1.182): the factoring model
+// Invoice factoring shortfall model (v1.183): the factoring model
 // (v1.173) prices the full-collection case only, and states that a
 // shortfall is NOT priced there. This model prices it, composing
 // modelInvoiceFactoring UNCHANGED for the stated terms and stating
@@ -11948,7 +11948,7 @@ export function modelInvoiceFactoringShortfall(input = {}) {
   };
 }
 
-// Dutch auction sale model (v1.182): a programmable token can be
+// Dutch auction sale model (v1.183): a programmable token can be
 // sold at a price that DESCENDS from a start price to a floor price
 // over a stated number of periods, and the first bid at the current
 // price clears the whole lot — a launch mechanism distinct from the
@@ -12034,7 +12034,7 @@ export function modelDutchAuction(input = {}) {
   };
 }
 
-// Dutch auction unsold model (v1.182): the Dutch auction sale model
+// Dutch auction unsold model (v1.183): the Dutch auction sale model
 // (v1.176) prices a bid landing in a stated period and states that
 // whether any bid arrives is NOT priced there — an auction that
 // reaches its floor with no bid is unsold, a different outcome. This
@@ -12111,7 +12111,7 @@ export function modelDutchAuctionUnsold(input = {}) {
   };
 }
 
-// Payment stream model (v1.182): a new axis — a sender deposits a
+// Payment stream model (v1.183): a new axis — a sender deposits a
 // total amount ONCE and it streams to a recipient linearly over a
 // stated number of periods (the salary / grant-stream shape a
 // programmable token can carry). PRISM priced lump transfers,
@@ -12181,7 +12181,7 @@ export function modelPaymentStream(input = {}) {
   };
 }
 
-// Payment stream cancellation model (v1.182): the stream axis's
+// Payment stream cancellation model (v1.183): the stream axis's
 // second moment — the payment stream model (v1.178) states a stream
 // at a stated elapsed point and states that what a cancellation
 // returns is NOT priced there. This model composes
@@ -12246,7 +12246,7 @@ export function modelPaymentStreamCancellation(input = {}) {
   };
 }
 
-// Security deposit return model (v1.182): a NEW axis — the stream
+// Security deposit return model (v1.183): a NEW axis — the stream
 // axis closed with its two moments (v1.179 lesson), and PRISM priced
 // no deposit held against stated deductions. A tenant (or a renter
 // of equipment, or a guest) pays a deposit once; at the end of the
@@ -12359,7 +12359,7 @@ export function modelSecurityDepositDispute(input = {}) {
   };
 }
 
-// Insurance claim model (v1.182): a NEW axis — the deposit axis
+// Insurance claim model (v1.183): a NEW axis — the deposit axis
 // closed with its two moments (v1.181 lesson), and PRISM priced no
 // claim against stated coverage. A policyholder states a loss; the
 // policy states a deductible the claimant bears first and a
@@ -12418,5 +12418,102 @@ export function modelInsuranceClaim(input = {}) {
     cappedByCoverage: aboveCoverage > 0n, // What remains after the deductible exceeds the limit: the payout is the limit exactly.
     fullyCovered: claimAfterDeductible > 0n && aboveCoverage === 0n, // Everything after the deductible is paid in full.
     nothingPaid: payout === 0n, // Nothing is paid — either nothing was claimed or the deductible absorbed the whole claim.
+  };
+}
+
+// Insurance claim against remaining coverage model (v1.183): the
+// insurance axis's second moment (v1.182 lesson) — the claim model
+// prices a claim against a FULL coverage limit and a FULL
+// deductible, but coverage is usually a PERIOD limit shared by
+// every claim in the period, and a deductible is usually met once
+// per period, so a later claim meets only what is LEFT of each.
+// This model states a later claim exactly in BigInt. The honest
+// core is that prior use changes BOTH terms, in opposite
+// directions, and neither may be hidden: coverage already used
+// SHRINKS what this claim can be paid from (the payout is capped
+// at the REMAINING limit, never at the stated limit — capping at
+// the stated limit would pay coverage the period has already
+// spent), and a deductible already met is NOT borne again (only
+// the part of the deductible still owed is borne now — charging
+// the full deductible on every claim would take it twice). The
+// order from the base model is unchanged: the deductible still
+// owed applies FIRST, and only what remains is measured against
+// the remaining limit. Coverage already exhausted before this
+// claim pays nothing on it — not a denial, the period's coverage
+// is spent — and that outcome is stated distinctly from the
+// deductible absorbing a claim. What the claimant bears now is
+// the deductible borne NOW plus the amount above the remaining
+// coverage, never merged, and never including what was borne or
+// paid on earlier claims. Where nothing was used and nothing was
+// met, this model agrees with the base claim model exactly.
+// Identities: payout + borneByClaimant === claimedAmount;
+// deductibleBorneNow + aboveRemainingCoverage ===
+// borneByClaimant; coverageAlreadyUsed + payout +
+// coverageRemainingAfter === coverageLimit; deductibleAlreadyMet
+// + deductibleBorneNow + deductibleStillOwedAfter ===
+// deductibleAmount. Shares are derived from the AMOUNTS against
+// this claim — never against the stated limit, which would state
+// a payout from remaining coverage as a share of coverage that no
+// longer exists in full.
+export function modelInsuranceClaimRemaining(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const claimedAmount = toUnits(input.claimedAmount === undefined ? '0' : input.claimedAmount, decimals); // The stated loss on this later claim — zero is a valid statement (no claim).
+  const deductibleAmount = toUnits(input.deductibleAmount === undefined ? '0' : input.deductibleAmount, decimals); // The period deductible the claimant bears first — zero is a valid statement.
+  const coverageLimit = toUnits(input.coverageLimit === undefined ? '0' : input.coverageLimit, decimals); // The period coverage limit, shared by every claim in the period.
+  if (coverageLimit <= 0n) throw new Error('Coverage limit must be greater than zero.');
+  const coverageAlreadyUsed = toUnits(input.coverageAlreadyUsed === undefined ? '0' : input.coverageAlreadyUsed, decimals); // What earlier claims in the period were already paid from this limit.
+  if (coverageAlreadyUsed > coverageLimit) throw new Error('Coverage already used cannot exceed the coverage limit.');
+  const deductibleAlreadyMet = toUnits(input.deductibleAlreadyMet === undefined ? '0' : input.deductibleAlreadyMet, decimals); // What the claimant already bore toward the period deductible on earlier claims.
+  if (deductibleAlreadyMet > deductibleAmount) throw new Error('Deductible already met cannot exceed the deductible.');
+  const remainingCoverageLimit = coverageLimit - coverageAlreadyUsed; // What is left of the period limit for this claim — the cap that actually applies now.
+  const deductibleStillOwed = deductibleAmount - deductibleAlreadyMet; // The part of the deductible not yet borne: only this can be borne on this claim — what was met is never borne again.
+  const deductibleBorneNow = claimedAmount < deductibleStillOwed ? claimedAmount : deductibleStillOwed; // The deductible borne on this claim is the claim itself when the claim is smaller — never more than was claimed and never more than is still owed.
+  const claimAfterDeductible = claimedAmount - deductibleBorneNow; // What remains to be measured against the remaining coverage — zero when the deductible still owed absorbs the claim.
+  const payout = claimAfterDeductible < remainingCoverageLimit ? claimAfterDeductible : remainingCoverageLimit; // Capped at the REMAINING limit: never more than what is left of the period coverage and never more than what remains after the deductible.
+  const aboveRemainingCoverage = claimAfterDeductible - payout; // What remains after the deductible that the remaining coverage could not cover — borne by the claimant, stated separately from the deductible borne now.
+  const borneByClaimant = deductibleBorneNow + aboveRemainingCoverage; // Everything the claimant bears on THIS claim: the deductible still owed first, then whatever the remaining limit could not cover. Earlier claims' borne amounts are not part of it.
+  const coverageUsedAfter = coverageAlreadyUsed + payout; // The period limit used once this claim is paid.
+  const coverageRemainingAfter = remainingCoverageLimit - payout; // What is left of the period limit after this claim — zero when this claim, or earlier ones, exhaust it.
+  const deductibleMetAfter = deductibleAlreadyMet + deductibleBorneNow; // The deductible met once this claim is borne — the full deductible when this claim completes it.
+  const deductibleStillOwedAfter = deductibleAmount - deductibleMetAfter; // What would still be owed toward the deductible on a further claim.
+  const shareText = (part, baseAmount) => {
+    if (baseAmount === 0n) return '0.00';
+    const hundredths = part * 1000000n / baseAmount;
+    return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
+  return {
+    decimals,
+    claimedAmount,
+    deductibleAmount,
+    coverageLimit,
+    coverageAlreadyUsed,
+    deductibleAlreadyMet,
+    remainingCoverageLimit,
+    deductibleStillOwed,
+    deductibleBorneNow,
+    claimAfterDeductible,
+    payout,
+    aboveRemainingCoverage,
+    borneByClaimant,
+    coverageUsedAfter,
+    coverageRemainingAfter,
+    deductibleMetAfter,
+    deductibleStillOwedAfter,
+    payoutShareBpsText: shareText(payout, claimedAmount), // The paid share of this claim, derived from the amounts.
+    deductibleNowShareBpsText: shareText(deductibleBorneNow, claimedAmount), // The deductible borne now, as a share of this claim, derived from the amounts.
+    aboveRemainingShareBpsText: shareText(aboveRemainingCoverage, claimedAmount), // The above-remaining-coverage share of this claim, derived from the amounts.
+    remainingShareBpsText: shareText(remainingCoverageLimit, coverageLimit), // The remaining share of the period limit before this claim, derived from the amounts.
+    noClaim: claimedAmount === 0n, // Nothing is claimed: nothing is paid, nothing more is borne, and the remaining coverage is untouched.
+    noPriorUse: coverageAlreadyUsed === 0n && deductibleAlreadyMet === 0n, // Nothing used and nothing met: this is the base claim model exactly.
+    coverageExhaustedBefore: remainingCoverageLimit === 0n, // Earlier claims spent the whole period limit: this claim can be paid nothing from coverage — not a denial, the coverage is spent.
+    deductibleAlreadyFullyMet: deductibleStillOwed === 0n, // The period deductible was fully met on earlier claims: none of it is borne again on this claim.
+    deductiblePartlyMet: deductibleAlreadyMet > 0n && deductibleStillOwed > 0n, // Part of the deductible was met earlier: only the rest can be borne now.
+    claimWithinRemainingDeductible: claimedAmount > 0n && claimAfterDeductible === 0n, // The deductible still owed absorbs the whole claim: nothing is paid — not a denial, and not spent coverage.
+    exactlyAtRemainingDeductible: claimedAmount > 0n && claimedAmount === deductibleStillOwed, // The claim is exactly the deductible still owed: it is borne in full, completes the deductible, and nothing remains.
+    cappedByRemainingCoverage: aboveRemainingCoverage > 0n, // What remains after the deductible exceeds the remaining limit: the payout is the remaining limit exactly.
+    fullyCovered: claimAfterDeductible > 0n && aboveRemainingCoverage === 0n, // Everything after the deductible still owed is paid in full from the remaining coverage.
+    nothingPaid: payout === 0n, // Nothing is paid — nothing was claimed, the deductible still owed absorbed the claim, or the period coverage was already exhausted.
+    coverageExhaustedAfter: coverageRemainingAfter === 0n && (payout > 0n || coverageAlreadyUsed > 0n), // No period coverage remains after this claim.
+    deductibleCompletedNow: deductibleStillOwed > 0n && deductibleStillOwedAfter === 0n && claimedAmount > 0n, // This claim's borne part completes the period deductible.
   };
 }
