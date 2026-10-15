@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelHolderDistributionClaims, modelHolderDistribution } from '../src/domain.js';
 
-// Holder distribution claim-window model (v1.188): the lifecycle
+// Holder distribution claim-window model (v1.189): the lifecycle
 // after a priced distribution — the allocation is priced by the
 // uncapped holder distribution (v1.145) composed unchanged, then
 // each holder's allocation splits by claim status: claimed pays
@@ -239,6 +239,6 @@ test('wiring: app.js imports the model, renders a distribution-claims panel, and
   assert.match(app, /modelHolderDistributionClaims/);
   assert.match(app, /data-dclaim/);
   assert.match(app, /distribution-claims-output/);
-  assert.match(app, /v1\.188/);
+  assert.match(app, /v1\.189/);
   assert.match(readme, /Holder distribution claim-window model/);
 });

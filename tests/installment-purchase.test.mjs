@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelInstallmentPurchase } from '../src/domain.js';
 
-// Installment purchase model (v1.188): a NEW axis — a purchase
+// Installment purchase model (v1.189): a NEW axis — a purchase
 // paid partly now and the rest in stated installments. The fee
 // is floored on the FINANCED amount (its stated base, never the
 // whole price), the split is floored on the regular installment
