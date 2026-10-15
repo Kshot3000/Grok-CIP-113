@@ -135,7 +135,7 @@ test('the entered profile is carried through unchanged in the result', () => {
   assert.equal(v.spoofMonitoring, 'ongoing');
 });
 
-test('app wires the registry integrity checker: panel, verdicts, anchor reported-never-scored, honest boundary, v1.193', async () => {
+test('app wires the registry integrity checker: panel, verdicts, anchor reported-never-scored, honest boundary, v1.194', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkRegistryIntegrity/);
   assert.match(app, /registry-integrity-source/);
@@ -144,5 +144,5 @@ test('app wires the registry integrity checker: panel, verdicts, anchor reported
   assert.match(app, /SECURITY CONSIDERATIONS/);
   assert.match(app, /REPORTED, NEVER SCORED/);
   assert.match(app, /inspected no integrator, read no registry, and no chain state/);
-  assert.match(app, /v1\.193/);
+  assert.match(app, /v1\.194/);
 });
