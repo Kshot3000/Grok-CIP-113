@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelDutchAuctionUnsold } from '../src/domain.js';
 
-// Dutch auction unsold model (v1.184): the sale model prices a bid
+// Dutch auction unsold model (v1.185): the sale model prices a bid
 // landing in a stated period; this model prices the auction that
 // reaches its floor with NO bid. It is stated as a non-sale: nothing
 // sold, the whole lot returned, proceeds zero, and no platform fee
