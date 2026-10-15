@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelCreditLine, modelCreditLineMovement } from '../src/domain.js';
 
-// Credit line movement model (v1.197): the credit-line axis's
+// Credit line movement model (v1.198): the credit-line axis's
 // second moment — one stated movement on a revolving line,
 // composed from the credit line model unchanged. A draw
 // consumes availability exactly, a repayment restores it
