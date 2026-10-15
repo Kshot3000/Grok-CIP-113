@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCrowdfundWithdrawal } from '../src/domain.js';
 
-// Crowdfund withdrawal model (v1.181): a contributor withdraws before
+// Crowdfund withdrawal model (v1.182): a contributor withdraws before
 // the deadline; the withdrawn amount is returned with no fee and never
 // refunded twice, and the outcome and fee are repriced on what remains.
 // A withdrawal can flip a funded raise to missed, and then the project
@@ -169,6 +169,6 @@ test('wiring: app.js imports the model, renders a crowdfund withdrawal panel, an
   assert.match(app, /modelCrowdfundWithdrawal/);
   assert.match(app, /data-crowdw/);
   assert.match(app, /crowdw-output/);
-  assert.match(app, /v1\.181/);
+  assert.match(app, /v1\.182/);
   assert.match(readme, /Crowdfund withdrawal model/);
 });
