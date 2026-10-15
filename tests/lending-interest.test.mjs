@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelLendingInterest } from '../src/domain.js';
 
-// Lending interest model (v1.180): the liquidation model prices a
+// Lending interest model (v1.181): the liquidation model prices a
 // position already under water and the stress model prices a price
 // move, but debt also grows on its own. This model accrues interest
 // per period — simple on the starting debt, compound on the growing
@@ -154,5 +154,5 @@ test('the shipped site carries the lending interest panel and its honesty bounda
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /lending-interest-output/);
   assert.match(app, /PRISM lends nothing, holds no collateral, charges no interest, and liquidates nothing/);
-  assert.match(app, /v1\.180/);
+  assert.match(app, /v1\.181/);
 });

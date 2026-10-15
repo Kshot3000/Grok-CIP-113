@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelInvoiceFactoring } from '../src/domain.js';
 
-// Invoice factoring model (v1.180): a seller assigns an invoice to a
+// Invoice factoring model (v1.181): a seller assigns an invoice to a
 // factor, who advances a floored share of the face at once, holds the
 // rest as a reserve, and takes the disclosed discount fee — floored on
 // the face, its stated base — from that reserve when the debtor pays
@@ -152,6 +152,6 @@ test('wiring: app.js imports the model, renders an invoice factoring panel, and 
   assert.match(app, /modelInvoiceFactoring/);
   assert.match(app, /data-factor/);
   assert.match(app, /factor-output/);
-  assert.match(app, /v1\.180/);
+  assert.match(app, /v1\.181/);
   assert.match(readme, /Invoice factoring model/);
 });
