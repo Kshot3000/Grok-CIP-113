@@ -171,12 +171,12 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the substandard verification checker: panel, verdicts, honest boundary, v1.198', async () => {
+test('app wires the substandard verification checker: panel, verdicts, honest boundary, v1.199', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkSubstandardVerification/);
   assert.match(app, /sub-verification-actions/);
   assert.match(app, /SUBSTANDARD VERIFICATION · LOCAL MODEL/);
   assert.match(app, /NO VERDICT/);
   assert.match(app, /read no substandard script, no registry, and no chain state/);
-  assert.match(app, /v1\.198/);
+  assert.match(app, /v1\.199/);
 });
