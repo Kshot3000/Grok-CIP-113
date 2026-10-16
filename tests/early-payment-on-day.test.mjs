@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelEarlyPaymentDiscount, modelEarlyPaymentOnDay } from '../src/domain.js';
 
-// Early payment on a stated day model (v1.213): the trade-credit
+// Early payment on a stated day model (v1.214): the trade-credit
 // axis's second moment (v1.184) — the terms model states what
 // paying inside the window and at the net day each cost, but a
 // buyer pays on ONE stated day. This model composes the terms

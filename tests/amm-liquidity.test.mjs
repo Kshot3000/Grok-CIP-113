@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelAmmLiquidityDeposit } from '../src/domain.js';
 
-// Constant-product AMM liquidity deposit model (v1.213): a deposit
+// Constant-product AMM liquidity deposit model (v1.214): a deposit
 // into an existing pool, taken in full on both sides, with the LP
 // tokens minted governed by the LIMITING side — the smaller of the
 // two sides priced against the existing supply. Any excess over
@@ -166,6 +166,6 @@ test('wiring: app.js imports the model, renders an amm liquidity panel, and the 
   assert.match(app, /modelAmmLiquidityDeposit/);
   assert.match(app, /data-liq/);
   assert.match(app, /amm-liquidity-output/);
-  assert.match(app, /v1\.213/);
+  assert.match(app, /v1\.214/);
   assert.match(readme, /AMM liquidity deposit model/);
 });
