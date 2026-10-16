@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCappedHolderDistribution, modelHolderDistribution } from '../src/domain.js';
 
-// Capped pro-rata holder distribution model (v1.216): the holder
+// Capped pro-rata holder distribution model (v1.217): the holder
 // distribution (v1.145) divides a pool by holdings with no limit;
 // this model caps what any one holder may receive and divides
 // what the cap holds back again among the holders still under
@@ -188,6 +188,6 @@ test('wiring: app.js imports the model, renders a capped distribution panel, and
   assert.match(app, /modelCappedHolderDistribution/);
   assert.match(app, /data-capdist/);
   assert.match(app, /capped-distribution-output/);
-  assert.match(app, /v1\.216/);
+  assert.match(app, /v1\.217/);
   assert.match(readme, /Capped holder distribution model/);
 });
