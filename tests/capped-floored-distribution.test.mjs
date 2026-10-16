@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCappedFlooredHolderDistribution, modelCappedHolderDistribution, modelMinimumHolderDistribution } from '../src/domain.js';
 
-// Capped-and-floored holder distribution model (v1.217): both bounds
+// Capped-and-floored holder distribution model (v1.218): both bounds
 // of the distribution family at once — the minimum guarantee of the
 // floored model (v1.147) reserved first, the remainder water-filled
 // under each holder's cap room (cap − minimum) as in the capped
@@ -239,6 +239,6 @@ test('wiring: app.js imports the model, renders a capped-and-floored distributio
   assert.match(app, /modelCappedFlooredHolderDistribution/);
   assert.match(app, /data-cfd/);
   assert.match(app, /capped-floored-distribution-output/);
-  assert.match(app, /v1\.217/);
+  assert.match(app, /v1\.218/);
   assert.match(readme, /Capped-and-floored holder distribution model/);
 });
