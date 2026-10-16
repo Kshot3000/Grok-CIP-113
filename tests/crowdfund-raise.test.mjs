@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCrowdfundRaise } from '../src/domain.js';
 
-// Crowdfund raise model (v1.220): an all-or-nothing raise — the
+// Crowdfund raise model (v1.221): an all-or-nothing raise — the
 // goal is reached and the project is paid, with the platform fee
 // charged only on success, or the goal is missed and every
 // contribution is refunded in full with no fee. No cap: overfunding
@@ -171,6 +171,6 @@ test('wiring: app.js imports the model, renders a crowdfund panel, and the READM
   assert.match(app, /modelCrowdfundRaise/);
   assert.match(app, /data-crowd/);
   assert.match(app, /crowd-output/);
-  assert.match(app, /v1\.220/);
+  assert.match(app, /v1\.221/);
   assert.match(readme, /Crowdfund raise model/);
 });
