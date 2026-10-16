@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelRefund, modelPriceDiscount } from '../src/domain.js';
 
-// Refund model (v1.206): a NEW axis — a stated amount was
+// Refund model (v1.207): a NEW axis — a stated amount was
 // paid and a stated share of it is handed back. The refund
 // is measured against the amount PAID (never a list price),
 // floored to the base unit, and can never exceed the

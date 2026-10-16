@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelStakingRewards, STAKING_HORIZON_PERIODS } from '../src/domain.js';
 
-// Staking rewards dev-fee model (v1.206): a staking lifecycle holds
+// Staking rewards dev-fee model (v1.207): a staking lifecycle holds
 // two kinds of money — the staker's principal and the rewards it
 // earns — and the dev fee is charged ONLY on the rewards. The
 // principal returns whole in every outcome.
@@ -123,6 +123,6 @@ test('wiring: app.js imports the model, renders a staking panel, and the README 
   assert.match(app, /modelStakingRewards/);
   assert.match(app, /data-stake/);
   assert.match(app, /staking-output/);
-  assert.match(app, /v1\.206/);
+  assert.match(app, /v1\.207/);
   assert.match(readme, /Staking rewards dev-fee model/);
 });
