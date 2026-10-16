@@ -123,7 +123,7 @@ test('the entered profile is carried through unchanged in the result', () => {
   assert.equal(v.substandardVerification, 'verified');
 });
 
-test('app wires the lending integration checker: panel, verdicts, honest boundary, v1.205', async () => {
+test('app wires the lending integration checker: panel, verdicts, honest boundary, v1.206', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkLendingIntegration/);
   assert.match(app, /lending-integration-collateral/);
@@ -131,5 +131,5 @@ test('app wires the lending integration checker: panel, verdicts, honest boundar
   assert.match(app, /LENDING INTEGRATION · LOCAL MODEL/);
   assert.match(app, /REPORTED, NEVER SCORED/);
   assert.match(app, /inspected no lending protocol, read no registry, and no chain state/);
-  assert.match(app, /v1\.205/);
+  assert.match(app, /v1\.206/);
 });

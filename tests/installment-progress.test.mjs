@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelInstallmentPurchase, modelInstallmentProgress } from '../src/domain.js';
 
-// Installment plan progress model (v1.205): the installment
+// Installment plan progress model (v1.206): the installment
 // axis's second moment — the purchase model states a plan at
 // its start; this model composes it UNCHANGED and states the
 // position after a stated number of installments have been

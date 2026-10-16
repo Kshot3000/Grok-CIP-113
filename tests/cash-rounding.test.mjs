@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCashRounding } from '../src/domain.js';
 
-// Cash rounding model (v1.205): a NEW axis — a stated amount
+// Cash rounding model (v1.206): a NEW axis — a stated amount
 // rounded to the NEAREST stated increment, ties up, with the
 // adjustment stated signed and never silently absorbed, and
 // the adjustment never exceeding half the increment.
@@ -145,6 +145,6 @@ test('wiring: app.js imports the model, renders a cash rounding panel, and the R
   assert.match(app, /modelCashRounding/);
   assert.match(app, /data-cashround/);
   assert.match(app, /cashround-output/);
-  assert.match(app, /v1\.205/);
+  assert.match(app, /v1\.206/);
   assert.match(readme, /Cash rounding model/);
 });
