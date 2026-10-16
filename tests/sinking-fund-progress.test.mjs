@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelSinkingFund, modelSinkingFundProgress } from '../src/domain.js';
 
-// Sinking fund progress model (v1.207): the sinking-fund
+// Sinking fund progress model (v1.208): the sinking-fund
 // axis's second moment — the position part way through a
 // stated fund. Deposited-so-far is counted at the schedule's
 // own amounts, the deposits still to come sum to the amount

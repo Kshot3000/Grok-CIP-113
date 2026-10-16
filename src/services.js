@@ -309,6 +309,81 @@ export async function getRegistryTokens(network, protocols) {
   const groups=parseRegistryTokens(rows);
   return {network,indexer:origin.origin,groups,chains:groups.map(g=>registryChainCheck(g,protocols)),fetchedAt:Date.now()};
 }
+// Pure parser for the Foundation registry indexer's single-token
+// registration answer (GET /api/v1/registry/is-registered/{policyId} on
+// the same per-network indexers). The answer is one boolean under one
+// named field — anything else (a bare boolean, a truthy string, a missing
+// field) is refused, because a lookup verdict built on a coerced flag
+// would state a registration the indexer never stated.
+export function parseRegisteredFlag(data) {
+  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('Unexpected registration answer.');
+  if(typeof data.registered!=='boolean')throw new Error('Invalid registration answer: registered flag.');
+  return data.registered;
+}
+
+// Pure parser for the Foundation registry indexer's single-token node
+// response (GET /api/v1/registry/token/{policyId} — the one node the
+// tokens endpoint lists in its groups, read on its own). The node is
+// judged by exactly the registry-node parser the tokens and walk reads
+// use (validate-once — one parser judges every node, whatever endpoint
+// carried it), with the origin shape refused: a token lookup never
+// returns the origin. The returned node's key must be the policy that
+// was asked for — a node answering to a different key is a record for a
+// different token, however tidy it looks.
+export function parseRegistryToken(data, expectedPolicyId) {
+  if(typeof expectedPolicyId!=='string'||!(HEX28).test(expectedPolicyId))throw new Error('Policy ID must be 56 hexadecimal characters.');
+  const node=parseRegistryNode(data,false);
+  if(node.key!==expectedPolicyId.toLowerCase())throw new Error('The indexer returned a registry node for a different policy than the one looked up.');
+  return node;
+}
+
+// Cross-check one single-token lookup against the registered-tokens read
+// — two indexer reads of one registry that must agree before PRISM calls
+// a lookup verified. The registration flag and the tokens list are two
+// answers to the same question and must match: a policy the flag calls
+// registered must be listed, with a node agreeing FIELD FOR FIELD with
+// the node the token endpoint returned on its own; a policy the flag
+// calls unregistered must not be listed. When no tokens groups were
+// supplied to compare (that read failed upstream), compared is false and
+// every cross-check verdict is null — not compared — never a fabricated
+// agreement. A lookup whose own reads disagree is never ok.
+export function registryLookupCheck(lookup, tokensGroups) {
+  const node=lookup?.node??null;
+  const registered=lookup?.registered===true;
+  const compared=tokensGroups!=null;
+  const listed=compared?(tokensGroups??[]).flatMap(g=>g.registryNodes??[]).find(n=>n.key===lookup?.policyId)??null:null;
+  const presentInTokens=!compared?null:listed!==null;
+  const fields=['next','mintingLogicScript','transferLogicScript','thirdPartyTransferLogicScript','unfrackingLogicScript','globalStatePolicyId'];
+  const nodeAgrees=!compared||!registered||!node||!listed?null:fields.every(f=>listed[f]===node[f]);
+  const flagAgrees=!compared?null:(registered===presentInTokens);
+  const ok=registered?!!node&&flagAgrees!==false&&nodeAgrees!==false:!node&&flagAgrees!==false;
+  return {policyId:lookup?.policyId??null,registered,hasNode:!!node,compared,presentInTokens,nodeAgrees,flagAgrees,ok};
+}
+
+// Live read of ONE registered token by its policy ID from the same
+// Foundation indexer the registry reads use: the is-registered answer
+// first, and — only when it says registered — the token's own node,
+// strictly parsed and required to answer to the policy asked for. A
+// policy the indexer calls unregistered returns no node and no second
+// fetch is made: the token endpoint answers an unregistered policy with
+// an empty 404, which is the same fact stated worse. The cross-check
+// runs against the tokens groups the caller already read, when it has
+// them. Read-only; this is the indexer's view of its own deployment —
+// an unregistered answer says this indexer lists no node for the
+// policy, never that no such token exists anywhere.
+export async function getRegistryToken(network, policyId, tokensGroups=null) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before looking a token up in its registry.');
+  if(typeof policyId!=='string'||!(HEX28).test(policyId.trim()))throw new Error('Policy ID must be 56 hexadecimal characters.');
+  const policy=policyId.trim().toLowerCase();
+  const origin=new URL(net.registryApi);
+  if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
+  const base=origin.href.replace(/\/$/,'');
+  const registered=parseRegisteredFlag(await fetchJson(`${base}/api/v1/registry/is-registered/${policy}`));
+  const node=registered?parseRegistryToken(await fetchJson(`${base}/api/v1/registry/token/${policy}`),policy):null;
+  const lookup={network,indexer:origin.origin,policyId:policy,registered,node,fetchedAt:Date.now()};
+  return {...lookup,check:registryLookupCheck(lookup,tokensGroups)};
+}
 // Pure parser for the Foundation registry indexer's protocol parameter
 // versions response (GET /api/v1/protocol-params/versions on the same
 // per-network indexers — the endpoint the platform's own frontend reads
