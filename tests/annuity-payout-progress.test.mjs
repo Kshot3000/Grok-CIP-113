@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelAnnuityPayout, modelAnnuityPayoutProgress } from '../src/domain.js';
 
-// Annuity payout progress model (v1.214): the annuity
+// Annuity payout progress model (v1.215): the annuity
 // axis's second moment — the position part way through a
 // stated fund's payouts. Paid-out-so-far is counted at the
 // schedule's own amounts, the payouts still to come sum to
