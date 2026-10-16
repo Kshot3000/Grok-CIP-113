@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCashRounding, modelCashRoundingChange } from '../src/domain.js';
 
-// Cash rounding change model (v1.221): the cash-rounding axis's
+// Cash rounding change model (v1.222): the cash-rounding axis's
 // second moment — the rounding model states what is due at
 // payment, but a payer tenders an amount and the excess over
 // the ROUNDED amount due is handed back as change, stated

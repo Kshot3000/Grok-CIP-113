@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelStakingRollover, modelStakingRewards } from '../src/domain.js';
 
-// Staking rollover model (v1.221): a finished position restaked into
+// Staking rollover model (v1.222): a finished position restaked into
 // a new term on the same terms. The rolled principal is the first
 // term's final (principal plus NET rewards), the dev fee is charged
 // again on the second term's rewards only, and the comparison with
@@ -175,5 +175,5 @@ test('the shipped site carries the staking rollover panel and its honesty bounda
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /staking-rollover-output/);
   assert.match(app, /PRISM stakes nothing, holds no stake, pays no rewards, and rolls no position over/);
-  assert.match(app, /v1\.221/);
+  assert.match(app, /v1\.222/);
 });

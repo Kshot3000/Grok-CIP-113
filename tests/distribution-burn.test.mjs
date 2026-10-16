@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelHolderDistributionBurn, modelHolderDistributionSecondWindow } from '../src/domain.js';
 
-// Holder distribution burn model (v1.221): the other final
+// Holder distribution burn model (v1.222): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after both claim windows — the
 // design burns them, so they leave the total supply. The
@@ -169,6 +169,6 @@ test('wiring: app.js imports the model, renders a distribution-burn panel, and t
   assert.match(app, /modelHolderDistributionBurn/);
   assert.match(app, /data-dburn/);
   assert.match(app, /distribution-burn-output/);
-  assert.match(app, /v1\.221/);
+  assert.match(app, /v1\.222/);
   assert.match(readme, /Holder distribution burn model/);
 });
