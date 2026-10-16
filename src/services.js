@@ -452,6 +452,88 @@ export async function getProtocolParamVersions(network, protocols) {
   const versions=parseProtocolParamVersions(rows);
   return {network,indexer:origin.origin,versions,check:protocolVersionsCheck(versions,protocols),fetchedAt:Date.now()};
 }
+// Pure parser for the Foundation registry indexer's latest protocol
+// parameters response (GET /api/v1/protocol-params/latest on the same
+// per-network indexers). Where the versions endpoint reads the parameter
+// HISTORY, this endpoint reads the parameters standing NOW, with the full
+// credential set the deployments list never carries: the transfer,
+// third-party, programmable-logic-global, issuance-logic, unfracking, and
+// upgrade credentials a programmable token's wiring is checked against,
+// the credential nominated for a pending upgrade (null when none is
+// nominated — a stated absence, not a missing field), and the protocol's
+// inline-datum size limit. Every field is validated and hex canonicalised;
+// the record must name the numeric protocol parameters ID the deployments
+// endpoint keys its records by. The creation time arrives either as an
+// ISO date-time string (the shape the indexer's own API schema names) or
+// as the seven-part array [year, month, day, hour, minute, second,
+// nanoseconds] the live indexer actually serialises — both are accepted
+// and normalised to an ISO string; anything else is refused.
+export function parseProtocolParamsLatest(data) {
+  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('Unexpected latest protocol parameters response.');
+  const cred=(v,label)=>{if(!(HEX28).test(v??''))throw new Error(`Invalid latest protocol parameters record: ${label}.`);return v.toLowerCase();};
+  if(!Number.isSafeInteger(data.id)||data.id<0)throw new Error('Invalid latest protocol parameters record: protocol parameters ID.');
+  const registryNodePolicyId=cred(data.registryNodePolicyId,'registry node policy ID');
+  const progLogicScriptHash=cred(data.progLogicScriptHash,'programmable logic script hash');
+  const transferCred=cred(data.transferCred,'transfer credential');
+  const thirdPartyCred=cred(data.thirdPartyCred,'third-party credential');
+  const programmableLogicGlobalCred=cred(data.programmableLogicGlobalCred,'programmable-logic global credential');
+  const issuanceLogicCred=cred(data.issuanceLogicCred,'issuance-logic credential');
+  const unfrackingCred=cred(data.unfrackingCred,'unfracking credential');
+  const upgradeCred=cred(data.upgradeCred,'upgrade credential');
+  const pendingUpgradeCred=data.pendingUpgradeCred===null?null:cred(data.pendingUpgradeCred,'pending upgrade credential');
+  if(!Number.isSafeInteger(data.maxInlineDatumBytes)||data.maxInlineDatumBytes<0)throw new Error('Invalid latest protocol parameters record: maximum inline datum size.');
+  if(!(/^[a-f0-9]{64}$/i).test(data.txHash??''))throw new Error('Invalid latest protocol parameters record: deployment transaction.');
+  if(!Number.isSafeInteger(data.slot)||data.slot<0)throw new Error('Invalid latest protocol parameters record: slot.');
+  if(!Number.isSafeInteger(data.blockHeight)||data.blockHeight<0)throw new Error('Invalid latest protocol parameters record: block height.');
+  let createdAt=null;
+  if(typeof data.createdAt==='string'){
+    const t=Date.parse(data.createdAt);
+    if(!Number.isFinite(t))throw new Error('Invalid latest protocol parameters record: creation time.');
+    createdAt=new Date(t).toISOString();
+  } else if(Array.isArray(data.createdAt)){
+    const c=data.createdAt;
+    if(c.length!==7||!c.every(Number.isSafeInteger))throw new Error('Invalid latest protocol parameters record: creation time.');
+    const [y,mo,d,h,mi,s,ns]=c;
+    if(y<1||mo<1||mo>12||d<1||d>31||h<0||h>23||mi<0||mi>59||s<0||s>60||ns<0||ns>999999999)throw new Error('Invalid latest protocol parameters record: creation time.');
+    createdAt=new Date(Date.UTC(y,mo-1,d,h,mi,s,Math.floor(ns/1e6))).toISOString();
+  } else throw new Error('Invalid latest protocol parameters record: creation time.');
+  return {id:data.id,registryNodePolicyId,progLogicScriptHash,transferCred,thirdPartyCred,programmableLogicGlobalCred,issuanceLogicCred,unfrackingCred,upgradeCred,pendingUpgradeCred,maxInlineDatumBytes:data.maxInlineDatumBytes,txHash:data.txHash.toLowerCase(),slot:data.slot,blockHeight:data.blockHeight,createdAt};
+}
+
+// Cross-check the latest protocol parameters against the deployments list
+// from the protocols endpoint — two reads of the parameters standing NOW
+// that must agree before PRISM calls them verified. The deployments list
+// must carry a record with the latest read's protocol parameters ID, and
+// that record must agree on the registry node policy, the
+// programmable-logic hash, the deployment transaction, and the slot —
+// field for field, the same agreement the version-history check requires
+// of its standing default. When no deployments list was supplied (its own
+// read failed), compared is false and every agreement verdict is null —
+// not compared — never a fabricated agreement.
+export function protocolParamsLatestCheck(latest, protocols) {
+  const compared=protocols!=null&&latest!=null;
+  const record=compared?(protocols??[]).find(p=>p.protocolParamsId===latest.id)??null:null;
+  const listed=compared?record!==null:null;
+  const agrees=!compared?null:!!record&&record.registryNodePolicyId===latest.registryNodePolicyId&&record.progLogicScriptHash===latest.progLogicScriptHash&&record.txHash===latest.txHash&&record.slot===latest.slot;
+  const ok=!!latest&&agrees!==false;
+  return {protocolParamsId:latest?.id??null,compared,listed,agrees,ok};
+}
+// Live read of one network's latest (standing) protocol parameters from
+// the same Foundation indexer the registry reads use, cross-checked
+// against the deployments list the caller already read. Read-only;
+// strictly parsed. This is the indexer's record of the parameters its
+// deployment runs under NOW — the credential set the studio's local
+// protocol models are designed against, read live, never a parameter set
+// PRISM deploys or changes.
+export async function getProtocolParamsLatest(network, protocols) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before reading its latest protocol parameters.');
+  const origin=new URL(net.registryApi);
+  if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
+  const data=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/protocol-params/latest`);
+  const latest=parseProtocolParamsLatest(data);
+  return {network,indexer:origin.origin,latest,check:protocolParamsLatestCheck(latest,protocols),fetchedAt:Date.now()};
+}
 // A Cardano script hash for a Plutus V3 script is the Blake2b-224 digest
 // of the one-byte language tag 0x03 followed by the script's bytes (the
 // ledger's script-hash construction). Computing it locally is what turns
