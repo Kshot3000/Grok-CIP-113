@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelTip, modelTaxExclusiveTotal } from '../src/domain.js';
 
-// Tip model (v1.209): a NEW axis — money given extra,
+// Tip model (v1.210): a NEW axis — money given extra,
 // voluntarily, on top of an amount due. The tip is
 // measured against the BILL (never a tax-inclusive
 // total), floored to the base unit, and bounded by

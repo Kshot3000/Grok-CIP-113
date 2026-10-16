@@ -309,6 +309,58 @@ export async function getRegistryTokens(network, protocols) {
   const groups=parseRegistryTokens(rows);
   return {network,indexer:origin.origin,groups,chains:groups.map(g=>registryChainCheck(g,protocols)),fetchedAt:Date.now()};
 }
+// Verify one deployment's SORTED token read (GET
+// /api/v1/registry/tokens/sorted?protocolParamsId=<id> on the same
+// per-network indexers) — the tokens endpoint's groups keyed to ONE
+// deployment, in the order the endpoint's own name claims: ascending by
+// key. That name is a claim, and PRISM verifies it rather than trusting
+// it: the group is judged by exactly the chain check the tokens read is
+// judged by (validate-once — keys strictly ascending, every next naming
+// the following key, the last node terminating at the sentinel, and the
+// deployments list agreeing on the registry node policy, the
+// programmable-logic hash, and the token count), and it must also agree
+// NODE FOR NODE, every field, with the same deployment's group in the
+// plain tokens read — two reads of one chain that disagree anywhere
+// fail, however tidy each looks alone. The endpoint REQUIRES its
+// protocol parameters ID (it answers 400 without one, where the plain
+// tokens endpoint takes the ID optionally), so a sorted read is always
+// about a named deployment: a response carrying no group for that
+// deployment's registry node policy verifies nothing, and neither does
+// a deployments list with no record under that ID. When no tokens
+// groups were supplied to compare (that read failed upstream),
+// tokensAgree is null — not compared — never a fabricated agreement.
+export function registryTokensSortedCheck(sortedGroups, protocolParamsId, tokensGroups, protocols) {
+  const record=(protocols??[]).find(p=>p.protocolParamsId===protocolParamsId)??null;
+  const group=record?(sortedGroups??[]).find(g=>g.protocolParams.registryNodePolicyId===record.registryNodePolicyId)??null:null;
+  const groupFound=group!==null;
+  const chain=groupFound?registryChainCheck(group,protocols):null;
+  const matched=groupFound&&tokensGroups!=null?(tokensGroups??[]).find(t=>t.protocolParams.registryNodePolicyId===group.protocolParams.registryNodePolicyId)??null:null;
+  const tokensCompared=matched!==null;
+  const nodesEqual=(a,b)=>!!a&&!!b&&a.key===b.key&&a.next===b.next&&NODE_FIELDS.every(f=>a[f]===b[f]);
+  const tokensAgree=!tokensCompared?null:(matched.registryNodes.length===group.registryNodes.length&&matched.registryNodes.every((n,i)=>nodesEqual(n,group.registryNodes[i])));
+  const ok=groupFound&&chain.ok&&tokensAgree!==false;
+  return {protocolParamsId,registryNodePolicyId:record?.registryNodePolicyId??null,deploymentListed:record!==null,groupFound,nodeCount:group?.registryNodes.length??0,sorted:chain?.sorted??false,linked:chain?.linked??false,terminatesAtSentinel:chain?.terminatesAtSentinel??false,protocolFound:chain?.protocolFound??false,logicMatches:chain?.logicMatches??false,countMatches:chain?.countMatches??false,tokensCompared,tokensAgree,ok};
+}
+// Live read of ONE deployment's registered token nodes in the indexer's
+// claimed sorted order, from the same Foundation indexer the registry
+// reads use. The endpoint is keyed by the NUMERIC protocol parameters
+// ID that only the protocols endpoint reports, so the caller passes the
+// id from that list — an id that is not a non-negative integer is
+// refused before any fetch, because the endpoint requires the ID and a
+// wrong one returns an unrelated or empty answer. Read-only; strictly
+// parsed by the same token-group parser as the tokens read;
+// cross-checked against both the tokens groups and the deployments list
+// the caller already read.
+export async function getRegistryTokensSorted(network, protocolParamsId, tokensGroups, protocols) {
+  const net=NETWORKS[network];
+  if(!net)throw new Error('Unknown network — choose a network before reading its sorted registry tokens.');
+  if(!Number.isSafeInteger(protocolParamsId)||protocolParamsId<0)throw new Error('A sorted registry read needs the deployment’s protocol parameters ID from the deployments list.');
+  const origin=new URL(net.registryApi);
+  if(origin.protocol!=='https:')throw new Error('The registry API must use HTTPS.');
+  const rows=await fetchJson(`${origin.href.replace(/\/$/,'')}/api/v1/registry/tokens/sorted?protocolParamsId=${protocolParamsId}`);
+  const groups=parseRegistryTokens(rows);
+  return {network,indexer:origin.origin,protocolParamsId,groups,check:registryTokensSortedCheck(groups,protocolParamsId,tokensGroups,protocols),fetchedAt:Date.now()};
+}
 // Pure parser for the Foundation registry indexer's single-token
 // registration answer (GET /api/v1/registry/is-registered/{policyId} on
 // the same per-network indexers). The answer is one boolean under one

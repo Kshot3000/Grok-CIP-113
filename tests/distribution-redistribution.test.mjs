@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelHolderDistributionRedistribution, modelHolderDistributionClaims } from '../src/domain.js';
 
-// Holder distribution redistribution model (v1.209): one
+// Holder distribution redistribution model (v1.210): one
 // destination for the unclaimed allocations the claim-window model
 // (v1.149) states — the claimants share them. The claim-window
 // model is composed unchanged; its unclaimed total becomes a
@@ -221,6 +221,6 @@ test('wiring: app.js imports the model, renders a distribution-redistribution pa
   assert.match(app, /modelHolderDistributionRedistribution/);
   assert.match(app, /data-dredis/);
   assert.match(app, /distribution-redistribution-output/);
-  assert.match(app, /v1\.209/);
+  assert.match(app, /v1\.210/);
   assert.match(readme, /Holder distribution redistribution model/);
 });

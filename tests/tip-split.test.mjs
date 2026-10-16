@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelTipSplit, modelTip } from '../src/domain.js';
 
-// Tip split model (v1.209): the tip axis's second moment —
+// Tip split model (v1.210): the tip axis's second moment —
 // the stated tip from modelTip divided among stated
 // recipients by stated shares, each floored. The split
 // divides the TIP, never the bill or the total due; what

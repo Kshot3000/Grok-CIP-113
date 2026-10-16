@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelVestingRevocation } from '../src/domain.js';
 
-// Vesting revocation model (v1.209): a revocable schedule ends at
+// Vesting revocation model (v1.210): a revocable schedule ends at
 // the revocation period — the recipient keeps exactly what had
 // vested by then under the vesting schedule model (v1.142),
 // composed unchanged, everything not yet vested returns to the
@@ -137,6 +137,6 @@ test('wiring: app.js imports the model, renders a revocation panel, and the READ
   assert.match(app, /modelVestingRevocation/);
   assert.match(app, /data-revoke/);
   assert.match(app, /revocation-output/);
-  assert.match(app, /v1\.209/);
+  assert.match(app, /v1\.210/);
   assert.match(readme, /Vesting revocation model/);
 });

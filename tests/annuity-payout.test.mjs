@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelAnnuityPayout } from '../src/domain.js';
 
-// Annuity payout model (v1.209): a NEW axis — a stated fund
+// Annuity payout model (v1.210): a NEW axis — a stated fund
 // paid out in stated payouts until it is exhausted. No yield
 // and no growth are priced (the payouts alone sum to the fund
 // exactly), the regular payout is floored and the final
