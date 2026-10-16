@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCurrencyConversion, modelCurrencyConversionFee } from '../src/domain.js';
 
-// Currency conversion fee model (v1.211): the conversion
+// Currency conversion fee model (v1.212): the conversion
 // axis's second moment — a stated fee taken from the
 // converted amount. The fee is floor(converted x rate /
 // 10,000), measured against the converted amount in target

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelDutchAuction } from '../src/domain.js';
 
-// Dutch auction sale model (v1.211): the price descends from a start
+// Dutch auction sale model (v1.212): the price descends from a start
 // price to a floor price over a stated number of periods — the elapsed
 // share of the drop is floored, so the price is never below the exact
 // schedule and never below the floor — and the first bid at the

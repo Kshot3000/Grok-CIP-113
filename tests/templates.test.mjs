@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { TEMPLATES } from '../src/config.js';
-import { fromTemplate, validateDesign, simulateTransfer, makeManifest, parseManifest, toUnits } from '../src/domain.js';
+import { fromTemplate, validateDesign, simulateTransfer, makeManifest, parseManifest, toUnits, auditDesign } from '../src/domain.js';
 
-// v1.7 added the carbon-credit and event-ticket templates; v1.211 added the
-// governance template. These tests pin the
+// v1.7 added the carbon-credit and event-ticket templates; the governance
+// template followed, and v1.212 added the open-payments template — the first
+// template with the per-transfer cap OFF, so no starting design before it
+// ever showed the uncapped state. These tests pin the
 // whole catalog: every template must produce a valid design, ship a real icon
 // and a real accent style (icon() silently falls back to a box and an unknown
 // accent class renders unstyled — both failures are invisible without a test),
@@ -15,11 +17,11 @@ import { fromTemplate, validateDesign, simulateTransfer, makeManifest, parseMani
 const iconsSource = readFileSync(new URL('../src/icons.js', import.meta.url), 'utf8');
 const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
-test('catalog has seven templates with unique ids and tickers', () => {
-  assert.equal(TEMPLATES.length, 7);
-  assert.equal(new Set(TEMPLATES.map(t => t.id)).size, 7);
-  assert.equal(new Set(TEMPLATES.map(t => t.ticker)).size, 7);
-  assert.deepEqual(TEMPLATES.map(t => t.id), ['rwa', 'credit', 'stable', 'community', 'carbon', 'ticket', 'governance']);
+test('catalog has eight templates with unique ids and tickers', () => {
+  assert.equal(TEMPLATES.length, 8);
+  assert.equal(new Set(TEMPLATES.map(t => t.id)).size, 8);
+  assert.equal(new Set(TEMPLATES.map(t => t.ticker)).size, 8);
+  assert.deepEqual(TEMPLATES.map(t => t.id), ['rwa', 'credit', 'stable', 'community', 'carbon', 'ticket', 'governance', 'payments']);
 });
 
 test('every template builds a design that validates with zero errors', () => {
@@ -37,8 +39,8 @@ test('every template icon exists and every non-default accent has template-icon 
   }
 });
 
-test('carbon, ticket, and governance manifests round-trip exactly', () => {
-  for (const id of ['carbon', 'ticket', 'governance']) {
+test('carbon, ticket, governance, and payments manifests round-trip exactly', () => {
+  for (const id of ['carbon', 'ticket', 'governance', 'payments']) {
     const m = makeManifest(fromTemplate(id), 'preview');
     assert.deepEqual(parseManifest(JSON.stringify(m)), { design: fromTemplate(id), network: 'preview' });
   }
@@ -116,4 +118,48 @@ test('governance token: open voting power, no issuer pause, 1%-of-supply per-tra
   // no freeze mechanism to apply.
   const frozen = simulateTransfer(d, { recipient: 'blocked', amount: '1' });
   assert.equal(frozen.allowed, true, JSON.stringify(frozen.checks));
+});
+
+test('open payments: no per-transfer cap, open access, no issuer controls — the whole supply can move in one transfer', () => {
+  const d = fromTemplate('payments');
+  assert.equal(d.decimals, 6);
+  assert.equal(d.allowlist, false);
+  assert.equal(d.limitEnabled, false);
+  assert.equal(d.pausable, false);
+  assert.equal(d.identity, false);
+  assert.equal(d.substandard, 'generic');
+  assert.equal(toUnits(d.supply, d.decimals), 100000000000000n);
+  // The template is the catalog's only uncapped design: every other template
+  // enables the per-transfer limit, so this state was unreachable as a
+  // starting design before it. The stored limit is the value that would
+  // apply if a builder turns the cap on — exactly 1% of supply.
+  assert.equal(TEMPLATES.filter(t => t.limitEnabled).length, 7);
+  assert.equal(toUnits(d.limit, d.decimals) * 100n, toUnits(d.supply, d.decimals));
+  // Uncapped and open: the ENTIRE designed supply can move to the pending
+  // participant (no allowlist, no credential) in a single modeled transfer,
+  // passing the transfer-limit check because no cap is modeled.
+  const whole = simulateTransfer(d, { recipient: 'pending', amount: '100000000' });
+  assert.equal(whole.allowed, true, JSON.stringify(whole.checks));
+  assert.equal(whole.checks.find(c => c.name === 'Transfer limit').pass, true);
+  assert.match(whole.checks.find(c => c.name === 'Transfer limit').detail, /No per-transfer cap/);
+  // One base unit over the supply is denied by the available-supply check alone.
+  const over = simulateTransfer(d, { recipient: 'approved', amount: '100000000.000001' });
+  assert.equal(over.allowed, false);
+  assert.equal(over.checks.find(c => c.name === 'Available supply').pass, false);
+  assert.ok(over.checks.filter(c => !c.pass).length === 1);
+  // Issuer controls are off, so a design carrying the paused flag cannot be
+  // halted and a frozen participant is not blocked — the same promise the
+  // governance template makes, here for a payment asset.
+  const paused = simulateTransfer({ ...d, paused: true }, { recipient: 'approved', amount: '1' });
+  assert.equal(paused.allowed, true, JSON.stringify(paused.checks));
+  const frozen = simulateTransfer(d, { recipient: 'blocked', amount: '1' });
+  assert.equal(frozen.allowed, true, JSON.stringify(frozen.checks));
+  // The design review states the trade-off out loud instead of hiding it:
+  // with no rule active and the generic substandard, this design behaves
+  // like an ordinary native token — a warning, not a blocker.
+  const audit = auditDesign(d);
+  assert.equal(audit.ready, true);
+  assert.deepEqual(audit.counts, { blocker: 0, warning: 1, note: 2, ok: 1 });
+  assert.equal(audit.findings.find(f => f.id === 'rule-coverage').level, 'warning');
+  assert.equal(audit.findings.find(f => f.id === 'cap-effectiveness').title, 'No per-transfer cap');
 });

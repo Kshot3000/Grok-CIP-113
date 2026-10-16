@@ -45,6 +45,7 @@ export const TEMPLATES = [
   { id:'carbon', name:'Carbon credit', short:'CARBON', icon:'leaf', description:'One credit, one verified tonne', tokenName:'Prism Carbon Credit', ticker:'PCC', decimals:0, supply:'250000', limit:'10000', allowlist:true, limitEnabled:true, pausable:true, identity:true, substandard:'kyc', accent:'teal' },
   { id:'ticket', name:'Event ticket', short:'TICKET', icon:'ticket', description:'Resale caps that fight scalping', tokenName:'Prism Event Ticket', ticker:'PTIX', decimals:0, supply:'5000', limit:'4', allowlist:false, limitEnabled:true, pausable:true, identity:false, substandard:'generic', accent:'rose' },
   { id:'governance', name:'Governance token', short:'GOV', icon:'vote', description:'Voting power no issuer can pause', tokenName:'Prism Governance', ticker:'PGOV', decimals:6, supply:'10000000', limit:'100000', allowlist:false, limitEnabled:true, pausable:false, identity:false, substandard:'generic', accent:'indigo' },
+  { id:'payments', name:'Open payments', short:'PAY', icon:'send', description:'Uncapped transfers, open to anyone', tokenName:'Prism Payment Token', ticker:'PPAY', decimals:6, supply:'100000000', limit:'1000000', allowlist:false, limitEnabled:false, pausable:false, identity:false, substandard:'generic', accent:'cyan' },
 ];
 
 export const SOURCES = [
