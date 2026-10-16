@@ -824,13 +824,53 @@ export async function refreshCardano(wallet,network) {
   if(id!==wallet.networkId||address!==wallet.address)throw new Error('Wallet account or network changed. Reconnect to continue.');
   return wallet;
 }
-async function readMidnightAddress(api) {
+// Midnight unshielded addresses are Bech32m strings (BIP-350): the human-
+// readable part is `mn_addr`, optionally carrying the network it belongs to
+// (`mn_addr_preview`, `mn_addr_preprod`, `mn_addr_mainnet`,
+// `mn_addr_undeployed`), the separator is the LAST '1', and the data part is
+// a 32-byte payload plus a 6-character Bech32m checksum (polymod constant
+// 0x2bc830a3 — the Bech32 constant 1 does NOT verify these addresses).
+// Inspecting one is purely local: it proves the string is a well-formed
+// unshielded address and states the network its HRP encodes, never that any
+// account holds funds or that a deployment recognises it.
+const MIDNIGHT_CHARSET='qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+const MIDNIGHT_NETWORKS=Object.freeze(['preview','preprod','mainnet','undeployed']);
+function midnightPolymod(values) {
+  let chk=1;
+  const gen=[0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3];
+  for(const v of values) {const top=chk>>>25;chk=((chk&0x1ffffff)<<5)^v;for(let i=0;i<5;i++) if((top>>>i)&1)chk^=gen[i];}
+  return chk>>>0;
+}
+export function inspectMidnightAddress(address) {
+  if(typeof address!=='string'||!address.length||address.length>250)throw new Error('The wallet did not provide a valid public address.');
+  if(address!==address.toLowerCase()&&address!==address.toUpperCase())throw new Error('The wallet did not provide a valid public address: mixed-case Bech32m.');
+  const s=address.toLowerCase(),split=s.lastIndexOf('1'),hrp=s.slice(0,split);
+  const segment=hrp==='mn_addr'?null:hrp.startsWith('mn_addr_')?hrp.slice('mn_addr_'.length):undefined;
+  if(segment===undefined||(segment!==null&&!MIDNIGHT_NETWORKS.includes(segment)))throw new Error('The wallet did not provide an unshielded Midnight address (mn_addr).');
+  const data=[...s.slice(split+1)].map(c=>MIDNIGHT_CHARSET.indexOf(c));
+  if(data.length<7||data.some(v=>v<0))throw new Error('The wallet did not provide a valid public address.');
+  const expand=[...hrp].map(c=>c.charCodeAt(0)>>>5).concat([0],[...hrp].map(c=>c.charCodeAt(0)&31));
+  if(midnightPolymod([...expand,...data])!==0x2bc830a3)throw new Error('The wallet address failed its Bech32m checksum. Reconnect and try again.');
+  // Strict 5-to-8 conversion of the payload (checksum stripped): leftover
+  // bits must be fewer than 5 and all zero, exactly as the Cardano codec
+  // refuses non-canonical padding.
+  let acc=0,bits=0;const bytes=[];
+  for(const v of data.slice(0,-6)){acc=((acc<<5)|v)&0xfff;bits+=5;while(bits>=8){bits-=8;bytes.push((acc>>>bits)&0xff);}}
+  if(bits>=5||(acc&((1<<bits)-1)))throw new Error('The wallet did not provide a valid public address.');
+  if(bytes.length!==32)throw new Error('The wallet did not provide a valid public address: an unshielded address carries a 32-byte payload.');
+  return {address:s,hrp,network:segment,payloadBytes:bytes.length,checksum:'bech32m'};
+}
+async function readMidnightAddress(api,network) {
   if(!api||typeof api.getUnshieldedAddress!=='function')throw new Error('The wallet did not provide a complete Midnight API. Update the wallet or try another one.');
   // Never fetch balances or secret material. Read only the public unshielded address.
   const result=await api.getUnshieldedAddress();
-  const address=typeof result==='string'?result:result?.unshieldedAddress;
-  if(typeof address!=='string'||!address.startsWith('mn_addr')||address.length<20||address.length>250)throw new Error('The wallet did not provide a valid public address.');
-  return address;
+  const raw=typeof result==='string'?result:result?.unshieldedAddress;
+  const info=inspectMidnightAddress(raw);
+  // The connection status already proved the wallet's network; the address
+  // must not contradict it. An HRP with no network segment encodes none, so
+  // there is nothing to contradict — that absence is reported, not filled in.
+  if(info.network!==null&&info.network!==NETWORKS[network].midnight)throw new Error(`Midnight wallet address is for ${info.network}, not ${NETWORKS[network].name}. Switch networks in the wallet and reconnect.`);
+  return info;
 }
 async function readMidnightState(api,network) {
   if(!api||typeof api.getConnectionStatus!=='function')throw new Error('The wallet did not provide a complete Midnight API. Update the wallet or try another one.');
@@ -845,12 +885,12 @@ export async function connectMidnight(provider,network) {
   if(!/^4\./.test(provider.apiVersion??''))throw new Error('Use a Midnight wallet with connector API v4.');
   const api=await provider.connect(NETWORKS[network].midnight);
   const status=await readMidnightState(api,network);
-  const address=await readMidnightAddress(api);
-  return {name:provider.name,api,address,network:NETWORKS[network].midnight,networkId:status.networkId,version:provider.apiVersion};
+  const info=await readMidnightAddress(api,network);
+  return {name:provider.name,api,address:info.address,addressNetwork:info.network,network:NETWORKS[network].midnight,networkId:status.networkId,version:provider.apiVersion};
 }
 export async function refreshMidnight(wallet,network) {
   await readMidnightState(wallet.api,network);
-  const address=await readMidnightAddress(wallet.api);
-  if(address!==wallet.address)throw new Error('Midnight account changed. Reconnect to continue.');
+  const info=await readMidnightAddress(wallet.api,network);
+  if(info.address!==wallet.address)throw new Error('Midnight account changed. Reconnect to continue.');
   return wallet;
 }

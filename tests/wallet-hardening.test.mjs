@@ -39,14 +39,18 @@ test('Cardano refresh still detects a same-network account change',async()=>{
   await assert.rejects(refreshCardano(wallet,'preview'),/account or network changed/);
 });
 
-function midnightProvider({status={status:'connected',networkId:'preview'},address='mn_addr_preview1hardeningtest'}={}) {
+// Valid Bech32m fixtures: each payload is a fixed 32-byte test value with a
+// correctly computed Bech32m checksum for its HRP — the strict inspector in
+// services.js verifies the checksum, so a hand-typed string cannot pass.
+const MIDNIGHT_FIXTURES=Object.freeze({preview:'mn_addr_preview19val6r9qnzadsam8ywclza7sgfa4d7n9phxxtdmvnhkytnx5j6ps966y6d',preprod:'mn_addr_preprod1rlzxf8u3z20m8hyr5e7rx2gsjep34u0m49eaft8fw4lere6fncksc3uwrn',mainnet:'mn_addr_mainnet1zfrhu7mjhgkvzt0rcsv3p9xq2263qcxmhp8phycmh2uj6a4gjgyqhzaxx4'});
+function midnightProvider({status={status:'connected',networkId:'preview'},address='mn_addr_preview19val6r9qnzadsam8ywclza7sgfa4d7n9phxxtdmvnhkytnx5j6ps966y6d'}={}) {
   const api={getConnectionStatus:async()=>status,getUnshieldedAddress:async()=>({unshieldedAddress:address})};
   return {provider:{name:'Midnight hardening',apiVersion:'4.2.0',connect:async()=>api},api};
 }
 
 test('Midnight refresh verifies status against the NETWORKS midnight id for every network',async()=>{
   for(const key of Object.keys(NETWORKS)) {
-    const {provider,api}=midnightProvider({status:{status:'connected',networkId:NETWORKS[key].midnight},address:`mn_addr_${key}1hardeningtest`});
+    const {provider,api}=midnightProvider({status:{status:'connected',networkId:NETWORKS[key].midnight},address:MIDNIGHT_FIXTURES[key]});
     const wallet=await connectMidnight(provider,key);
     assert.equal(wallet.networkId,NETWORKS[key].midnight);
     await refreshMidnight(wallet,key); // unchanged session resolves
@@ -60,7 +64,7 @@ test('Midnight refresh verifies status against the NETWORKS midnight id for ever
 test('Midnight refresh detects an account change the old status-only check missed',async()=>{
   const {provider,api}=midnightProvider();
   const wallet=await connectMidnight(provider,'preview');
-  api.getUnshieldedAddress=async()=>({unshieldedAddress:'mn_addr_preview1differentaccount'});
+  api.getUnshieldedAddress=async()=>({unshieldedAddress:'mn_addr_preview1efyxlaf955mjl4ttv2an5yt0fgjgfhdrg99xvkcdv6qrp5syp8yscl8dmr'});
   await assert.rejects(refreshMidnight(wallet,'preview'),/Midnight account changed/);
 });
 

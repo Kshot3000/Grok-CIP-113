@@ -18,8 +18,8 @@ test('Cardano connection rejects wrong network and detects changed accounts',asy
 });
 test('Midnight connection checks v4 status and reads only public address',async()=>{
   let requested;let status={status:'connected',networkId:'preview'};
-  const provider={name:'Midnight test',apiVersion:'4.0.1',connect:async(n)=>{requested=n;return{getConnectionStatus:async()=>status,getUnshieldedAddress:async()=>({unshieldedAddress:'mn_addr_preview1test'})};}};
-  const wallet=await connectMidnight(provider,'preview');assert.equal(requested,'preview');assert.equal(wallet.address,'mn_addr_preview1test');
+  const provider={name:'Midnight test',apiVersion:'4.0.1',connect:async(n)=>{requested=n;return{getConnectionStatus:async()=>status,getUnshieldedAddress:async()=>({unshieldedAddress:'mn_addr_preview19val6r9qnzadsam8ywclza7sgfa4d7n9phxxtdmvnhkytnx5j6ps966y6d'})};}};
+  const wallet=await connectMidnight(provider,'preview');assert.equal(requested,'preview');assert.equal(wallet.address,'mn_addr_preview19val6r9qnzadsam8ywclza7sgfa4d7n9phxxtdmvnhkytnx5j6ps966y6d');
   status={status:'connected',networkId:'mainnet'};await assert.rejects(connectMidnight(provider,'preview'),/not Preview/);
   status={status:'disconnected'};await assert.rejects(connectMidnight(provider,'preview'));
 });

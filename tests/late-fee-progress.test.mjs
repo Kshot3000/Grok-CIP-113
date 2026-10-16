@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelLateFee, modelLateFeeProgress } from '../src/domain.js';
 
-// Late fee progress model (v1.210): the late-charge axis's
+// Late fee progress model (v1.211): the late-charge axis's
 // second moment — what remains owed is the total now due
 // minus what has already been paid, never the amount due
 // minus what was paid (which drops the charge), and never a
