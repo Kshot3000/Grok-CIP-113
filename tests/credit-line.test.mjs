@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelCreditLine } from '../src/domain.js';
 
-// Credit line model (v1.219): a NEW axis — a revolving line
+// Credit line model (v1.220): a NEW axis — a revolving line
 // stated by its limit and what is drawn against it right
 // now. Availability is the limit minus the drawn amount
 // exactly, no interest, fee, or charge is priced (the drawn

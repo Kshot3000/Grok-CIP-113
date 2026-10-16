@@ -181,6 +181,6 @@ test('app and README carry the comparison at the current version', () => {
   assert.match(app, /delegate-pair-diff-after-outputs/);
   assert.match(app, /delegate-pair-diff-after-start/);
   assert.match(app, /delegate-pair-diff-result/);
-  assert.match(app, /v1\.219/);
+  assert.match(app, /v1\.220/);
   assert.match(readme, /Delegate pairing comparison/);
 });
