@@ -179,6 +179,6 @@ test('app and README carry the comparison at the current version', () => {
   assert.match(app, /base-redeemer-diff-after-refs/);
   assert.match(app, /base-redeemer-diff-after-withdrawals/);
   assert.match(app, /base-redeemer-diff-result/);
-  assert.match(app, /v1\.201/);
+  assert.match(app, /v1\.202/);
   assert.match(readme, /BaseSpendRedeemer comparison/);
 });
