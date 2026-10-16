@@ -126,7 +126,7 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the wallet readiness checker: panel, verdicts, honest boundary, v1.202', async () => {
+test('app wires the wallet readiness checker: panel, verdicts, honest boundary, v1.203', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkWalletReadiness/);
   assert.match(app, /wallet-readiness-derivation/);
@@ -134,5 +134,5 @@ test('app wires the wallet readiness checker: panel, verdicts, honest boundary, 
   assert.match(app, /WALLET READINESS · LOCAL MODEL/);
   assert.match(app, /REPORTED, NEVER SCORED/);
   assert.match(app, /inspected no wallet, read no registry, and no chain state/);
-  assert.match(app, /v1\.202/);
+  assert.match(app, /v1\.203/);
 });
