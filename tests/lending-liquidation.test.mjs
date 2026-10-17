@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelLendingLiquidation } from '../src/domain.js';
 
-// Lending liquidation model (v1.230): a position is liquidatable
+// Lending liquidation model (v1.231): a position is liquidatable
 // only when its debt exceeds the most debt its collateral may
 // carry at the liquidation threshold; the liquidator repays a
 // stated part of the debt and seizes the repayment plus a penalty
@@ -148,5 +148,5 @@ test('the shipped site carries the lending liquidation panel and its honesty bou
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /lending-liquidation-output/);
   assert.match(app, /PRISM lends nothing, holds no collateral, repays no debt, and seizes nothing/);
-  assert.match(app, /v1\.230/);
+  assert.match(app, /v1\.231/);
 });

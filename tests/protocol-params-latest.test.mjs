@@ -182,5 +182,5 @@ test('app wires the latest parameters: read, verdict lines, honest unavailable s
   assert.match(app, /Latest parameters check FAILED/);
   assert.match(app, /Latest protocol parameters unavailable\.<\/strong>/);
   assert.match(app, /No pending upgrade nominated/);
-  assert.match(app, /WORKSPACE <span>v1\.230<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.231<\/span>/);
 });

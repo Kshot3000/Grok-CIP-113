@@ -160,7 +160,7 @@ test('fee timing and the refund rule: funding collects nothing, and a fixed fee 
   assert.equal(r.refund.funderReceives, r.gross);
 });
 
-test('app wires the escrow model: panel, verdict outcomes, honest boundary, v1.230', async () => {
+test('app wires the escrow model: panel, verdict outcomes, honest boundary, v1.231', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /modelEscrow/);
   assert.match(app, /Model an escrow release/);
@@ -169,5 +169,5 @@ test('app wires the escrow model: panel, verdict outcomes, honest boundary, v1.2
   assert.match(app, /data-escrow="releasedBps"/);
   assert.match(app, /id="escrow-output"/);
   assert.match(app, /PRISM holds no funds, locks nothing, and executes no release or refund/);
-  assert.match(app, /v1\.230/);
+  assert.match(app, /v1\.231/);
 });
