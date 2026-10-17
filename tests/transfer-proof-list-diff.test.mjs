@@ -173,7 +173,7 @@ test('the comparison does not mutate either claim, and its two sides are the che
   assert.deepEqual(d.after, checkTransferProofList(aSnap));
 });
 
-test('app wires the transfer proof-list impact comparison: panel, verdicts, honest boundary, v1.228', async () => {
+test('app wires the transfer proof-list impact comparison: panel, verdicts, honest boundary, v1.229', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /diffTransferProofList/);
   assert.match(app, /proof-list-diff-after-spent/);
@@ -181,5 +181,5 @@ test('app wires the transfer proof-list impact comparison: panel, verdicts, hone
   assert.match(app, /TRANSFER PROOF LIST IMPACT · LOCAL MODEL/);
   assert.match(app, /BECAME NOT CONFORMING/);
   assert.match(app, /REQUIREMENT CHANGED/);
-  assert.match(app, /v1\.228/);
+  assert.match(app, /v1\.229/);
 });

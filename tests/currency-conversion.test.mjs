@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelCurrencyConversion } from '../src/domain.js';
 
-// Currency conversion model (v1.228): a NEW axis — an amount
+// Currency conversion model (v1.229): a NEW axis — an amount
 // changing unit at a stated rate. The rate is stated as an
 // exact fraction (numerator over denominator), the conversion
 // is floored to the target base unit, and what the floor

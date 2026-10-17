@@ -125,7 +125,7 @@ test('the entered profile is carried through unchanged in the result', () => {
   assert.equal(v.withdrawalDestination, 'user-smart-wallet');
 });
 
-test('app wires the vault integration checker: panel, verdicts, descriptive-grade disclosure, honest boundary, v1.228', async () => {
+test('app wires the vault integration checker: panel, verdicts, descriptive-grade disclosure, honest boundary, v1.229', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkVaultIntegration/);
   assert.match(app, /vault-integration-deposit/);
@@ -134,5 +134,5 @@ test('app wires the vault integration checker: panel, verdicts, descriptive-grad
   assert.match(app, /DESCRIPTIVE, NO MUST/);
   assert.match(app, /imposes no MUST in this subsection/);
   assert.match(app, /inspected no vault, read no registry, and no chain state/);
-  assert.match(app, /v1\.228/);
+  assert.match(app, /v1\.229/);
 });

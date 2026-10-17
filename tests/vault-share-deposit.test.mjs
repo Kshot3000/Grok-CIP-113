@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelVaultShareDeposit } from '../src/domain.js';
 
-// Vault share deposit model (v1.228): a deposit into a share-based
+// Vault share deposit model (v1.229): a deposit into a share-based
 // vault mints shares floored on the pre-deposit price; the minted
 // shares can be worth less than the deposit at that price, and the
 // difference stays in the vault for the existing holders.
@@ -157,6 +157,6 @@ test('wiring: app.js imports the model, renders a vault share deposit panel, and
   assert.match(app, /modelVaultShareDeposit/);
   assert.match(app, /data-vaultd/);
   assert.match(app, /vaultd-output/);
-  assert.match(app, /v1\.228/);
+  assert.match(app, /v1\.229/);
   assert.match(readme, /Vault share deposit model/);
 });

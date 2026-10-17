@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelReserveRelease } from '../src/domain.js';
 
-// Reserve release model (v1.228): the reserve axis's
+// Reserve release model (v1.229): the reserve axis's
 // second moment — the holdback states what is held; when
 // the hold ends, stated claims are taken from what was
 // held and the remainder is released to the seller. The
@@ -132,6 +132,6 @@ test('wiring: the app imports the model, renders a reserve release panel, and th
   assert.ok(app.includes('modelReserveRelease'));
   assert.ok(app.includes('data-resrel'));
   assert.ok(app.includes('resrel-output'));
-  assert.match(app, /v1\.228/);
+  assert.match(app, /v1\.229/);
   assert.ok(readme.includes('Reserve release model'));
 });
