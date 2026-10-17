@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelRefundProgress, modelRefund } from '../src/domain.js';
 
-// Refund progress model (v1.225): the refund axis's second
+// Refund progress model (v1.226): the refund axis's second
 // moment — the position after part of a stated refund has
 // already been handed back. What remains refundable is the
 // stated refund minus what has already been handed back,
