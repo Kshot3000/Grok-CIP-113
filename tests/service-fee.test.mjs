@@ -122,7 +122,7 @@ test('defaults: fixed fee and volume default, cap defaults to none', () => {
   assert.equal(r.fee, 500000n);
 });
 
-test('app wires the service-fee model: panel, outputs, honest boundary, v1.241', async () => {
+test('app wires the service-fee model: panel, outputs, honest boundary, v1.242', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /modelServiceFee/);
   assert.match(app, /Service-fee model — a disclosed cut, priced exactly/);
@@ -130,5 +130,5 @@ test('app wires the service-fee model: panel, outputs, honest boundary, v1.241',
   assert.match(app, /data-fee="feeBps"/);
   assert.match(app, /id="fee-output"/);
   assert.match(app, /PRISM collects nothing, charges nothing, and executes no transfer/);
-  assert.match(app, /v1\.241/);
+  assert.match(app, /v1\.242/);
 });

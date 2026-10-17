@@ -157,7 +157,7 @@ test('effective rates are derived from the amounts, not the entered rates: floor
   assert.equal(r.sellerNet, 3n);
 });
 
-test('app wires the marketplace model: panel, verdict outcomes, honest boundary, v1.241', async () => {
+test('app wires the marketplace model: panel, verdict outcomes, honest boundary, v1.242', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /modelMarketplaceSale/);
   assert.match(app, /Model a marketplace sale/);
@@ -165,5 +165,5 @@ test('app wires the marketplace model: panel, verdict outcomes, honest boundary,
   assert.match(app, /data-market="royaltyBps"/);
   assert.match(app, /id="marketplace-output"/);
   assert.match(app, /PRISM runs no marketplace, lists nothing, and executes no sale/);
-  assert.match(app, /v1\.241/);
+  assert.match(app, /v1\.242/);
 });
