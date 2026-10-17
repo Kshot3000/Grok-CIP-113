@@ -181,11 +181,11 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the transfer proof-list checker: panel, verdicts, honest boundary, v1.246', async () => {
+test('app wires the transfer proof-list checker: panel, verdicts, honest boundary, v1.247', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkTransferProofList/);
   assert.match(app, /proof-list-proofs/);
   assert.match(app, /TRANSFER PROOF LIST · LOCAL MODEL/);
   assert.match(app, /MISSING/);
-  assert.match(app, /v1\.246/);
+  assert.match(app, /v1\.247/);
 });
