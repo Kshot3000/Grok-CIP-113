@@ -279,5 +279,5 @@ test('app wires the sorted read: keyed reads, verdict lines, honest unavailable 
   assert.match(app, /Sorted tokens check passed/);
   assert.match(app, /Sorted tokens check FAILED/);
   assert.match(app, /Sorted tokens unavailable\.<\/strong>/);
-  assert.match(app, /WORKSPACE <span>v1\.235<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.236<\/span>/);
 });
