@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelInsuranceClaim, modelInsuranceClaimRemaining } from '../src/domain.js';
 
-// Insurance claim against remaining coverage model (v1.224): the
+// Insurance claim against remaining coverage model (v1.225): the
 // insurance axis's second moment (v1.182 lesson) — the claim model
 // prices a claim against a FULL limit and a FULL deductible, but
 // coverage is a period limit shared by the period's claims and a

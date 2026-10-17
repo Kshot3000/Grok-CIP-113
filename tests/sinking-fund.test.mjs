@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelSinkingFund } from '../src/domain.js';
 
-// Sinking fund model (v1.224): a NEW axis — money set aside
+// Sinking fund model (v1.225): a NEW axis — money set aside
 // in stated deposits until a stated target is reached. No
 // yield is priced (the deposits alone sum to the target
 // exactly), the regular deposit is floored, and the final
