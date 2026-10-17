@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelLendingHealthStress } from '../src/domain.js';
 
-// Lending health stress model (v1.226): the liquidation model
+// Lending health stress model (v1.227): the liquidation model
 // prices a position already under water; this model reprices a
 // position after a stated move in its collateral's price and
 // states whether the move crossed the liquidation threshold,
@@ -147,5 +147,5 @@ test('the shipped site carries the lending health stress panel and its honesty b
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /lending-health-stress-output/);
   assert.match(app, /PRISM lends nothing, holds no collateral, observes no price, and liquidates nothing/);
-  assert.match(app, /v1\.226/);
+  assert.match(app, /v1\.227/);
 });
