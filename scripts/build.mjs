@@ -4,7 +4,7 @@ const root=new URL('../',import.meta.url),dist=new URL('dist/',root);
 await rm(dist,{recursive:true,force:true});
 await mkdir(dist,{recursive:true});
 for(const path of ['index.html','favicon.svg','donation-qr.svg','og.jpg','robots.txt','sitemap.xml','src','visual-upgrade'])await cp(new URL(path,root),new URL(path,dist),{recursive:true});
-// Stamp the deployed sitemap with the build date (v1.240) — see sitemap.mjs.
+// Stamp the deployed sitemap with the build date (v1.241) — see sitemap.mjs.
 const sitemapUrl=new URL('sitemap.xml',dist);
 await writeFile(sitemapUrl,stampSitemap(await readFile(sitemapUrl,'utf8'),buildDate()));
 console.log('PRISM built to dist/. Static assets only; no keys or backend secrets.');
