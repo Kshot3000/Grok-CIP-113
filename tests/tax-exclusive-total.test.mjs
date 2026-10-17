@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelTaxExclusiveTotal, modelTaxInclusiveSplit } from '../src/domain.js';
 
-// Tax-exclusive price total model (v1.231): the tax axis's
+// Tax-exclusive price total model (v1.232): the tax axis's
 // second moment — a price quoted BEFORE tax, with a stated
 // tax added on top of it. The tax is charged on top —
 // floor(net x rate / 10,000) — never extracted from inside

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelBondCall } from '../src/domain.js';
 
-// Tokenised bond early-redemption (call) model (v1.231): an
+// Tokenised bond early-redemption (call) model (v1.232): an
 // issuer ends a bond early on a coupon date by paying the call
 // price; the remaining periods never run, so their coupons are
 // never paid. Both accounts are stated signed — the holder's
@@ -189,6 +189,6 @@ test('wiring: app.js imports the model, renders a bond-call panel, and the READM
   assert.match(app, /modelBondCall/);
   assert.match(app, /data-bcall/);
   assert.match(app, /bcall-output/);
-  assert.match(app, /v1\.231/);
+  assert.match(app, /v1\.232/);
   assert.match(readme, /Bond early-redemption \(call\) model/);
 });
