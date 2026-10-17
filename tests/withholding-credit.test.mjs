@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelWithholdingCredit } from '../src/domain.js';
 
-// Withholding credit model (v1.242): the withholding
+// Withholding credit model (v1.243): the withholding
 // axis's second moment — a stated credit for amounts
 // already withheld, applied against a later payment's
 // withholding due. The due is measured on the full gross
@@ -186,6 +186,6 @@ test('wiring: the app imports the model, renders a withholding credit panel, and
   assert.ok(app.includes('modelWithholdingCredit'));
   assert.ok(app.includes('data-withcred'));
   assert.ok(app.includes('withcred-output'));
-  assert.match(app, /v1\.242/);
+  assert.match(app, /v1\.243/);
   assert.ok(readme.includes('Withholding credit model'));
 });
