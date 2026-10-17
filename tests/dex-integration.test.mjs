@@ -129,7 +129,7 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the DEX integration checker: panel, verdicts, honest boundary, v1.223', async () => {
+test('app wires the DEX integration checker: panel, verdicts, honest boundary, v1.224', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkDexIntegration/);
   assert.match(app, /dex-integration-lp/);
@@ -137,5 +137,5 @@ test('app wires the DEX integration checker: panel, verdicts, honest boundary, v
   assert.match(app, /DEX INTEGRATION · LOCAL MODEL/);
   assert.match(app, /REPORTED, NEVER SCORED/);
   assert.match(app, /inspected no DEX, read no registry, and no chain state/);
-  assert.match(app, /v1\.223/);
+  assert.match(app, /v1\.224/);
 });
