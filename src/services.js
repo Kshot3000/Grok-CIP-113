@@ -858,7 +858,66 @@ export function inspectMidnightAddress(address) {
   for(const v of data.slice(0,-6)){acc=((acc<<5)|v)&0xfff;bits+=5;while(bits>=8){bits-=8;bytes.push((acc>>>bits)&0xff);}}
   if(bits>=5||(acc&((1<<bits)-1)))throw new Error('The wallet did not provide a valid public address.');
   if(bytes.length!==32)throw new Error('The wallet did not provide a valid public address: an unshielded address carries a 32-byte payload.');
-  return {address:s,hrp,network:segment,payloadBytes:bytes.length,checksum:'bech32m'};
+  return {address:s,hrp,network:segment,payloadBytes:bytes.length,payloadHex:bytes.map(b=>b.toString(16).padStart(2,'0')).join(''),checksum:'bech32m'};
+}
+// Bech32m encoding — the inverse of the inspection above, in the same
+// discipline as the Cardano builders in cardano.js: a 32-byte payload and
+// an optional network segment assemble the exact unshielded address,
+// byte for byte. Encoding is purely local: it creates no wallet, key, or
+// account, and proves nothing about who holds the payload or whether any
+// deployment recognises the address.
+function midnightHrpExpand(hrp) {
+  return [...hrp].map(c=>c.charCodeAt(0)>>>5).concat([0],[...hrp].map(c=>c.charCodeAt(0)&31));
+}
+function midnightPayloadBytes(payloadHex) {
+  const h=String(payloadHex??'').trim().toLowerCase();
+  if(!/^[0-9a-f]*$/.test(h)||h.length%2)throw new Error('The payload must be hex: an even number of hexadecimal characters.');
+  if(h.length!==64)throw new Error(`An unshielded address payload is exactly 32 bytes (64 hex characters); this payload is ${h.length/2} bytes.`);
+  const bytes=[];for(let i=0;i<h.length;i+=2)bytes.push(parseInt(h.slice(i,i+2),16));
+  return bytes;
+}
+export function buildMidnightAddress(payloadHex, network=null) {
+  const seg=(network===undefined||network===null||network==='')?null:String(network).trim().toLowerCase();
+  if(seg!==null&&!MIDNIGHT_NETWORKS.includes(seg))throw new Error(`Unknown Midnight network segment "${seg}": use preview, preprod, mainnet, undeployed, or no segment.`);
+  const bytes=midnightPayloadBytes(payloadHex);
+  const hrp=seg===null?'mn_addr':`mn_addr_${seg}`;
+  // 8-to-5 conversion WITH padding, exactly as BIP-350 encodes: 32 bytes
+  // become 52 five-bit values, the final value carrying 4 zero bits.
+  let acc=0,bits=0;const data=[];
+  for(const b of bytes){acc=((acc<<8)|b)&0xfff;bits+=8;while(bits>=5){bits-=5;data.push((acc>>>bits)&31);}}
+  if(bits>0)data.push((acc<<(5-bits))&31);
+  const mod=(midnightPolymod([...midnightHrpExpand(hrp),...data,0,0,0,0,0,0])^0x2bc830a3)>>>0;
+  const checksum=[0,1,2,3,4,5].map(i=>(mod>>>(5*(5-i)))&31);
+  const address=hrp+'1'+[...data,...checksum].map(v=>MIDNIGHT_CHARSET[v]).join('');
+  return {address,hrp,network:seg,payloadBytes:bytes.length,payloadHex:bytes.map(b=>b.toString(16).padStart(2,'0')).join(''),checksum:'bech32m'};
+}
+// Midnight unshielded address verification — the checking half of
+// buildMidnightAddress, in the same shape as the Cardano verifiers: a
+// claimed address is compared position by position against the payload
+// and network it is claimed to name, so a mismatch names which claim
+// failed. The payload and the network fail separately: the same payload
+// under another network segment passes the payload verdict exactly and
+// fails the network verdict alone, and a segment-less candidate claimed
+// with a network fails the network verdict alone — the absence of a
+// segment is a fact about the address, never filled in from the claim.
+// A match is byte equality with the address rebuilt from the claims
+// (buildMidnightAddress itself, so claim validation is the builder's
+// own). A claim that cannot be decoded or built at all — a shielded or
+// dust candidate, a bad checksum, a non-32-byte claimed payload — is
+// refused rather than reported as a mismatch.
+export function verifyMidnightAddress(candidateAddress, payloadHex, network=null) {
+  const candidate=inspectMidnightAddress(candidateAddress);
+  const built=buildMidnightAddress(payloadHex, network);
+  const payloadMatch=candidate.payloadHex===built.payloadHex;
+  const networkMatch=candidate.network===built.network;
+  const match=payloadMatch&&networkMatch&&candidate.address===built.address;
+  return {
+    match, payloadMatch, networkMatch,
+    address:candidate.address, hrp:candidate.hrp, network:candidate.network,
+    payloadHex:candidate.payloadHex, payloadBytes:candidate.payloadBytes,
+    claimedNetwork:built.network, claimedPayloadHex:built.payloadHex,
+    builtAddress:built.address, builtHrp:built.hrp,
+  };
 }
 async function readMidnightAddress(api,network) {
   if(!api||typeof api.getUnshieldedAddress!=='function')throw new Error('The wallet did not provide a complete Midnight API. Update the wallet or try another one.');
