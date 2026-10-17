@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelBondSecondarySale } from '../src/domain.js';
 
-// Tokenised bond secondary-sale model (v1.245): a sale before
+// Tokenised bond secondary-sale model (v1.246): a sale before
 // maturity settles in two parts, never merged — a clean price for
 // the bond itself, and the accrued coupon (the elapsed share of
 // the current period's coupon) paid by the buyer to the seller on
@@ -196,6 +196,6 @@ test('wiring: app.js imports the model, renders a bond-sale panel, and the READM
   assert.match(app, /modelBondSecondarySale/);
   assert.match(app, /data-bsale/);
   assert.match(app, /bsale-output/);
-  assert.match(app, /v1\.245/);
+  assert.match(app, /v1\.246/);
   assert.match(readme, /Bond secondary-sale model/);
 });

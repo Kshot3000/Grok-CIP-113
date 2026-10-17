@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelIndexedAmount } from '../src/domain.js';
 
-// Indexation model (v1.245): a NEW axis — a stated amount
+// Indexation model (v1.246): a NEW axis — a stated amount
 // indexed at a stated rate per period for stated periods,
 // compounded as an exact rational and floored ONCE at the
 // end. adjusted x denominator + remainder === amount x
@@ -132,6 +132,6 @@ test('wiring: the app imports the model, renders an indexation panel, and the RE
   assert.ok(app.includes('modelIndexedAmount'));
   assert.ok(app.includes('data-idxamt'));
   assert.ok(app.includes('idxamt-output'));
-  assert.match(app, /v1\.245/);
+  assert.match(app, /v1\.246/);
   assert.ok(readme.includes('Indexation model'));
 });

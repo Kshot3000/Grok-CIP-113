@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelTaxInclusiveSplit } from '../src/domain.js';
 
-// Tax-inclusive price split model (v1.245): a NEW axis —
+// Tax-inclusive price split model (v1.246): a NEW axis —
 // a price that already contains a stated tax inside it.
 // The tax is extracted from inside the gross, floored —
 // floor(gross x rate / (10,000 + rate)) — never charged
