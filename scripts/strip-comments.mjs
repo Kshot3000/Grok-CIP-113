@@ -1,4 +1,4 @@
-// Build-time comment stripper for the DEPLOYED copy only (v1.244).
+// Build-time comment stripper for the DEPLOYED copy only (v1.245).
 //
 // PRISM's source files carry their documentation as full-line // comments —
 // in domain.js alone they are roughly 38% of the raw bytes and about half of

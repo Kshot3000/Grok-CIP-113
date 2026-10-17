@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelSecurityDepositDispute, modelSecurityDepositReturn } from '../src/domain.js';
 
-// Security deposit dispute model (v1.244): the return model
-// (v1.244) settles a deposit against stated deductions, but part
+// Security deposit dispute model (v1.245): the return model
+// (v1.245) settles a deposit against stated deductions, but part
 // of a claim can be DISPUTED. The undisputed part is applied now,
 // the contested part is held back (never more than the deposit
 // holds after the undisputed part), and the rest returns now.

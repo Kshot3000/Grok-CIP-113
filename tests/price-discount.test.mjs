@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelPriceDiscount } from '../src/domain.js';
 
-// Price discount model (v1.244): a NEW axis — a stated
+// Price discount model (v1.245): a NEW axis — a stated
 // discount taken off a stated list price. The discount is
 // taken off the list price — floor(list x rate / 10,000) —
 // never measured against the amount due, the amount due
