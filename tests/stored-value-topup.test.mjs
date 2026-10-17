@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelStoredValueTopUp } from '../src/domain.js';
 
-// Stored-value top-up model (v1.243): the stored-value
+// Stored-value top-up model (v1.244): the stored-value
 // axis's second moment — a later load adds to a standing
 // balance. The balance afterwards is the standing balance
 // plus the load, exactly: no bonus invented, no fee taken.

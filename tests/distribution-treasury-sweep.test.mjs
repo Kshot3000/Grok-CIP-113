@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelHolderDistributionTreasurySweep, modelHolderDistributionSecondWindow } from '../src/domain.js';
 
-// Holder distribution treasury sweep model (v1.243): the final
+// Holder distribution treasury sweep model (v1.244): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after both claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -163,6 +163,6 @@ test('wiring: app.js imports the model, renders a distribution-treasury-sweep pa
   assert.match(app, /modelHolderDistributionTreasurySweep/);
   assert.match(app, /data-dsweep/);
   assert.match(app, /distribution-treasury-sweep-output/);
-  assert.match(app, /v1\.243/);
+  assert.match(app, /v1\.244/);
   assert.match(readme, /Holder distribution treasury sweep model/);
 });
