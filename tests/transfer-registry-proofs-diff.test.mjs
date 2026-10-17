@@ -290,7 +290,7 @@ test('the comparison’s two sides are the checker’s own verdicts', () => {
   assert.deepEqual(d.after, checkTransferRegistryProofs(JSON.parse(JSON.stringify(after))));
 });
 
-test('app wires the transfer registry-proof impact comparison: panel, verdicts, honest boundary, v1.229', async () => {
+test('app wires the transfer registry-proof impact comparison: panel, verdicts, honest boundary, v1.230', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /diffTransferRegistryProofs/);
   assert.match(app, /transfer-proof-diff-after-proofs/);
@@ -299,7 +299,7 @@ test('app wires the transfer registry-proof impact comparison: panel, verdicts, 
   assert.match(app, /TRANSFER REGISTRY-PROOF IMPACT · LOCAL MODEL/);
   assert.match(app, /BECAME NOT CONFORMING/);
   assert.match(app, /REQUIREMENT CHANGED/);
-  assert.match(app, /v1\.229/);
+  assert.match(app, /v1\.230/);
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.match(readme, /Transfer registry-proof impact/);
 });

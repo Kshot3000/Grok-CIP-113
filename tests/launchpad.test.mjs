@@ -170,7 +170,7 @@ test('the subscription rate is stated past 10,000 bps when a launch is heavily o
   assert.equal(r.refunded, 150000000000n);
 });
 
-test('app wires the launchpad model: panel, verdict outcomes, honest boundary, v1.229', async () => {
+test('app wires the launchpad model: panel, verdict outcomes, honest boundary, v1.230', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /modelLaunchpadSale/);
   assert.match(app, /Model a launchpad sale/);
@@ -178,5 +178,5 @@ test('app wires the launchpad model: panel, verdict outcomes, honest boundary, v
   assert.match(app, /data-launch="subscribed"/);
   assert.match(app, /id="launchpad-output"/);
   assert.match(app, /PRISM runs no launchpad, sells no tokens, and takes no subscriptions/);
-  assert.match(app, /v1\.229/);
+  assert.match(app, /v1\.230/);
 });
