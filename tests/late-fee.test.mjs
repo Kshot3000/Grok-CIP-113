@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelLateFee } from '../src/domain.js';
 
-// Late payment charge model (v1.262): a NEW axis — what an
+// Late payment charge model (v1.263): a NEW axis — what an
 // amount owed costs when it is paid late. The charge is
 // measured against the AMOUNT DUE for every period alike,
 // SIMPLE (never on the growing total), and floored ONCE on
