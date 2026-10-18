@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelAmmSwap } from '../src/domain.js';
 
-// Constant-product AMM swap model (v1.256): a swap priced against
+// Constant-product AMM swap model (v1.257): a swap priced against
 // two reserves by the constant product, with a disclosed protocol
 // fee taken as a share OF THE SWAP FEE — never of the amount in.
 // The fee split sums exactly to the total fee, only the protocol
@@ -189,6 +189,6 @@ test('wiring: app.js imports the model, renders an amm swap panel, and the READM
   assert.match(app, /modelAmmSwap/);
   assert.match(app, /data-swap/);
   assert.match(app, /amm-swap-output/);
-  assert.match(app, /v1\.256/);
+  assert.match(app, /v1\.257/);
   assert.match(readme, /AMM swap model/);
 });
