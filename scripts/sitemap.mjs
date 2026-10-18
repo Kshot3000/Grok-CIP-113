@@ -1,4 +1,4 @@
-// Sitemap freshness (v1.253): the source sitemap.xml intentionally carries
+// Sitemap freshness (v1.254): the source sitemap.xml intentionally carries
 // no <lastmod> — a hardcoded date went stale at the 2026-10-04 launch value
 // through every later release, telling crawlers the page had not changed
 // when it had. The build stamps the DEPLOYED sitemap with the build date:
