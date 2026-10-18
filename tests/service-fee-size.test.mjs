@@ -145,5 +145,5 @@ test('panel wiring: the size profile renders in app.js with its fairness-bound f
   assert.match(app, /serviceFeeSizeProfile\(/);
   assert.match(app, /data-fee="maxEffectiveBps"/);
   assert.match(app, /first standard size within your/);
-  assert.match(app, /v1\.250/);
+  assert.match(app, /v1\.251/);
 });
