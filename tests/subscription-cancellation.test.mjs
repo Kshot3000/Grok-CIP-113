@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelSubscriptionCancellation } from '../src/domain.js';
 
-// Subscription cancellation model (v1.259): cancelling a
+// Subscription cancellation model (v1.260): cancelling a
 // subscription does not refund pulls already made, pulls during
 // a notice period still happen, and only what remains after
 // notice is revoked. A cancellation after the authorisation is
@@ -196,6 +196,6 @@ test('wiring: app.js imports the model, renders a cancellation panel, and the RE
   assert.match(app, /modelSubscriptionCancellation/);
   assert.match(app, /data-subcancel/);
   assert.match(app, /subcancel-output/);
-  assert.match(app, /v1\.259/);
+  assert.match(app, /v1\.260/);
   assert.match(readme, /Subscription cancellation model/);
 });

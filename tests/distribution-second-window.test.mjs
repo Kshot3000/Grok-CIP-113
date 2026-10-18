@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelHolderDistributionSecondWindow, modelHolderDistributionClaims } from '../src/domain.js';
 
-// Holder distribution second claim window model (v1.259): the
+// Holder distribution second claim window model (v1.260): the
 // other destination for the unclaimed allocations the claim-window
 // model (v1.149) names — a later window, where holders who missed
 // the first deadline claim their OWN allocation in full, never a
@@ -184,6 +184,6 @@ test('wiring: app.js imports the model, renders a distribution-second-window pan
   assert.match(app, /modelHolderDistributionSecondWindow/);
   assert.match(app, /data-dwin/);
   assert.match(app, /distribution-second-window-output/);
-  assert.match(app, /v1\.259/);
+  assert.match(app, /v1\.260/);
   assert.match(readme, /Holder distribution second claim window model/);
 });

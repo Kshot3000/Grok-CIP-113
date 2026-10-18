@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelBondCoupon } from '../src/domain.js';
 
-// Tokenised bond coupon model (v1.259): a bond owes two kinds of
+// Tokenised bond coupon model (v1.260): a bond owes two kinds of
 // payment — a coupon each period on the FACE (the face never
 // amortises and the price never enters the coupon's base) and the
 // face whole at maturity. The price is stated separately from the
@@ -195,6 +195,6 @@ test('wiring: app.js imports the model, renders a bond panel, and the README doc
   assert.match(app, /modelBondCoupon/);
   assert.match(app, /data-bond/);
   assert.match(app, /bond-output/);
-  assert.match(app, /v1\.259/);
+  assert.match(app, /v1\.260/);
   assert.match(readme, /Bond coupon model/);
 });
