@@ -181,7 +181,7 @@ test('decimals handling: the chain follows the entered scale, and a bad scale is
   assert.throws(() => modelMarketplaceEscrow({ ...DEFAULT, decimals: 7 }), /Decimals/);
 });
 
-test('app wires the marketplace-escrow model: panel, verdict outcomes, honest boundary, v1.257', async () => {
+test('app wires the marketplace-escrow model: panel, verdict outcomes, honest boundary, v1.258', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /modelMarketplaceEscrow/);
   assert.match(app, /Model a marketplace sale with escrowed settlement/);
@@ -190,5 +190,5 @@ test('app wires the marketplace-escrow model: panel, verdict outcomes, honest bo
   assert.match(app, /data-mesc="releasedBps"/);
   assert.match(app, /id="marketplace-escrow-output"/);
   assert.match(app, /PRISM runs no marketplace, holds no escrow, and executes no sale/);
-  assert.match(app, /v1\.257/);
+  assert.match(app, /v1\.258/);
 });

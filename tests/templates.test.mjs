@@ -5,7 +5,7 @@ import { TEMPLATES } from '../src/config.js';
 import { fromTemplate, validateDesign, simulateTransfer, makeManifest, parseManifest, toUnits, auditDesign } from '../src/domain.js';
 
 // v1.7 added the carbon-credit and event-ticket templates; the governance
-// template followed, and v1.257 added the open-payments template — the first
+// template followed, and v1.258 added the open-payments template — the first
 // template with the per-transfer cap OFF, so no starting design before it
 // ever showed the uncapped state. These tests pin the
 // whole catalog: every template must produce a valid design, ship a real icon

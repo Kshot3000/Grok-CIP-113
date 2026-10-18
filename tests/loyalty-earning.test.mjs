@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelLoyaltyEarning } from '../src/domain.js';
 
-// Loyalty-points earning model (v1.257): the loyalty axis's
+// Loyalty-points earning model (v1.258): the loyalty axis's
 // second moment — a stated purchase earns a stated whole
 // number of points per whole token unit spent, floored once.
 // Identity: points held before + points earned === points
