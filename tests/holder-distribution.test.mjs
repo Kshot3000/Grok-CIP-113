@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelHolderDistribution } from '../src/domain.js';
 
-// Pro-rata holder distribution model (v1.266): a pool divided by
+// Pro-rata holder distribution model (v1.267): a pool divided by
 // HOLDINGS — shares derived from balances, never entered, unlike
 // the revenue split (v1.133), which divides by entered percentage
 // shares — with per-holder flooring that leaves dust belonging to
@@ -150,6 +150,6 @@ test('wiring: app.js imports the model, renders a distribution panel, and the RE
   assert.match(app, /modelHolderDistribution/);
   assert.match(app, /data-dist/);
   assert.match(app, /distribution-output/);
-  assert.match(app, /v1\.266/);
+  assert.match(app, /v1\.267/);
   assert.match(readme, /Holder distribution model/);
 });
