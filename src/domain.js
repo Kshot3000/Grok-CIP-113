@@ -7327,7 +7327,7 @@ export function diffTransferSequenceFile(raw, currentSteps) {
   };
 }
 
-// A portable file for ONE supply-sequence scenario (v1.251) — the
+// A portable file for ONE supply-sequence scenario (v1.252) — the
 // transfer-sequence scenario files' companion for the other sequence
 // lab whose steps are design-relative. Until now an issuance schedule
 // a builder had tuned in the Supply sequence lab (an authority denial,
@@ -7449,7 +7449,7 @@ export function diffSupplySequenceFile(raw, currentSteps) {
   };
 }
 
-// A portable file for ONE timeline scenario (v1.251) — the scenario
+// A portable file for ONE timeline scenario (v1.252) — the scenario
 // files' companion for the one lab whose steps are not all one kind.
 // Until now a timeline a builder had tuned in the Timeline lab (a mint
 // that makes later transfers possible, a burn blocked because the
@@ -9531,7 +9531,7 @@ export function modelMarketplaceEscrow(input = {}) {
   };
 }
 
-// Staking rewards dev fee (v1.251): the profit mandate names staking
+// Staking rewards dev fee (v1.252): the profit mandate names staking
 // tools with a dev fee, and PRISM modeled no staking at all. A staking
 // lifecycle has two different kinds of money in it — the staker's
 // principal, which was theirs before the tool did anything, and the
@@ -9619,7 +9619,7 @@ export function modelStakingRewards(input = {}) {
   };
 }
 
-// Staking early-exit model (v1.251): the staking rewards model
+// Staking early-exit model (v1.252): the staking rewards model
 // (v1.141) prices a position held to its full term, but a staker
 // can usually leave early — and what leaving early costs was
 // priced nowhere. Exiting early costs two DIFFERENT things, and
@@ -9717,7 +9717,7 @@ export function modelStakingExit(input = {}) {
   };
 }
 
-// Staking rollover model (v1.251): the staking rewards model
+// Staking rollover model (v1.252): the staking rewards model
 // (v1.141) prices one term held to its end and the early-exit
 // model (v1.160) prices leaving one, but a finished position is
 // usually offered a ROLLOVER — the staker restakes everything
@@ -9818,7 +9818,7 @@ export function modelStakingRollover(input = {}) {
   };
 }
 
-// Token vesting schedule (v1.251): PRISM designs programmable tokens
+// Token vesting schedule (v1.252): PRISM designs programmable tokens
 // but modeled no vesting, yet nearly every real allocation — team,
 // treasury, investor — unlocks over time behind a cliff. New
 // modelVestingSchedule prices one allocation's schedule exactly, by
@@ -9887,7 +9887,7 @@ export function modelVestingSchedule(input = {}) {
   };
 }
 
-// Vesting revocation model (v1.251): the vesting schedule model
+// Vesting revocation model (v1.252): the vesting schedule model
 // (v1.142) prices an allocation that runs to its full duration,
 // but a standard real design is REVOCABLE — team and contractor
 // allocations are often revocable, for example when the recipient
@@ -9949,7 +9949,7 @@ export function modelVestingRevocation(input = {}) {
   };
 }
 
-// Vesting acceleration model (v1.251): the vesting schedule model
+// Vesting acceleration model (v1.252): the vesting schedule model
 // (v1.142) prices an allocation that unlocks on its entered
 // schedule, and the revocation model (v1.143) prices ending it
 // early — but a standard real design also ACCELERATES vesting on
@@ -10031,7 +10031,7 @@ export function modelVestingAcceleration(input = {}) {
 }
 
 
-// Vesting claim model (v1.251): the vesting schedule model
+// Vesting claim model (v1.252): the vesting schedule model
 // (v1.142) prices what has VESTED by a period, the revocation
 // model (v1.143) prices ending a schedule, and the acceleration
 // model prices releasing more of it at once — but vesting is not
@@ -10127,7 +10127,7 @@ export function modelVestingClaim(input = {}) {
   };
 }
 
-// Tokenised bond coupon model (v1.251): a programmable token can
+// Tokenised bond coupon model (v1.252): a programmable token can
 // BE a bond — a security whose holder is owed two different kinds
 // of payment, and PRISM priced neither. FIRST, a coupon each
 // period: couponPerPeriod = floor(face × couponBps ÷ 10,000),
@@ -10234,7 +10234,7 @@ export function modelBondCoupon(input = {}) {
   };
 }
 
-// Tokenised bond secondary-sale model (v1.251): the bond coupon
+// Tokenised bond secondary-sale model (v1.252): the bond coupon
 // model (v1.163) prices a bond held to maturity, but a holder can
 // sell before maturity, and a sale between coupon dates raises
 // the classic dispute this model prices: the current period's
@@ -10348,7 +10348,7 @@ export function modelBondSecondarySale(input = {}) {
   };
 }
 
-// Tokenised bond early-redemption (call) model (v1.251): the
+// Tokenised bond early-redemption (call) model (v1.252): the
 // bond coupon model (v1.163) prices a bond held to maturity and
 // the secondary-sale model (v1.164) prices a sale between
 // holders, but an ISSUER can also end a bond early — a call —
@@ -10461,7 +10461,7 @@ export function modelBondCall(input = {}) {
   };
 }
 
-// Pro-rata holder distribution model (v1.251): a distribution to a
+// Pro-rata holder distribution model (v1.252): a distribution to a
 // token's holders — an airdrop, a revenue share, a reward pool —
 // divides ONE pool among holders in proportion to what each one
 // HOLDS, and PRISM modeled no such division. This is a different
@@ -10536,7 +10536,7 @@ export function modelHolderDistribution(input = {}) {
   };
 }
 
-// Capped pro-rata holder distribution model (v1.251): the holder
+// Capped pro-rata holder distribution model (v1.252): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // but a standard real design CAPS what any one holder may receive
 // — an airdrop fairness cap, a whale cap on a revenue share — and
@@ -10637,7 +10637,7 @@ export function modelCappedHolderDistribution(input = {}) {
   };
 }
 
-// Minimum-guarantee holder distribution model (v1.251): the holder
+// Minimum-guarantee holder distribution model (v1.252): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; a standard real design does the opposite — it
@@ -10720,7 +10720,7 @@ export function modelMinimumHolderDistribution(input = {}) {
   };
 }
 
-// Capped-and-floored holder distribution model (v1.251): a real
+// Capped-and-floored holder distribution model (v1.252): a real
 // design often carries BOTH bounds of the distribution family at
 // once — the minimum guarantee of the floored model (v1.147) so
 // small holders are not dusted out, AND the per-holder cap of the
@@ -10852,7 +10852,7 @@ export function modelCappedFlooredHolderDistribution(input = {}) {
   };
 }
 
-// Holder distribution claim-window model (v1.251): the
+// Holder distribution claim-window model (v1.252): the
 // distribution family (v1.145–v1.148) prices what each holder is
 // ALLOCATED, but a priced distribution is rarely paid instantly —
 // holders claim within a window or by a deadline, some never
@@ -10922,7 +10922,7 @@ export function modelHolderDistributionClaims(input = {}) {
   };
 }
 
-// Holder distribution redistribution model (v1.251): one destination
+// Holder distribution redistribution model (v1.252): one destination
 // a design can choose for the unclaimed allocations the claim-window
 // model (v1.149) states — redistribute them to the holders who DID
 // claim. The claim-window model is composed unchanged: its
@@ -10974,7 +10974,7 @@ export function modelHolderDistributionRedistribution(input = {}) {
   };
 }
 
-// Holder distribution second claim window model (v1.251): the
+// Holder distribution second claim window model (v1.252): the
 // other destination the claim-window model (v1.149) names for
 // unclaimed allocations — a later window. Redistribution (v1.150)
 // gives the unclaimed allocations to the holders who DID claim; a
@@ -11038,7 +11038,7 @@ export function modelHolderDistributionSecondWindow(input = {}) {
   };
 }
 
-// Holder distribution treasury sweep model (v1.251): the final
+// Holder distribution treasury sweep model (v1.252): the final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design sweeps them to its treasury. The second-window model is
@@ -11100,7 +11100,7 @@ export function modelHolderDistributionTreasurySweep(input = {}) {
   };
 }
 
-// Holder distribution burn model (v1.251): the other final
+// Holder distribution burn model (v1.252): the other final
 // disposition the second-window model (v1.151) names for the
 // allocations still unclaimed after BOTH claim windows — the
 // design BURNS them, so they leave the total supply. Unlike the
@@ -11160,7 +11160,7 @@ export function modelHolderDistributionBurn(input = {}) {
   };
 }
 
-// Constant-product AMM swap model (v1.251): the profit mandate's
+// Constant-product AMM swap model (v1.252): the profit mandate's
 // first priority is a swap interface with a disclosed fee, and the
 // fee models (v1.133 family) price fees on transfers, but PRISM
 // priced no SWAP itself. A constant-product pool holds two
@@ -11239,7 +11239,7 @@ export function modelAmmSwap(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity deposit model (v1.251): the swap
+// Constant-product AMM liquidity deposit model (v1.252): the swap
 // model (v1.154) prices trades against a pool, but a pool holds
 // nothing until someone deposits both assets, and PRISM modeled no
 // deposit. This model prices a deposit into an EXISTING pool — the
@@ -11326,7 +11326,7 @@ export function modelAmmLiquidityDeposit(input = {}) {
   };
 }
 
-// Constant-product AMM liquidity withdrawal model (v1.251): the
+// Constant-product AMM liquidity withdrawal model (v1.252): the
 // deposit model (v1.155) prices filling a pool and the swap model
 // (v1.154) prices trading against it, but a provider's position is
 // only real when it can leave, and PRISM modeled no exit. This
@@ -11410,7 +11410,7 @@ export function modelAmmLiquidityWithdrawal(input = {}) {
   };
 }
 
-// Lending liquidation model (v1.251): switching axes after the
+// Lending liquidation model (v1.252): switching axes after the
 // swap axis closed (trade, deposit, withdrawal) — a lending
 // position is the other place a programmable token's value is at
 // risk, and PRISM priced no liquidation. This model prices one
@@ -11501,7 +11501,7 @@ export function modelLendingLiquidation(input = {}) {
   };
 }
 
-// Lending health stress model (v1.251): the liquidation model
+// Lending health stress model (v1.252): the liquidation model
 // (v1.157) prices a liquidation once a position is already under
 // water, but a borrower meets the price move first — and PRISM
 // priced no move. This model reprices one lending position after
@@ -11584,7 +11584,7 @@ export function modelLendingHealthStress(input = {}) {
   };
 }
 
-// Lending interest model (v1.251): the liquidation model (v1.157)
+// Lending interest model (v1.252): the liquidation model (v1.157)
 // prices a position already under water and the stress model
 // (v1.158) prices a collateral price move, but debt also grows on
 // its own — interest accrues whether or not any price moves, and
@@ -11677,7 +11677,7 @@ export function modelLendingInterest(input = {}) {
   };
 }
 
-// Recurring subscription pull model (v1.251): a programmable
+// Recurring subscription pull model (v1.252): a programmable
 // token can carry a SUBSCRIPTION — a subscriber authorises a
 // merchant to pull a fixed amount once per period, up to a
 // stated number of periods and a stated ALLOWANCE CAP on the
@@ -11808,8 +11808,8 @@ export function modelSubscriptionPull(input = {}) {
   };
 }
 
-// Subscription cancellation model (v1.251): the subscription pull model
-// (v1.251) prices an authorisation, but a subscriber can end one early, and
+// Subscription cancellation model (v1.252): the subscription pull model
+// (v1.252) prices an authorisation, but a subscriber can end one early, and
 // cancelling is not free of consequence in either direction: pulls already
 // made are not refunded by cancelling, pulls during a notice period still
 // happen, and only what remains after notice is actually revoked. This model
@@ -11874,7 +11874,7 @@ export function modelSubscriptionCancellation(input = {}) {
   };
 }
 
-// Subscription failed-pull model (v1.251): the pull model (v1.166) prices
+// Subscription failed-pull model (v1.252): the pull model (v1.166) prices
 // an authorisation and the cancellation model (v1.167) prices ending one,
 // but a pull can also FAIL — the subscriber's balance or the authorisation
 // check is not there when the merchant tries — and PRISM priced no failure.
@@ -11937,7 +11937,7 @@ export function modelSubscriptionFailedPull(input = {}) {
   };
 }
 
-// Subscription proration model (v1.251): a NEW moment in the
+// Subscription proration model (v1.252): a NEW moment in the
 // subscription family per the v1.240 lesson (3) — the perf
 // question was weighed and set aside for a run that can measure
 // it properly, and the hunt PR is still in flight. The pull,
@@ -12013,7 +12013,7 @@ export function modelSubscriptionProration(input = {}) {
   };
 }
 
-// Subscription plan-change model (v1.251): the subscription family's
+// Subscription plan-change model (v1.252): the subscription family's
 // fifth and final named moment per the v1.241 lesson (2) — a subscriber
 // who SWITCHES plans part way through a period, priced nowhere before:
 // the proration model prices a subscriber who JOINS (there is no old
@@ -12104,7 +12104,7 @@ export function modelSubscriptionPlanChange(input = {}) {
   };
 }
 
-// Crowdfund raise model (v1.251): a programmable token can be sold in an
+// Crowdfund raise model (v1.252): a programmable token can be sold in an
 // ALL-OR-NOTHING raise — contributors commit toward a stated GOAL, and
 // either the goal is reached and the project is paid, or it is missed and
 // every contribution is refunded. This is not the launchpad model: a
@@ -12165,7 +12165,7 @@ export function modelCrowdfundRaise(input = {}) {
   };
 }
 
-// Crowdfund withdrawal model (v1.251): the raise model (v1.169) prices a
+// Crowdfund withdrawal model (v1.252): the raise model (v1.169) prices a
 // raise at its outcome, but before the deadline a contributor can usually
 // WITHDRAW some or all of what they committed, and PRISM priced no
 // withdrawal. A withdrawal is stated exactly: the withdrawn amount is
@@ -12229,7 +12229,7 @@ export function modelCrowdfundWithdrawal(input = {}) {
   };
 }
 
-// Vault share deposit model (v1.251): PRISM priced deposits into pools
+// Vault share deposit model (v1.252): PRISM priced deposits into pools
 // and raises, but a share-based VAULT — where a depositor receives
 // shares representing a pro-rata claim on everything the vault holds,
 // and the share price moves as the vault gains or loses value — was
@@ -12291,7 +12291,7 @@ export function modelVaultShareDeposit(input = {}) {
     noDust: mintingDust === 0n, // The deposit divided exactly at the pre-deposit price: the minted shares are worth exactly what was deposited.
   };
 }
-// Vault share redemption model (v1.251): the deposit model (v1.251)
+// Vault share redemption model (v1.252): the deposit model (v1.252)
 // prices entering a share-based vault, but a holder leaves by REDEEMING
 // shares, and PRISM priced no redemption. A redemption is stated
 // exactly in BigInt: the shares redeemed are burned, and their gross
@@ -12359,7 +12359,7 @@ export function modelVaultShareRedemption(input = {}) {
   };
 }
 
-// Invoice factoring model (v1.251): a new axis — the vault axis closed
+// Invoice factoring model (v1.252): a new axis — the vault axis closed
 // with its deposit and redemption moments, and PRISM priced no sale of
 // a RECEIVABLE. In factoring a seller assigns an invoice (a stated face
 // the debtor owes) to a factor, who pays most of it at once and the
@@ -12424,7 +12424,7 @@ export function modelInvoiceFactoring(input = {}) {
   };
 }
 
-// Invoice factoring shortfall model (v1.251): the factoring model
+// Invoice factoring shortfall model (v1.252): the factoring model
 // (v1.173) prices the full-collection case only, and states that a
 // shortfall is NOT priced there. This model prices it, composing
 // modelInvoiceFactoring UNCHANGED for the stated terms and stating
@@ -12502,7 +12502,7 @@ export function modelInvoiceFactoringShortfall(input = {}) {
   };
 }
 
-// Dutch auction sale model (v1.251): a programmable token can be
+// Dutch auction sale model (v1.252): a programmable token can be
 // sold at a price that DESCENDS from a start price to a floor price
 // over a stated number of periods, and the first bid at the current
 // price clears the whole lot — a launch mechanism distinct from the
@@ -12588,7 +12588,7 @@ export function modelDutchAuction(input = {}) {
   };
 }
 
-// Dutch auction unsold model (v1.251): the Dutch auction sale model
+// Dutch auction unsold model (v1.252): the Dutch auction sale model
 // (v1.176) prices a bid landing in a stated period and states that
 // whether any bid arrives is NOT priced there — an auction that
 // reaches its floor with no bid is unsold, a different outcome. This
@@ -12665,7 +12665,7 @@ export function modelDutchAuctionUnsold(input = {}) {
   };
 }
 
-// Payment stream model (v1.251): a new axis — a sender deposits a
+// Payment stream model (v1.252): a new axis — a sender deposits a
 // total amount ONCE and it streams to a recipient linearly over a
 // stated number of periods (the salary / grant-stream shape a
 // programmable token can carry). PRISM priced lump transfers,
@@ -12735,7 +12735,7 @@ export function modelPaymentStream(input = {}) {
   };
 }
 
-// Payment stream cancellation model (v1.251): the stream axis's
+// Payment stream cancellation model (v1.252): the stream axis's
 // second moment — the payment stream model (v1.178) states a stream
 // at a stated elapsed point and states that what a cancellation
 // returns is NOT priced there. This model composes
@@ -12800,7 +12800,7 @@ export function modelPaymentStreamCancellation(input = {}) {
   };
 }
 
-// Security deposit return model (v1.251): a NEW axis — the stream
+// Security deposit return model (v1.252): a NEW axis — the stream
 // axis closed with its two moments (v1.179 lesson), and PRISM priced
 // no deposit held against stated deductions. A tenant (or a renter
 // of equipment, or a guest) pays a deposit once; at the end of the
@@ -12913,7 +12913,7 @@ export function modelSecurityDepositDispute(input = {}) {
   };
 }
 
-// Insurance claim model (v1.251): a NEW axis — the deposit axis
+// Insurance claim model (v1.252): a NEW axis — the deposit axis
 // closed with its two moments (v1.181 lesson), and PRISM priced no
 // claim against stated coverage. A policyholder states a loss; the
 // policy states a deductible the claimant bears first and a
@@ -12975,7 +12975,7 @@ export function modelInsuranceClaim(input = {}) {
   };
 }
 
-// Insurance claim against remaining coverage model (v1.251): the
+// Insurance claim against remaining coverage model (v1.252): the
 // insurance axis's second moment (v1.182 lesson) — the claim model
 // prices a claim against a FULL coverage limit and a FULL
 // deductible, but coverage is usually a PERIOD limit shared by
@@ -13072,7 +13072,7 @@ export function modelInsuranceClaimRemaining(input = {}) {
   };
 }
 
-// Early payment discount model (v1.251): a NEW axis — the
+// Early payment discount model (v1.252): a NEW axis — the
 // insurance axis closed with its two moments (v1.183 lesson), and
 // PRISM priced no trade-credit terms. A supplier invoices a buyer
 // on terms such as "2/10 net 30": pay within the discount window
@@ -13142,7 +13142,7 @@ export function modelEarlyPaymentDiscount(input = {}) {
   };
 }
 
-// Early payment on a stated day model (v1.251): the trade-credit
+// Early payment on a stated day model (v1.252): the trade-credit
 // axis's second moment (v1.184 lesson) — the terms model states
 // what paying inside the window and paying at the net day each
 // cost, but a buyer pays on ONE stated day, and which side of
@@ -13212,7 +13212,7 @@ export function modelEarlyPaymentOnDay(input = {}) {
   };
 }
 
-// Installment purchase model (v1.251): a NEW axis per the
+// Installment purchase model (v1.252): a NEW axis per the
 // v1.185 lesson (trade-credit closed with its two moments) —
 // a purchase paid partly now and the rest in stated
 // installments was priced nowhere. This model states such a
@@ -13300,7 +13300,7 @@ export function modelInstallmentPurchase(input = {}) {
   };
 }
 
-// Installment plan progress model (v1.251): the installment
+// Installment plan progress model (v1.252): the installment
 // axis's second moment per the v1.186 lesson — the purchase
 // model (v1.186) states a plan at its start, but a buyer part
 // way through a plan has paid some installments and owes the
@@ -13369,7 +13369,7 @@ export function modelInstallmentProgress(input = {}) {
   };
 }
 
-// Sinking fund model (v1.251): a NEW axis — the installment
+// Sinking fund model (v1.252): a NEW axis — the installment
 // axis closed with its two moments (v1.187 lesson (3)), and
 // the named axes (registry endpoint watch, import/export
 // hardening, wallet/Midnight depth) were re-audited complete
@@ -13434,9 +13434,9 @@ export function modelSinkingFund(input = {}) {
   };
 }
 
-// Sinking fund progress model (v1.251): the sinking-fund
+// Sinking fund progress model (v1.252): the sinking-fund
 // axis's second moment per the v1.188 lesson — the schedule
-// model (v1.251) states a fund at its start, but a fund part
+// model (v1.252) states a fund at its start, but a fund part
 // way through its schedule has taken some deposits and still
 // owes the rest of its target, and that position was stated
 // nowhere. This model composes modelSinkingFund UNCHANGED
@@ -13502,7 +13502,7 @@ export function modelSinkingFundProgress(input = {}) {
   };
 }
 
-// Annuity payout model (v1.251): a NEW axis per the v1.189
+// Annuity payout model (v1.252): a NEW axis per the v1.189
 // lesson — the sinking-fund axis closed with its two moments,
 // so this run opens the opposite direction of travel: a
 // stated fund paid OUT in stated payouts until it is
@@ -13566,9 +13566,9 @@ export function modelAnnuityPayout(input = {}) {
   };
 }
 
-// Annuity payout progress model (v1.251): the annuity
+// Annuity payout progress model (v1.252): the annuity
 // axis's second moment per the v1.190 lesson — the payout
-// model (v1.251) states a fund at its start, but a fund part
+// model (v1.252) states a fund at its start, but a fund part
 // way through its payouts has paid some of them out and
 // still holds the rest, and that position was stated
 // nowhere. This model composes modelAnnuityPayout UNCHANGED
@@ -13639,7 +13639,7 @@ export function modelAnnuityPayoutProgress(input = {}) {
   };
 }
 
-// Credit line model (v1.251): a NEW axis — the annuity axis
+// Credit line model (v1.252): a NEW axis — the annuity axis
 // closed with its two moments (v1.191), and the named axes
 // (registry endpoint watch, import/export hardening,
 // wallet/Midnight depth) were re-audited this run (all three
@@ -13710,7 +13710,7 @@ export function modelCreditLine(input = {}) {
   };
 }
 
-// Credit line movement model (v1.251): the credit-line
+// Credit line movement model (v1.252): the credit-line
 // axis's second moment per the v1.192 lesson — the credit
 // line model (v1.192) states a line's position, but a line
 // exists to MOVE: a borrower draws against it and repays
@@ -13795,7 +13795,7 @@ export function modelCreditLineMovement(input = {}) {
   };
 }
 
-// Tax-inclusive price split model (v1.251): a NEW axis —
+// Tax-inclusive price split model (v1.252): a NEW axis —
 // the credit-line axis closed with its two moments
 // (v1.193), and this run switches axes per its lesson
 // rather than inventing a third credit-line variant. The
@@ -13872,7 +13872,7 @@ export function modelTaxInclusiveSplit(input = {}) {
   };
 }
 
-// Tax-exclusive price total model (v1.251): the tax axis's
+// Tax-exclusive price total model (v1.252): the tax axis's
 // second moment per the v1.194 lesson — the split model
 // (v1.194) extracts the tax a price already contains, but
 // a price quoted BEFORE tax travels the other way: a
@@ -13942,7 +13942,7 @@ export function modelTaxExclusiveTotal(input = {}) {
   };
 }
 
-// Price discount model (v1.251): a NEW axis per the v1.195
+// Price discount model (v1.252): a NEW axis per the v1.195
 // lesson — the tax axis closed with its two moments, so
 // this run opens the price CUT: a stated discount taken
 // off a stated list price (a sale price on a marketplace,
@@ -14014,9 +14014,9 @@ export function modelPriceDiscount(input = {}) {
   };
 }
 
-// Stacked discounts model (v1.251): the discount axis's
+// Stacked discounts model (v1.252): the discount axis's
 // second moment per the v1.196 lesson — the price discount
-// model (v1.251) states one stated cut taken off a stated
+// model (v1.252) states one stated cut taken off a stated
 // list price, but a real price often carries TWO stated
 // cuts in a stated order (a sale discount and then a coupon
 // on the sale price, a member reduction stacked on a
@@ -14114,7 +14114,7 @@ export function modelStackedDiscounts(input = {}) {
   };
 }
 
-// Refund model (v1.251): a NEW axis — the axis switch the
+// Refund model (v1.252): a NEW axis — the axis switch the
 // v1.197 lesson directed (the discount axis closed with its
 // two moments; the named non-model axes were re-audited this
 // run first: the registry readers are wired to the three
@@ -14195,7 +14195,7 @@ export function modelRefund(input = {}) {
   };
 }
 
-// Refund progress model (v1.251): the refund axis's second
+// Refund progress model (v1.252): the refund axis's second
 // moment, per the v1.198 lesson — the refund model (v1.198)
 // states a hand-back at its start, but a refund part way
 // through has handed SOME of it back and still owes the
@@ -14275,7 +14275,7 @@ export function modelRefundProgress(input = {}) {
   };
 }
 
-// Tip model (v1.251): a NEW axis — every model so far
+// Tip model (v1.252): a NEW axis — every model so far
 // prices money kept, charged, or handed back; this one
 // prices money given EXTRA, voluntarily, on top of an
 // amount due: a stated tip (gratuity) on a stated bill (a
@@ -14338,8 +14338,8 @@ export function modelTip(input = {}) {
   };
 }
 
-// Tip split model (v1.251): the tip axis's second moment —
-// the tip model (v1.251) states a tip on a bill but prices
+// Tip split model (v1.252): the tip axis's second moment —
+// the tip model (v1.252) states a tip on a bill but prices
 // nothing about WHO receives it; a real tip rarely goes to
 // one person: it is split among stated recipients by stated
 // shares (a server, the kitchen, support staff on a payment
@@ -14417,7 +14417,7 @@ export function modelTipSplit(input = {}) {
   };
 }
 
-// Late payment charge model (v1.251): a NEW axis — every
+// Late payment charge model (v1.252): a NEW axis — every
 // model so far prices money lent, kept, charged at the
 // point of sale, or handed back; this one prices what an
 // amount owed costs when it is paid LATE: a stated late
@@ -14495,8 +14495,8 @@ export function modelLateFee(input = {}) {
   };
 }
 
-// Late fee progress model (v1.251): the late-charge axis's
-// second moment — the late fee model (v1.251) states a total
+// Late fee progress model (v1.252): the late-charge axis's
+// second moment — the late fee model (v1.252) states a total
 // now due at a stated count of periods late, but a total is
 // rarely settled in one payment: part of it is paid and the
 // rest is still owed, priced nowhere before. This model
@@ -14575,7 +14575,7 @@ export function modelLateFeeProgress(input = {}) {
   };
 }
 
-// Cash rounding model (v1.251): a NEW axis — every model so
+// Cash rounding model (v1.252): a NEW axis — every model so
 // far prices an amount as stated, but a stated amount is
 // not always payable as stated: where the smallest unit
 // that can actually move is larger than the base unit (a
@@ -14688,7 +14688,7 @@ export function modelCashRoundingChange(input = {}) {
   };
 }
 
-// Currency conversion model (v1.251): a NEW axis — every
+// Currency conversion model (v1.252): a NEW axis — every
 // model so far prices an amount in the unit it is stated
 // in, but an amount also changes UNIT: a payment quoted in
 // one currency and settled in another, a payout converted
@@ -14769,8 +14769,8 @@ export function modelCurrencyConversion(input = {}) {
   };
 }
 
-// Currency conversion fee model (v1.251): the conversion
-// model's second moment — the conversion model (v1.251)
+// Currency conversion fee model (v1.252): the conversion
+// model's second moment — the conversion model (v1.252)
 // states an amount converted at a stated rate, but a real
 // conversion rarely hands the converted amount over whole:
 // a stated fee is taken FROM it first (a conversion service's
@@ -14850,7 +14850,7 @@ export function modelCurrencyConversionFee(input = {}) {
   };
 }
 
-// Settlement reserve holdback model (v1.251): a NEW axis —
+// Settlement reserve holdback model (v1.252): a NEW axis —
 // money HELD BACK from a settlement, still the seller's,
 // priced nowhere before. A payment tool or marketplace
 // settling a sale to a seller rarely hands the settlement
@@ -14927,7 +14927,7 @@ export function modelReserveHoldback(input = {}) {
   };
 }
 
-// Settlement reserve release model (v1.251): the reserve
+// Settlement reserve release model (v1.252): the reserve
 // axis's second moment — the holdback model (v1.213)
 // states what is held back from a settlement, but a
 // reserve is held to be RELEASED: when the hold ends,
@@ -15002,7 +15002,7 @@ export function modelReserveRelease(input = {}) {
   };
 }
 
-// Indexation model (v1.251): a NEW axis — every model
+// Indexation model (v1.252): a NEW axis — every model
 // so far prices an amount as stated at one moment, but
 // a stated amount in a long-running design is often
 // INDEXED: a payment, a limit, or a payout written to
@@ -15091,8 +15091,8 @@ export function modelIndexedAmount(input = {}) {
   };
 }
 
-// Indexation position model (v1.251): the indexation
-// model's second moment — the indexation model (v1.251)
+// Indexation position model (v1.252): the indexation
+// model's second moment — the indexation model (v1.252)
 // states an amount after stated periods, but an indexed
 // amount is usually met PART WAY THROUGH its periods: some
 // have elapsed and the amount stands at an intermediate
@@ -15181,7 +15181,7 @@ export function modelIndexedAmountPosition(input = {}) {
   };
 }
 
-// Withholding model (v1.251): a NEW axis — every model
+// Withholding model (v1.252): a NEW axis — every model
 // so far prices money kept as a fee, handed over, held for
 // a buyer in escrow, or held back as a seller's reserve,
 // but a payment made across a stated withholding rule is
@@ -15270,7 +15270,7 @@ export function modelWithholding(input = {}) {
 }
 
 
-// Withholding credit model (v1.251): the withholding
+// Withholding credit model (v1.252): the withholding
 // axis's second moment — the withholding model (v1.217)
 // states a share of one gross payment withheld and
 // remitted on the recipient's behalf, but a recipient who
@@ -15373,7 +15373,7 @@ export function modelWithholdingCredit(input = {}) {
 }
 
 
-// Cashback model (v1.251): a NEW axis — every model so far
+// Cashback model (v1.252): a NEW axis — every model so far
 // prices money kept as a fee, handed over, held for a
 // buyer in escrow, held back as a seller's reserve,
 // remitted as withholding, or taken off a price as a
@@ -15449,8 +15449,8 @@ export function modelCashback(input = {}) {
   };
 }
 
-// Cashback clawback model (v1.251): the cashback axis's
-// second moment — the cashback model (v1.251) states a
+// Cashback clawback model (v1.252): the cashback axis's
+// second moment — the cashback model (v1.252) states a
 // share of a purchase paid in full coming back to the
 // buyer afterwards, and expressly leaves whether a later
 // refund claws it back unpriced. A refund is that later
@@ -15538,7 +15538,7 @@ export function modelCashbackClawback(input = {}) {
   };
 }
 
-// Stored-value payment model (v1.251): a NEW axis — every
+// Stored-value payment model (v1.252): a NEW axis — every
 // model so far prices money kept as a fee, handed over,
 // held for a buyer in escrow, held back as a seller's
 // reserve, remitted as withholding, taken off a price as
@@ -15613,8 +15613,8 @@ export function modelStoredValuePayment(input = {}) {
   };
 }
 
-// Stored-value top-up model (v1.251): the stored-value
-// axis's second moment — the payment model (v1.251)
+// Stored-value top-up model (v1.252): the stored-value
+// axis's second moment — the payment model (v1.252)
 // applies a stated balance to a purchase and expressly
 // leaves how the balance was loaded unpriced, but a
 // stored-value balance had to be loaded first, and a
@@ -15679,7 +15679,7 @@ export function modelStoredValueTopUp(input = {}) {
   };
 }
 
-// Loyalty-points redemption model (v1.251): a NEW axis per
+// Loyalty-points redemption model (v1.252): a NEW axis per
 // the v1.225 lesson (3) — the stored-value axis has its two
 // moments (payment, top-up) and a third stored-value variant
 // was barred, so this run switches axes. Every model priced
@@ -15762,7 +15762,7 @@ export function modelLoyaltyRedemption(input = {}) {
   };
 }
 
-// Loyalty-points earning model (v1.251): the loyalty axis's
+// Loyalty-points earning model (v1.252): the loyalty axis's
 // second moment per the v1.226 lesson (3) — the redemption
 // model states points taken against a purchase and expressly
 // leaves how points are earned unpriced. This model states
@@ -15886,8 +15886,8 @@ export function modelLayaway(input = {}) {
   };
 }
 
-// Layaway cancellation model (v1.251): the layaway
-// axis's second moment — the layaway model (v1.251)
+// Layaway cancellation model (v1.252): the layaway
+// axis's second moment — the layaway model (v1.252)
 // states a position part way toward a price and
 // expressly leaves what happens to the payments if the
 // buyer cancels or never completes unpriced. A
@@ -15973,7 +15973,7 @@ export function modelLayawayCancellation(input = {}) {
   };
 }
 
-// Donation matching model (v1.251): a NEW axis — the
+// Donation matching model (v1.252): a NEW axis — the
 // layaway axis has its two moments (position,
 // cancellation) and a third layaway variant was barred.
 // Every model before priced a purchase, a balance, a
@@ -16177,7 +16177,7 @@ export function modelGrantPosition(input = {}) {
   };
 }
 
-// Trade-in credit model (v1.251): a buyer can also pay
+// Trade-in credit model (v1.252): a buyer can also pay
 // part of a purchase with an ITEM they surrender — a
 // phone, a vehicle, equipment — at a stated trade-in
 // value agreed for that item, priced nowhere before.
@@ -16301,7 +16301,7 @@ export function modelTradeInReturn(input = {}) {
     goodsResalePriced: false, // Never: what the seller does with the returned goods is stated nowhere here.
   };
 }
-// Booking deposit model (v1.251): a NEW axis per the
+// Booking deposit model (v1.252): a NEW axis per the
 // v1.235 lesson (2) — the trade-in axis has its two
 // moments (credit, return) and a third trade-in
 // variant was barred. A buyer can also reserve a
@@ -16386,7 +16386,7 @@ export function modelBookingDeposit(input = {}) {
     fulfillmentPriced: false, // Never: what happens when the booking completes — delivery, performance, or release — is stated nowhere here.
   };
 }
-// Booking cancellation model (v1.251): the booking-
+// Booking cancellation model (v1.252): the booking-
 // deposit axis's second moment per the v1.236 lesson
 // (2) — the named real second moment: what happens to
 // the deposit when a booking is cancelled or never
@@ -16468,7 +16468,7 @@ export function modelBookingCancellation(input = {}) {
   };
 }
 
-// Forward settlement model (v1.251): a NEW axis — two
+// Forward settlement model (v1.252): a NEW axis — two
 // parties can also agree TODAY on a price for a stated
 // quantity of an underlying, to settle at a stated
 // later date, priced nowhere before. Every earlier
@@ -16558,8 +16558,8 @@ export function modelForwardSettlement(input = {}) {
   };
 }
 
-// Forward close-out model (v1.251): the forward axis's
-// second moment — the settlement model (v1.251) states
+// Forward close-out model (v1.252): the forward axis's
+// second moment — the settlement model (v1.252) states
 // what a forward pays ON its settlement date, and
 // expressly leaves closing it out before that date
 // unpriced. The two sides can also agree BEFORE the
@@ -16633,8 +16633,8 @@ export function modelForwardCloseout(input = {}) {
   };
 }
 
-// Call option settlement model (v1.251): a NEW axis — the
-// forward models (v1.251) oblige BOTH sides: at settlement
+// Call option settlement model (v1.252): a NEW axis — the
+// forward models (v1.252) oblige BOTH sides: at settlement
 // the losing side pays, whichever side that is. Two parties
 // can also agree a contract that obliges only ONE side: a
 // call option gives its holder the RIGHT, not the
@@ -16725,8 +16725,8 @@ export function modelCallOptionSettlement(input = {}) {
     feesPriced: false, // Never: any fee on the premium or the payoff is stated nowhere here.
   };
 }
-// Put option settlement model (v1.251): the option axis's
-// mirror contract — the call model (v1.251) states the
+// Put option settlement model (v1.252): the option axis's
+// mirror contract — the call model (v1.252) states the
 // right to BUY at a strike; a put option gives its holder
 // the RIGHT, not the obligation, to SELL a stated quantity
 // of an underlying at a stated strike price, and its
@@ -16831,8 +16831,8 @@ export function modelPutOptionSettlement(input = {}) {
   };
 }
 
-// Option sale before expiry model (v1.251): the option
-// axis's second moment — the settlement models (v1.251)
+// Option sale before expiry model (v1.252): the option
+// axis's second moment — the settlement models (v1.252)
 // state what a call or a put pays AT expiry, and both
 // expressly leave exercise or disposal before expiry
 // unpriced. A holder need not wait for expiry: before it,
@@ -16933,7 +16933,7 @@ export function modelOptionSaleBeforeExpiry(input = {}) {
   };
 }
 
-// Loan guarantee model (v1.251): a NEW axis — every
+// Loan guarantee model (v1.252): a NEW axis — every
 // earlier RealFi model states what the parties to a
 // contract pay each other; a guarantee brings in a
 // THIRD party who pays when the borrower does not. A
@@ -17038,7 +17038,7 @@ export function modelLoanGuarantee(input = {}) {
   };
 }
 
-// Guarantor recovery model (v1.251): the guarantee
+// Guarantor recovery model (v1.252): the guarantee
 // axis's second moment. The loan guarantee model
 // states the call: a guarantor pays the lender the
 // part of a stated obligation the borrower leaves
@@ -17138,7 +17138,7 @@ export function modelGuarantorRecovery(input = {}) {
   };
 }
 
-// Bilateral netting model (v1.251): a NEW axis — every
+// Bilateral netting model (v1.252): a NEW axis — every
 // earlier RealFi model states amounts owed between
 // parties in ONE direction; where two parties owe
 // EACH OTHER, both directions stand at once, and
@@ -17217,5 +17217,92 @@ export function modelBilateralNetting(input = {}) {
     currencyConversionPriced: false, // Never: both obligations are stated in the same unit; obligations in different units are not converted here.
     feesPriced: false, // Never: any fee on the netting or the net payment is stated nowhere here.
     taxesPriced: false, // Never: any tax on either obligation or the net payment is stated nowhere here.
+  };
+}
+// Priority waterfall distribution model (v1.252): a NEW
+// axis — every distribution model above divides a pool
+// PRO-RATA by balance or share; a waterfall divides
+// stated PROCEEDS by PRIORITY instead. A senior claim
+// is stated, a junior claim is stated, and proceeds
+// are stated, all in the same unit. The senior claim
+// is paid FIRST, from the proceeds ACTUALLY STATED:
+// the senior receives the smaller of the proceeds and
+// THE SENIOR CLAIM ACTUALLY STATED. The junior claim
+// is paid only from WHAT REMAINS after the senior
+// claim: the junior receives the smaller of that
+// remainder and THE JUNIOR CLAIM ACTUALLY STATED —
+// never a share of the whole proceeds, which would
+// pay the junior alongside the senior as if priority
+// did not exist (on the preload — proceeds 1,000,
+// senior claim 600, junior claim 500 — measuring the
+// junior on the whole proceeds would pay it 500
+// where only 400 remains after the senior claim is
+// paid in full). Any proceeds beyond BOTH claims are
+// the RESIDUAL: stated as beyond the claims, not
+// paid to either claim. Each claim is conserved
+// exactly: what a claim receives plus what it stands
+// short equals that claim, and what both claims
+// receive plus the residual equals the proceeds.
+// Where the proceeds do not reach the senior claim,
+// the junior receives NOTHING — receiving nothing is
+// the statement of priority, not a missing payment.
+// A claim of zero is stated, not refused: with no
+// senior claim stated, the junior is paid from the
+// whole proceeds. Proceeds of zero are stated, not
+// refused: both claims stand short in full. The
+// distribution is NOT pro-rata and the residual is
+// NOT a fee and NOT stated as profit (what the
+// proceeds cost to produce is stated nowhere here).
+// Whether either claim is valid or enforceable, any
+// interest folded into a claim, further claim ranks
+// below the junior, fees, and taxes are NOT priced.
+export function modelWaterfallDistribution(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const proceedsAmount = toUnits(input.proceeds === undefined ? '0' : input.proceeds, decimals); // The proceeds to distribute, as stated — zero is a valid statement (nothing to distribute).
+  const seniorClaimAmount = toUnits(input.seniorClaim === undefined ? '0' : input.seniorClaim, decimals); // The senior claim, as stated — zero is a valid statement (no senior claim stands ahead).
+  const juniorClaimAmount = toUnits(input.juniorClaim === undefined ? '0' : input.juniorClaim, decimals); // The junior claim, as stated — zero is a valid statement (no junior claim stands behind).
+  const totalClaimsAmount = seniorClaimAmount + juniorClaimAmount; // Both claims together — what full payment of every stated claim would take.
+  const seniorPaidAmount = proceedsAmount < seniorClaimAmount ? proceedsAmount : seniorClaimAmount; // What the senior claim receives: the smaller of the proceeds and the senior claim, paid first.
+  const remainingAfterSeniorAmount = proceedsAmount - seniorPaidAmount; // What remains for the junior claim after the senior claim has been paid — the only amount the junior is ever measured on.
+  const juniorPaidAmount = remainingAfterSeniorAmount < juniorClaimAmount ? remainingAfterSeniorAmount : juniorClaimAmount; // What the junior claim receives: the smaller of the remainder and the junior claim.
+  const residualAmount = proceedsAmount - seniorPaidAmount - juniorPaidAmount; // Proceeds beyond both claims: paid to neither claim under this model.
+  const seniorShortfallAmount = seniorClaimAmount - seniorPaidAmount; // What the senior claim stands short: zero where it is paid in full.
+  const juniorShortfallAmount = juniorClaimAmount - juniorPaidAmount; // What the junior claim stands short: its whole claim where the proceeds never reach it.
+  const totalPaidToClaimsAmount = seniorPaidAmount + juniorPaidAmount; // What the two claims receive together.
+  const totalShortfallAmount = seniorShortfallAmount + juniorShortfallAmount; // What the two claims stand short together.
+  return {
+    decimals,
+    proceedsAmount, // The proceeds to distribute, as stated.
+    seniorClaimAmount, // The senior claim, as stated.
+    juniorClaimAmount, // The junior claim, as stated.
+    totalClaimsAmount, // Both claims together.
+    seniorPaidAmount, // What the senior claim receives, paid first.
+    remainingAfterSeniorAmount, // What remains after the senior claim: the junior claim's only base.
+    juniorPaidAmount, // What the junior claim receives, from the remainder only.
+    residualAmount, // Proceeds beyond both claims.
+    seniorShortfallAmount, // What the senior claim stands short.
+    juniorShortfallAmount, // What the junior claim stands short.
+    totalPaidToClaimsAmount, // What both claims receive together.
+    totalShortfallAmount, // What both claims stand short together.
+    hasProceeds: proceedsAmount > 0n, // Any proceeds are stated to distribute.
+    hasClaims: totalClaimsAmount > 0n, // At least one claim is stated.
+    seniorPaidInFull: seniorClaimAmount > 0n && seniorPaidAmount === seniorClaimAmount, // A stated senior claim is paid whole.
+    seniorStandsShort: seniorShortfallAmount > 0n, // The proceeds did not reach the whole senior claim: the junior receives nothing.
+    juniorPaidInFull: juniorClaimAmount > 0n && juniorPaidAmount === juniorClaimAmount, // A stated junior claim is paid whole.
+    juniorReceivesNothing: juniorClaimAmount > 0n && juniorPaidAmount === 0n, // A stated junior claim receives nothing: the proceeds were exhausted at or before the senior claim, or no proceeds are stated.
+    claimsPaidInFull: totalClaimsAmount > 0n && totalShortfallAmount === 0n, // Every stated claim is paid whole.
+    proceedsExceedClaims: residualAmount > 0n, // Proceeds remain beyond both claims.
+    juniorMeasuredOnRemainder: true, // Always: the junior claim is measured on what remains after the senior claim, never on the whole proceeds.
+    distributionConserved: true, // Always: each claim's receipt plus its shortfall equals that claim exactly, and both receipts plus the residual equal the proceeds exactly.
+    seniorPaidFirst: true, // Always: no part of the junior claim is paid before the senior claim is paid in full.
+    proRataPriced: false, // Never: this distribution is by priority, not by pro-rata shares of the proceeds.
+    residualIsFee: false, // Never: the residual is proceeds beyond the stated claims, not a charge for a service.
+    residualIsProfit: false, // Never: what the proceeds cost to produce is stated nowhere here, so the residual is not stated as profit.
+    distributionIsFee: false, // Never: what the claims receive is their own stated claims paid from stated proceeds, not a fee.
+    claimValidityPriced: false, // Never: whether either claim is valid or enforceable is stated nowhere here.
+    interestPriced: false, // Never: any interest folded into either claim is not separated out here.
+    furtherRanksPriced: false, // Never: any claim rank below the junior claim is stated nowhere here.
+    feesPriced: false, // Never: any fee on the distribution is stated nowhere here.
+    taxesPriced: false, // Never: any tax on the proceeds or the distribution is stated nowhere here.
   };
 }

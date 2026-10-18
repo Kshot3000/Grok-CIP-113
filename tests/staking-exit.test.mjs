@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelStakingExit, modelStakingRewards } from '../src/domain.js';
 
-// Staking early-exit model (v1.251): the staking rewards model prices
+// Staking early-exit model (v1.252): the staking rewards model prices
 // a position held to term. This model prices leaving early: rewards
 // not yet accrued are never earned, a penalty is charged only on the
 // rewards accrued by the exit, the dev fee likewise, and the two
@@ -155,5 +155,5 @@ test('the shipped site carries the staking exit panel and its honesty boundary',
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /staking-exit-output/);
   assert.match(app, /PRISM stakes nothing, holds no stake, pays no rewards, and exits no position/);
-  assert.match(app, /v1\.251/);
+  assert.match(app, /v1\.252/);
 });
