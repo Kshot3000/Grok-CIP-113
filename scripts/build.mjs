@@ -5,10 +5,10 @@ const root=new URL('../',import.meta.url),dist=new URL('dist/',root);
 await rm(dist,{recursive:true,force:true});
 await mkdir(dist,{recursive:true});
 for(const path of ['index.html','favicon.svg','donation-qr.svg','og.jpg','robots.txt','sitemap.xml','src','visual-upgrade'])await cp(new URL(path,root),new URL(path,dist),{recursive:true});
-// Stamp the deployed sitemap with the build date (v1.260) — see sitemap.mjs.
+// Stamp the deployed sitemap with the build date (v1.261) — see sitemap.mjs.
 const sitemapUrl=new URL('sitemap.xml',dist);
 await writeFile(sitemapUrl,stampSitemap(await readFile(sitemapUrl,'utf8'),buildDate()));
-// Strip full-line // comments from the DEPLOYED JavaScript only (v1.260):
+// Strip full-line // comments from the DEPLOYED JavaScript only (v1.261):
 // the source keeps its documentation; a browser gains nothing from
 // downloading it (about half of domain.js's gzipped wire size). Same line
 // count, same code — see strip-comments.mjs and tests/comment-strip.test.mjs.
