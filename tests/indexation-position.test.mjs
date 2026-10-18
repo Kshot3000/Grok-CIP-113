@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelIndexedAmount, modelIndexedAmountPosition } from '../src/domain.js';
 
-// Indexation position model (v1.269): the indexation
+// Indexation position model (v1.270): the indexation
 // model's second moment — a position part way through its
 // periods. Both the elapsed and the total amounts are
 // measured from the ORIGINAL amount by composing
@@ -139,6 +139,6 @@ test('wiring: the app imports the position model, renders an indexation position
   assert.ok(app.includes('modelIndexedAmountPosition'));
   assert.ok(app.includes('data-idxpos'));
   assert.ok(app.includes('idxpos-output'));
-  assert.match(app, /v1\.269/);
+  assert.match(app, /v1\.270/);
   assert.ok(readme.includes('Indexation position model'));
 });
