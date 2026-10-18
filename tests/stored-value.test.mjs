@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelStoredValuePayment } from '../src/domain.js';
 
-// Stored-value payment model (v1.258): a NEW axis — the
+// Stored-value payment model (v1.259): a NEW axis — the
 // buyer pays with value they already hold: applied is
 // min(balance, purchase), capped by the amount due, and
 // any excess STAYS on the balance, never paid out as

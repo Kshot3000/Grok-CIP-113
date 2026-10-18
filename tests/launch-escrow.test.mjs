@@ -178,7 +178,7 @@ test('decimals handling: the chain follows the entered scale, and a bad scale is
   assert.throws(() => modelLaunchEscrow({ ...DEFAULT, decimals: 7 }), /Decimals/);
 });
 
-test('app wires the launch-escrow model: panel, verdict outcomes, honest boundary, v1.258', async () => {
+test('app wires the launch-escrow model: panel, verdict outcomes, honest boundary, v1.259', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /modelLaunchEscrow/);
   assert.match(app, /Model a launch that escrows its proceeds/);
@@ -187,5 +187,5 @@ test('app wires the launch-escrow model: panel, verdict outcomes, honest boundar
   assert.match(app, /data-lesc="releasedBps"/);
   assert.match(app, /id="launch-escrow-output"/);
   assert.match(app, /PRISM runs no launchpad, holds no escrow, and takes no subscriptions/);
-  assert.match(app, /v1\.258/);
+  assert.match(app, /v1\.259/);
 });

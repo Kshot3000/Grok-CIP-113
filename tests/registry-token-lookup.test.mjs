@@ -169,7 +169,7 @@ test('getRegistryToken surfaces an indexer failure instead of a verdict', async 
   finally { lying.restore(); }
 });
 
-test('app wires the lookup: input, action, verdict lines, honest unavailable state, v1\.258', async () => {
+test('app wires the lookup: input, action, verdict lines, honest unavailable state, v1\.259', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /id="registry-lookup-policy"/);
   assert.match(app, /data-action="registry-lookup"/);
@@ -178,5 +178,5 @@ test('app wires the lookup: input, action, verdict lines, honest unavailable sta
   assert.match(app, /Lookup check FAILED/);
   assert.match(app, /Registry lookup unavailable\.<\/strong>/);
   assert.match(app, /is not registered in this indexer/);
-  assert.match(app, /WORKSPACE <span>v1\.258<\/span>/);
+  assert.match(app, /WORKSPACE <span>v1\.259<\/span>/);
 });
