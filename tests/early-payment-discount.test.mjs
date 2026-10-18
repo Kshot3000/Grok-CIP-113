@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelEarlyPaymentDiscount } from '../src/domain.js';
 
-// Early payment discount model (v1.261): a NEW axis — the
+// Early payment discount model (v1.262): a NEW axis — the
 // insurance axis closed with its two moments (v1.183), and PRISM
 // priced no trade-credit terms. A supplier offers a stated
 // discount off the face for paying inside a window, with the

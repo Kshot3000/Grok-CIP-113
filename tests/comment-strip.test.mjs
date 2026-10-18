@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { stripFullLineComments } from '../scripts/strip-comments.mjs';
 
-// v1.261: the deployed copy strips full-line // comments at build time.
+// v1.262: the deployed copy strips full-line // comments at build time.
 // These tests pin the stripper itself (the build applies it to dist only;
 // the repository source keeps its documentation).
 
