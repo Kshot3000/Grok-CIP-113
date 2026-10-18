@@ -202,12 +202,12 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the transaction construction checker: panel, six steps, honest boundary, v1.265', async () => {
+test('app wires the transaction construction checker: panel, six steps, honest boundary, v1.266', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkTransactionConstruction/);
   assert.match(app, /construction-withdrawals/);
   assert.match(app, /TRANSACTION CONSTRUCTION · LOCAL MODEL/);
   assert.match(app, /NO VERDICT/);
   assert.match(app, /read no transaction, no protocol parameters UTxO, and no chain state/);
-  assert.match(app, /v1\.265/);
+  assert.match(app, /v1\.266/);
 });

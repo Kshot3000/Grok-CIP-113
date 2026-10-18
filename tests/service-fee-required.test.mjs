@@ -121,5 +121,5 @@ test('unreadable inputs are refused', () => {
 test('panel wiring: the solver renders in app.js', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /requiredServiceFee\(/);
-  assert.match(app, /v1\.265/);
+  assert.match(app, /v1\.266/);
 });
