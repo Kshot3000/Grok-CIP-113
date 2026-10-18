@@ -168,7 +168,7 @@ test('a minimum above the whole reserve out is stated, not refused, and refuses 
 
 test('the swap model\'s own refusals pass through the guard unchanged: a trade too small to buy one base unit out is refused as unpriceable, not as a guard refusal', () => {
   assert.throws(() => modelAmmSwapGuard({ reserveIn: '1000000', reserveOut: '500000', amountIn: '0.000001', swapFeeBps: 30, protocolFeeShareBps: 2000, minimumAmountOut: '0', decimals: 6 }), /too small to buy even one base unit/);
-  assert.throws(() => modelAmmSwapGuard({ ...DEFAULT, reserveIn: '0' }), /Reserve in must be greater than zero/);
+  assert.throws(() => modelAmmSwapGuard({ ...DEFAULT, reserveIn: '0' }), /Pool reserve in must be greater than zero/);
 });
 
 test('fractional and zero-decimal statements state exactly in BigInt', () => {
