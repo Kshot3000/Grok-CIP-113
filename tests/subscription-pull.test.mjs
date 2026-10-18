@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelSubscriptionPull } from '../src/domain.js';
 
-// Recurring subscription pull model (v1.247): a subscriber
+// Recurring subscription pull model (v1.248): a subscriber
 // authorises a fixed pull once per period up to a stated number
 // of periods and a stated allowance cap — two ceilings, the
 // lower wins. The service fee is floored on each pull, a cap
@@ -196,6 +196,6 @@ test('wiring: app.js imports the model, renders a subscription panel, and the RE
   assert.match(app, /modelSubscriptionPull/);
   assert.match(app, /data-subpull/);
   assert.match(app, /subpull-output/);
-  assert.match(app, /v1\.247/);
+  assert.match(app, /v1\.248/);
   assert.match(readme, /Subscription pull model/);
 });
