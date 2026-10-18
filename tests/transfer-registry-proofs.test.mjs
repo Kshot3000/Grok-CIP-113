@@ -236,11 +236,11 @@ test('the checker does not mutate its claim', () => {
   assert.deepEqual(claim, snapshot);
 });
 
-test('app wires the transfer registry-proof checker: panel, verdicts, honest boundary, v1.270', async () => {
+test('app wires the transfer registry-proof checker: panel, verdicts, honest boundary, v1.271', async () => {
   const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(app, /checkTransferRegistryProofs/);
   assert.match(app, /transfer-proof-nodes/);
   assert.match(app, /TRANSFER REGISTRY PROOFS · LOCAL MODEL/);
   assert.match(app, /NO VERDICT/);
-  assert.match(app, /v1\.270/);
+  assert.match(app, /v1\.271/);
 });
