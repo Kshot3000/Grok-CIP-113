@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelSubscriptionFailedPull } from '../src/domain.js';
 
-// Subscription failed-pull model (v1.254): a failed pull moves
+// Subscription failed-pull model (v1.255): a failed pull moves
 // nothing, charges no fee, and consumes no authorisation — a
 // retry attempts exactly the same amount. After a stated number
 // of consecutive failures the subscription lapses and only then
@@ -182,6 +182,6 @@ test('wiring: app.js imports the model, renders a failed-pull panel, and the REA
   assert.match(app, /modelSubscriptionFailedPull/);
   assert.match(app, /data-subfail/);
   assert.match(app, /subfail-output/);
-  assert.match(app, /v1\.254/);
+  assert.match(app, /v1\.255/);
   assert.match(readme, /Subscription failed-pull model/);
 });

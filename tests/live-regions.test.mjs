@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-// Live-region coverage for the studio's model panels (v1.254).
+// Live-region coverage for the studio's model panels (v1.255).
 //
 // Every model panel recomputes its result into a container each time an
-// input changes. Before v1.254 those containers were plain divs: a sighted
+// input changes. Before v1.255 those containers were plain divs: a sighted
 // user saw the new result, a screen-reader user heard nothing — only a
 // validation error (rendered with role="status") was ever announced. The
 // button-triggered result regions (simulation, sequence, verify/compare)
