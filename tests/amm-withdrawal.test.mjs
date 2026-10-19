@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelAmmLiquidityWithdrawal } from '../src/domain.js';
 
-// Constant-product AMM liquidity withdrawal model (v1.276): burning
+// Constant-product AMM liquidity withdrawal model (v1.277): burning
 // LP tokens pays out pro-rata by the share of the supply burned —
 // the same share of both reserves, floored per side, with the
 // flooring remainder staying in the pool. Burning the whole supply
@@ -168,6 +168,6 @@ test('wiring: app.js imports the model, renders an amm withdrawal panel, and the
   assert.match(app, /modelAmmLiquidityWithdrawal/);
   assert.match(app, /data-wliq/);
   assert.match(app, /amm-withdrawal-output/);
-  assert.match(app, /v1\.276/);
+  assert.match(app, /v1\.277/);
   assert.match(readme, /AMM liquidity withdrawal model/);
 });

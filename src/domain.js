@@ -18943,7 +18943,7 @@ export function modelAverageCostBasis(input = {}) {
   };
 }
 
-// Simple return model (v1.276): the future-value and
+// Simple return model (v1.277): the future-value and
 // present-value models move a stated amount through time at
 // a stated RATE, the current-yield model states the income
 // a stated price earns per period, and the indexation model
@@ -19013,5 +19013,80 @@ export function modelSimpleReturn(input = {}) {
     returnIsFee: false, // Never: the return is paid to no one; it restates the stated cost and proceeds.
     separateAmountsPriced: false, // Never: amounts received at other times stand inside the proceeds only as stated in that one figure.
     taxesPriced: false, // Never: any tax on the gain or the proceeds is stated nowhere here.
+  };
+}
+
+// Current ratio model (v1.277): the cash-runway model
+// states how long a stated cash balance lasts at a stated
+// net burn, and the lending models state one loan against
+// its collateral, but what a stated balance sheet's
+// NEAR-TERM assets cover of its NEAR-TERM liabilities at
+// one stated moment - the working capital standing between
+// them and the coverage ratio - was stated nowhere
+// (verified across every exported function in domain.js:
+// no current ratio, working capital, or balance-sheet
+// liquidity model). This model states it exactly in
+// BigInt, all amounts in the same unit: the working
+// capital is THE CURRENT ASSETS ACTUALLY STATED less THE
+// CURRENT LIABILITIES ACTUALLY STATED, signed and exact,
+// the current ratio is floor(assets x 10,000 / THE
+// LIABILITIES ACTUALLY STATED) in basis points, and the
+// liabilities are floor(liabilities x 10,000 / THE ASSETS
+// ACTUALLY STATED) basis points of the assets (preload:
+// current assets of 1,250,000 against current liabilities
+// of 1,000,000 leave working capital of 250,000, a current
+// ratio of 12,500 bps, and liabilities of 8,000 bps of the
+// assets; values computed mechanically against this model
+// before pinning; see tests/current-ratio.test.mjs). Its
+// defining statements are that THE RATIO IS ROUNDED DOWN,
+// never up, so the coverage it states is never overstated
+// - the ratio times the liabilities never exceeds the
+// assets times 10,000, and one basis point more would
+// exceed it - that THE WORKING CAPITAL IS SIGNED: where
+// the liabilities exceed the assets it is negative and
+// the shortfall is stated as its own figure, never hidden
+// inside the ratio - and that AT LIABILITIES OF ZERO
+// THERE IS NO FINITE RATIO, stated as no finite ratio
+// rather than refused or infinite, because any positive
+// assets divided by nothing owed sum without bound, while
+// the working capital is then the assets themselves.
+// Assets of zero are stated, not refused: the ratio is
+// zero and the whole liabilities stand as shortfall. The
+// ratio is NOT solvency and NOT profit: it states one
+// moment's stated near-term figures only. Whether the
+// assets can actually be collected or sold at their
+// stated amounts, when inside the period each amount
+// falls due, obligations standing off the stated figures,
+// and taxes NOT priced.
+export function modelCurrentRatio(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const currentAssets = toUnits(input.currentAssets === undefined ? '0' : input.currentAssets, decimals); // Validates assets + decimals. Zero is stated, not refused: the ratio is zero and the liabilities stand whole as shortfall.
+  const currentLiabilities = toUnits(input.currentLiabilities === undefined ? '0' : input.currentLiabilities, decimals); // Validates liabilities + decimals. Zero is stated, not refused: no finite ratio stands, and the working capital is the assets themselves.
+  const workingCapital = currentAssets - currentLiabilities; // Signed, exactly: positive where the assets exceed the liabilities, negative where they fall short, zero where they meet.
+  const hasRatio = currentLiabilities > 0n; // A finite ratio stands exactly where something is owed; at liabilities of zero the coverage is unbounded and no finite figure is stated.
+  const ratioBps = hasRatio ? currentAssets * 10000n / currentLiabilities : null; // floor(assets x 10,000 / liabilities): THE COVERAGE, rounded DOWN so it is never overstated; null where no finite ratio stands.
+  const liabilitiesBpsOfAssets = currentAssets > 0n ? currentLiabilities * 10000n / currentAssets : null; // floor(liabilities x 10,000 / assets): what share of the assets the liabilities claim, rounded DOWN; null where no assets stand to measure against.
+  const surplus = workingCapital > 0n ? workingCapital : 0n; // The assets standing above the liabilities, exactly; zero where there is no surplus.
+  const shortfall = workingCapital < 0n ? -workingCapital : 0n; // The liabilities standing above the assets, exactly, stated as its own figure; zero where there is no shortfall.
+  return {
+    decimals,
+    currentAssets, // The stated near-term assets, in the same unit throughout.
+    currentLiabilities, // The stated near-term liabilities, in the same unit throughout.
+    workingCapital, // assets - liabilities, signed, exactly.
+    hasRatio, // True exactly where the liabilities exceed zero and a finite ratio stands.
+    ratioBps, // floor(assets x 10,000 / liabilities) where a ratio stands, else null.
+    liabilitiesBpsOfAssets, // floor(liabilities x 10,000 / assets) where assets stand, else null.
+    surplus, // max(workingCapital, 0), exactly.
+    shortfall, // max(-workingCapital, 0), exactly.
+    coversLiabilities: currentAssets >= currentLiabilities, // True exactly where the stated assets meet or exceed the stated liabilities.
+    ratioRoundedDown: true, // Always: the ratio division floors, so the coverage stated is never overstated.
+    workingCapitalSigned: true, // Always: a shortfall states as a negative working capital, never floored at zero.
+    ratioIsSolvency: false, // Never: one moment's stated near-term coverage states nothing about overall solvency.
+    ratioIsProfit: false, // Never: nothing here is earned; the figures restate a stated position.
+    ratioIsFee: false, // Never: the ratio is paid to no one; it restates the stated assets and liabilities.
+    assetQualityPriced: false, // Never: whether the assets can be collected or sold at their stated amounts is stated nowhere here.
+    timingPriced: false, // Never: when inside the period each amount falls due stands nowhere in the figures.
+    offStatementPriced: false, // Never: obligations standing off the stated figures are priced nowhere here.
+    taxesPriced: false, // Never: any tax on the position is stated nowhere here.
   };
 }
