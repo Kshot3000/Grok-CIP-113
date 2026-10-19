@@ -18943,7 +18943,7 @@ export function modelAverageCostBasis(input = {}) {
   };
 }
 
-// Simple return model (v1.279): the future-value and
+// Simple return model (v1.280): the future-value and
 // present-value models move a stated amount through time at
 // a stated RATE, the current-yield model states the income
 // a stated price earns per period, and the indexation model
@@ -19016,7 +19016,7 @@ export function modelSimpleReturn(input = {}) {
   };
 }
 
-// Current ratio model (v1.279): the cash-runway model
+// Current ratio model (v1.280): the cash-runway model
 // states how long a stated cash balance lasts at a stated
 // net burn, and the lending models state one loan against
 // its collateral, but what a stated balance sheet's
@@ -19091,7 +19091,7 @@ export function modelCurrentRatio(input = {}) {
   };
 }
 
-// Debt-to-equity model (v1.279): the current-ratio model
+// Debt-to-equity model (v1.280): the current-ratio model
 // states a stated balance sheet's NEAR-TERM assets against
 // its NEAR-TERM liabilities at one moment, and the lending
 // models state one loan against its collateral, but how
@@ -19170,7 +19170,7 @@ export function modelDebtToEquity(input = {}) {
   };
 }
 
-// Free cash flow model (v1.279): the cash-runway model
+// Free cash flow model (v1.280): the cash-runway model
 // states how long a stated cash balance lasts at a stated
 // net burn, and the simple-return model states a completed
 // holding on two amounts alone, but what a stated period's
@@ -19249,5 +19249,95 @@ export function modelFreeCashFlow(input = {}) {
     workingCapitalPriced: false, // Never: changes in working capital inside the period are priced nowhere here.
     debtFlowsPriced: false, // Never: debt drawn or repaid inside the period is stated nowhere here.
     taxesPriced: false, // Never: any tax on the period is stated nowhere here.
+  };
+}
+
+// Interest coverage model (v1.280): the debt-to-equity
+// model states how a stated balance sheet is funded and
+// the current-ratio model states one moment's near-term
+// coverage, and the RealFi lab's debtServiceCoverage
+// derives a whole loan payment - principal and interest
+// together - from a loan schedule, but how many times a
+// stated period's stated earnings before interest cover
+// the period's stated INTEREST EXPENSE ALONE, with no
+// loan schedule and no principal anywhere inside it, was
+// stated nowhere (verified across every exported function
+// in domain.js: no interest coverage, times-interest-
+// earned, or earnings-to-interest model). This model
+// states it exactly in BigInt, all amounts in the same
+// unit: the coverage is floor(THE EARNINGS BEFORE
+// INTEREST ACTUALLY STATED x 10,000 / THE INTEREST
+// EXPENSE ACTUALLY STATED) in basis points, the interest
+// expense is floor(interest x 10,000 / THE EARNINGS
+// ACTUALLY STATED) basis points of the earnings, and the
+// earnings after the stated interest are the earnings
+// less the interest expense, signed and exact (preload:
+// earnings before interest of 1,000,000 against interest
+// expense of 250,000 cover the interest at 40,000 bps,
+// the interest expense is 2,500 bps of the earnings, and
+// earnings of 750,000 stand after the stated interest;
+// values computed mechanically against this model before
+// pinning; see tests/interest-coverage.test.mjs). Its
+// defining statements are that THE COVERAGE IS MEASURED
+// ON THE INTEREST EXPENSE, NEVER ON THE EARNINGS -
+// stating the earnings against themselves would state
+// 10,000 bps on the preload, not the 40,000 bps the
+// earnings actually cover the interest at - that THE
+// COVERAGE IS ROUNDED DOWN, never up, so the cover it
+// states is never overstated - and that THE INTEREST
+// EXPENSE IS NOT PRINCIPAL: this states earnings against
+// the cost of the debt only, never whether the principal
+// can be repaid, which is the debt-service statement this
+// model expressly does not make. Where the interest
+// exceeds the earnings the earnings after interest are
+// negative and the shortfall is stated as its own figure,
+// never hidden. At interest expense of zero there is NO
+// FINITE COVERAGE, stated as no finite coverage rather
+// than refused or infinite, while the whole earnings
+// stand after interest. Earnings of zero are stated, not
+// refused: the coverage is zero and the whole interest
+// expense stands as shortfall, with no share of the
+// earnings standing because no earnings stand. The
+// coverage is NOT solvency and NOT cash flow: the
+// earnings are an accrual figure, not cash in hand, and
+// a covered interest expense states nothing about whether
+// it will in fact be paid. The coverage is NOT profit and
+// NOT a fee: it is paid to no one here. Principal
+// repayment, the debt balance, its maturity, and taxes
+// NOT priced - the earnings stand BEFORE interest and
+// taxes by their stated name, and no tax figure is taken
+// from them here.
+export function modelInterestCoverage(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const earningsBeforeInterest = toUnits(input.earningsBeforeInterest === undefined ? '0' : input.earningsBeforeInterest, decimals); // Validates earnings + decimals. Zero is stated, not refused: the coverage is zero and the whole interest expense stands as shortfall.
+  const interestExpense = toUnits(input.interestExpense === undefined ? '0' : input.interestExpense, decimals); // Validates interest expense + decimals. Zero is stated, not refused: no finite coverage stands, and the whole earnings stand after interest.
+  const earningsAfterInterest = earningsBeforeInterest - interestExpense; // Signed and exact: THE EARNINGS LEFT AFTER THE STATED INTEREST, never floored at zero, so interest above the earnings states a negative figure.
+  const shortfall = earningsAfterInterest < 0n ? -earningsAfterInterest : 0n; // The amount by which the interest expense exceeds the earnings, exactly; zero where the earnings meet or exceed the interest.
+  const hasCoverage = interestExpense > 0n; // A finite coverage stands exactly where an interest expense stands; at zero there is nothing for the earnings to cover a stated number of times.
+  const coverageBps = hasCoverage ? earningsBeforeInterest * 10000n / interestExpense : null; // floor(earnings x 10,000 / interest expense): THE COVERAGE, rounded DOWN so it is never overstated; null where no finite coverage stands.
+  const hasEarningsShare = earningsBeforeInterest > 0n; // A finite share of the earnings stands exactly where earnings stand; at zero there is nothing to take a share of.
+  const interestBpsOfEarnings = hasEarningsShare ? interestExpense * 10000n / earningsBeforeInterest : null; // floor(interest x 10,000 / earnings): the interest's share of the earnings, rounded DOWN, UNCAPPED - it exceeds 10,000 where the interest exceeds the earnings; null where no earnings stand.
+  return {
+    decimals,
+    earningsBeforeInterest, // The stated earnings before interest (and taxes) for the period, in the same unit throughout.
+    interestExpense, // The stated interest expense for the period, in the same unit throughout.
+    earningsAfterInterest, // earningsBeforeInterest - interestExpense, signed and exact, never floored at zero.
+    shortfall, // max(interestExpense - earningsBeforeInterest, 0), exactly.
+    hasCoverage, // True exactly where the interest expense exceeds zero and a finite coverage stands.
+    coverageBps, // floor(earnings x 10,000 / interest expense) where a coverage stands, else null.
+    hasEarningsShare, // True exactly where the earnings exceed zero and a finite share of them stands.
+    interestBpsOfEarnings, // floor(interest x 10,000 / earnings) where earnings stand, else null; uncapped.
+    earningsCoverInterest: earningsBeforeInterest >= interestExpense, // True exactly where the stated earnings meet or exceed the stated interest expense.
+    interestExceedsEarnings: interestExpense > earningsBeforeInterest, // True exactly where the stated interest expense exceeds the stated earnings.
+    coverageRoundedDown: true, // Always: the coverage division floors, so the cover stated is never overstated.
+    coverageMeasuredOnInterestExpense: true, // Always: the coverage divides by the interest expense actually stated, never by the earnings.
+    coverageIsSolvency: false, // Never: covered interest on stated earnings states nothing about whether debts can be paid as they fall due.
+    coverageIsCashFlow: false, // Never: the earnings are an accrual figure; no cash figure stands here.
+    coverageIsProfit: false, // Never: the coverage restates two stated figures; nothing here is earned by this model.
+    coverageIsFee: false, // Never: the coverage is paid to no one; the interest expense is a stated cost of the period, not a charge by this model.
+    principalPriced: false, // Never: repayment of any principal is stated nowhere here - that is the debt-service statement, not this one.
+    debtBalancePriced: false, // Never: the balance the interest was charged on is stated nowhere here.
+    maturityPriced: false, // Never: when any debt falls due stands nowhere in the figures.
+    taxesPriced: false, // Never: the earnings stand before taxes by their stated name, and no tax is taken from them here.
   };
 }

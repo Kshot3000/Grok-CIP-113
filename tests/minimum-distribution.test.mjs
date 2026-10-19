@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelMinimumHolderDistribution, modelHolderDistribution } from '../src/domain.js';
 
-// Minimum-guarantee holder distribution model (v1.279): the holder
+// Minimum-guarantee holder distribution model (v1.280): the holder
 // distribution (v1.145) divides a pool by holdings with no limit,
 // and the capped distribution (v1.146) caps what any one holder
 // may receive; this model does the opposite — it GUARANTEES each
@@ -205,6 +205,6 @@ test('wiring: app.js imports the model, renders a minimum distribution panel, an
   assert.match(app, /modelMinimumHolderDistribution/);
   assert.match(app, /data-mindist/);
   assert.match(app, /minimum-distribution-output/);
-  assert.match(app, /v1\.279/);
+  assert.match(app, /v1\.280/);
   assert.match(readme, /Minimum-guarantee holder distribution model/);
 });
