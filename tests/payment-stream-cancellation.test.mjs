@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelPaymentStreamCancellation } from '../src/domain.js';
 
-// Payment stream cancellation model (v1.273): cancelling a stream
+// Payment stream cancellation model (v1.274): cancelling a stream
 // at a stated elapsed point. What has streamed stays with the
 // recipient, net of the fee already floored on it — cancelling is
 // not a clawback. What has not streamed returns to the sender

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelInvoiceFactoring, modelInvoiceFactoringShortfall } from '../src/domain.js';
 
-// Invoice factoring shortfall model (v1.273): the debtor pays less
+// Invoice factoring shortfall model (v1.274): the debtor pays less
 // than the face, and the shortfall is absorbed in a stated order —
 // first the seller's second payment, then the factor's fee, and only
 // then recovery of the advance. Non-recourse: the seller keeps the
@@ -176,6 +176,6 @@ test('wiring: app.js imports the model, renders an invoice factoring shortfall p
   assert.match(app, /modelInvoiceFactoringShortfall/);
   assert.match(app, /data-factors/);
   assert.match(app, /factors-output/);
-  assert.match(app, /v1\.273/);
+  assert.match(app, /v1\.274/);
   assert.match(readme, /Invoice factoring shortfall model/);
 });
