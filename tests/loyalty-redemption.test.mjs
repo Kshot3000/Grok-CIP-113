@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelLoyaltyRedemption } from '../src/domain.js';
 
-// Loyalty-points redemption model (v1.275): a NEW axis —
+// Loyalty-points redemption model (v1.276): a NEW axis —
 // points are not money; they become value only at a stated
 // redemption value per point. Points are taken whole, each
 // gives exactly its stated value, and only the whole points

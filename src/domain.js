@@ -18942,3 +18942,76 @@ export function modelAverageCostBasis(input = {}) {
     taxesPriced: false, // Never: any tax on acquiring or holding the position is stated nowhere here.
   };
 }
+
+// Simple return model (v1.276): the future-value and
+// present-value models move a stated amount through time at
+// a stated RATE, the current-yield model states the income
+// a stated price earns per period, and the indexation model
+// adjusts a stated amount by a stated rate, but the return
+// on a completed holding stated as two amounts alone -
+// what was PAID IN against what CAME BACK, with no rate
+// anywhere - was stated nowhere (verified: no simple
+// return, return-on-cost, or ROI model in domain.js; the
+// RealFi lab's coverage function divides a loan payment,
+// not a holding's proceeds). This model states it exactly
+// in BigInt, all amounts in the same unit: the gain or loss
+// is THE PROCEEDS ACTUALLY STATED less THE COST ACTUALLY
+// STATED, signed and exact, the gain in basis points is
+// floor(that gain x 10,000 / THE COST ACTUALLY STATED)
+// where the proceeds exceed the cost, the loss in basis
+// points is floor(the loss x 10,000 / the cost) where they
+// fall short, and the proceeds are floor(proceeds x 10,000
+// / the cost) basis points of the cost (preload: a cost of
+// 1,000,000 returned proceeds of 1,250,000, a gain of
+// 250,000 and a return of 2,500 bps on the cost, the
+// proceeds 12,500 bps of the cost; values computed
+// mechanically against this model before pinning; see
+// tests/simple-return.test.mjs). Its defining statements
+// are that THE RETURN IS MEASURED ON THE COST, NEVER ON
+// THE PROCEEDS - the same gain measured on the proceeds
+// would state a smaller return for the same holding - that
+// THE GAIN AND LOSS RATES ARE BOTH ROUNDED DOWN in
+// magnitude, so neither a gain nor a loss is ever
+// overstated - and that NO TIME STANDS INSIDE THE RETURN:
+// it covers the whole holding however long it was held,
+// states no per-period or annual rate, and is never a
+// promise that the same return will recur. A proceeds of
+// zero is stated, not refused: everything paid in was
+// lost, the loss is the whole cost and the loss rate is
+// exactly 10,000 bps. Proceeds equal to the cost state a
+// return of zero. A cost of zero is refused: no amount was
+// paid in, and a return on nothing would state an infinite
+// rate. The return is NOT a fee: nothing is paid to anyone
+// here; the proceeds stand as the holder received them.
+// Amounts received at other times stand inside the
+// proceeds only as the reader states them in that one
+// figure; holding time, fees, and taxes NOT priced.
+export function modelSimpleReturn(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const cost = toUnits(input.cost === undefined ? '0' : input.cost, decimals); // Validates cost + decimals.
+  if (cost <= 0n) throw new Error('Cost must be greater than zero: no amount was paid in, and a return on nothing would state an infinite rate.');
+  const proceeds = toUnits(input.proceeds === undefined ? '0' : input.proceeds, decimals); // Validates proceeds + decimals. Zero is stated, not refused: everything paid in was lost.
+  const gainOrLossAmount = proceeds - cost; // Signed, exactly: positive on a gain, negative on a loss, zero where the proceeds return the cost exactly.
+  const gainBps = gainOrLossAmount > 0n ? gainOrLossAmount * 10000n / cost : 0n; // floor(gain x 10,000 / cost): the gain measured ON THE COST, rounded DOWN so it is never overstated; zero where there is no gain.
+  const lossBps = gainOrLossAmount < 0n ? -gainOrLossAmount * 10000n / cost : 0n; // floor(loss x 10,000 / cost): the loss measured ON THE COST, rounded DOWN in magnitude so it is never overstated; zero where there is no loss.
+  const proceedsBpsOfCost = proceeds * 10000n / cost; // floor(proceeds x 10,000 / cost): what share of the cost came back, in basis points, rounded DOWN.
+  return {
+    decimals,
+    cost, // The stated amount paid in, in the same unit throughout.
+    proceeds, // The stated amount received back in total, as one figure.
+    gainOrLossAmount, // proceeds - cost, signed, exactly.
+    gainBps, // floor(gain x 10,000 / cost) where the proceeds exceed the cost, else 0.
+    lossBps, // floor(loss x 10,000 / cost) where the proceeds fall short of the cost, else 0.
+    proceedsBpsOfCost, // floor(proceeds x 10,000 / cost), exactly.
+    isGain: gainOrLossAmount > 0n, // True exactly where the proceeds exceed the cost.
+    isLoss: gainOrLossAmount < 0n, // True exactly where the proceeds fall short of the cost.
+    returnMeasuredOnCost: true, // Always: the rates divide by the amount paid in, never by the proceeds.
+    returnRoundedDown: true, // Always: both rate divisions floor in magnitude, so neither a gain nor a loss is overstated.
+    annualized: false, // Never: no per-period or annual rate stands here; the return covers the whole holding as stated.
+    timePriced: false, // Never: however long the holding was held stands nowhere in the figures.
+    returnIsGuarantee: false, // Never: a completed holding's return states the past as stated, not a future promise.
+    returnIsFee: false, // Never: the return is paid to no one; it restates the stated cost and proceeds.
+    separateAmountsPriced: false, // Never: amounts received at other times stand inside the proceeds only as stated in that one figure.
+    taxesPriced: false, // Never: any tax on the gain or the proceeds is stated nowhere here.
+  };
+}

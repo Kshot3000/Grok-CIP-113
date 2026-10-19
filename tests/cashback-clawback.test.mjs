@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelCashback, modelCashbackClawback } from '../src/domain.js';
 
-// Cashback clawback model (v1.275): the cashback axis's
+// Cashback clawback model (v1.276): the cashback axis's
 // second moment — a later refund takes back the pro-rata
 // share of the cashback actually returned that belonged
 // to the refunded part: floor(cashback x refund /

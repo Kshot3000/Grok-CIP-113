@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelStackedDiscounts, modelPriceDiscount } from '../src/domain.js';
 
-// Stacked discounts model (v1.275): the discount axis's
+// Stacked discounts model (v1.276): the discount axis's
 // second moment — two stated cuts in a stated order, the
 // second measured against the price the first cut leaves
 // (never both against the list price), each cut floored at
