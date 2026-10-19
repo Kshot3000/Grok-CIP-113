@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelWithholding } from '../src/domain.js';
 
-// Withholding model (v1.272): a NEW axis — a stated share
+// Withholding model (v1.273): a NEW axis — a stated share
 // of a gross payment withheld by the payer and remitted to
 // a stated authority on the recipient's behalf. The
 // withheld amount is floor(gross x rate / 10,000),
@@ -129,6 +129,6 @@ test('wiring: the app imports the model, renders a withholding panel, and the RE
   assert.ok(app.includes('modelWithholding'));
   assert.ok(app.includes('data-withhold'));
   assert.ok(app.includes('withhold-output'));
-  assert.match(app, /v1\.272/);
+  assert.match(app, /v1\.273/);
   assert.ok(readme.includes('Withholding model'));
 });
