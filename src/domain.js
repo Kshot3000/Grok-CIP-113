@@ -18943,7 +18943,7 @@ export function modelAverageCostBasis(input = {}) {
   };
 }
 
-// Simple return model (v1.278): the future-value and
+// Simple return model (v1.279): the future-value and
 // present-value models move a stated amount through time at
 // a stated RATE, the current-yield model states the income
 // a stated price earns per period, and the indexation model
@@ -19016,7 +19016,7 @@ export function modelSimpleReturn(input = {}) {
   };
 }
 
-// Current ratio model (v1.278): the cash-runway model
+// Current ratio model (v1.279): the cash-runway model
 // states how long a stated cash balance lasts at a stated
 // net burn, and the lending models state one loan against
 // its collateral, but what a stated balance sheet's
@@ -19091,7 +19091,7 @@ export function modelCurrentRatio(input = {}) {
   };
 }
 
-// Debt-to-equity model (v1.278): the current-ratio model
+// Debt-to-equity model (v1.279): the current-ratio model
 // states a stated balance sheet's NEAR-TERM assets against
 // its NEAR-TERM liabilities at one moment, and the lending
 // models state one loan against its collateral, but how
@@ -19167,5 +19167,87 @@ export function modelDebtToEquity(input = {}) {
     assetValuesPriced: false, // Never: what the assets funded by the capital are worth is stated nowhere here.
     offStatementPriced: false, // Never: obligations standing off the stated figures are priced nowhere here.
     taxesPriced: false, // Never: any tax on the position is stated nowhere here.
+  };
+}
+
+// Free cash flow model (v1.279): the cash-runway model
+// states how long a stated cash balance lasts at a stated
+// net burn, and the simple-return model states a completed
+// holding on two amounts alone, but what a stated period's
+// operations generated in cash AFTER the period's stated
+// reinvestment in assets - THE OPERATING CASH FLOW
+// ACTUALLY STATED less THE CAPITAL EXPENDITURE ACTUALLY
+// STATED - was stated nowhere (verified across every
+// exported function in domain.js: no free cash flow,
+// operating cash flow, or capital expenditure model; the
+// lab's debtServiceCoverage derives a loan payment from a
+// schedule, a different statement). This model states it
+// exactly in BigInt, all amounts in the same unit: the
+// free cash flow is THE OPERATING CASH FLOW ACTUALLY
+// STATED less THE CAPITAL EXPENDITURE ACTUALLY STATED,
+// signed and exact, and the capital expenditure and the
+// free cash flow are each stated as basis points of the
+// operating cash flow (preload: operating cash flow of
+// 1,000,000 less capital expenditure of 250,000 leaves
+// free cash flow of 750,000; the expenditure consumed
+// 2,500 bps of the operating cash flow and 7,500 bps was
+// left as free cash flow; values computed mechanically
+// against this model before pinning; see
+// tests/free-cash-flow.test.mjs). Its defining statements
+// are that THE FREE CASH FLOW IS SIGNED, NEVER FLOORED AT
+// ZERO - where the expenditure exceeds the operating cash
+// flow the free cash flow is negative and the shortfall
+// is stated as its own figure, never hidden - that THE
+// SHARES ARE MEASURED ON THE OPERATING CASH FLOW ACTUALLY
+// STATED and ROUNDED DOWN, so the expenditure's share is
+// never understated by rounding up the remainder and the
+// free share is never overstated, with the expenditure
+// share carrying NO CAP because an expenditure above the
+// period's operating cash flow states a share above
+// 10,000 bps - and that FREE CASH FLOW IS NOT PROFIT: it
+// is cash left after the stated expenditure, and profit
+// is an accrual figure that counts amounts not yet
+// received and costs not yet paid in cash, so the two can
+// stand far apart on the same period. At operating cash
+// flow of zero there is NO FINITE SHARE, stated as no
+// share rather than refused or infinite, while the free
+// cash flow is then the expenditure negated. An
+// expenditure of zero is stated, not refused: the whole
+// operating cash flow is free. The free cash flow is NOT
+// a fee and NOT a distribution: it is paid to no one and
+// promised to no one here. Whether the expenditure was
+// maintenance or growth, changes in working capital,
+// debt drawn or repaid inside the period, and taxes NOT
+// priced.
+export function modelFreeCashFlow(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const operatingCashFlow = toUnits(input.operatingCashFlow === undefined ? '0' : input.operatingCashFlow, decimals); // Validates operating cash flow + decimals. Zero is stated, not refused: no finite share stands, and the free cash flow is the expenditure negated.
+  const capitalExpenditure = toUnits(input.capitalExpenditure === undefined ? '0' : input.capitalExpenditure, decimals); // Validates capital expenditure + decimals. Zero is stated, not refused: the whole operating cash flow is free.
+  const freeCashFlow = operatingCashFlow - capitalExpenditure; // Signed and exact: THE CASH LEFT, never floored at zero, so an expenditure above the operating cash flow states a negative figure.
+  const shortfall = freeCashFlow < 0n ? -freeCashFlow : 0n; // The amount by which the expenditure exceeds the operating cash flow, exactly; zero where the free cash flow stands at or above zero.
+  const hasShares = operatingCashFlow > 0n; // Finite shares stand exactly where operating cash flow stands; at zero there is nothing to take a share of.
+  const capitalExpenditureBpsOfCashFlow = hasShares ? capitalExpenditure * 10000n / operatingCashFlow : null; // floor(expenditure x 10,000 / operating cash flow): the share consumed, rounded DOWN, UNCAPPED - it exceeds 10,000 where the expenditure exceeds the cash flow; null where no share stands.
+  const freeCashFlowBpsOfCashFlow = hasShares && freeCashFlow >= 0n ? freeCashFlow * 10000n / operatingCashFlow : null; // floor(free cash flow x 10,000 / operating cash flow) where it stands at or above zero, rounded DOWN so it is never overstated; null where it is negative or no share stands.
+  const shortfallBpsOfCashFlow = hasShares && freeCashFlow < 0n ? shortfall * 10000n / operatingCashFlow : null; // floor(shortfall x 10,000 / operating cash flow) where the free cash flow is negative, rounded DOWN; null otherwise.
+  return {
+    decimals,
+    operatingCashFlow, // The stated operating cash flow for the period, in the same unit throughout.
+    capitalExpenditure, // The stated capital expenditure for the period, in the same unit throughout.
+    freeCashFlow, // operatingCashFlow - capitalExpenditure, signed and exact, never floored at zero.
+    shortfall, // max(capitalExpenditure - operatingCashFlow, 0), exactly.
+    hasShares, // True exactly where the operating cash flow exceeds zero and finite shares stand.
+    capitalExpenditureBpsOfCashFlow, // floor(expenditure x 10,000 / operating cash flow) where shares stand, else null; uncapped.
+    freeCashFlowBpsOfCashFlow, // floor(free cash flow x 10,000 / operating cash flow) where shares stand and it is not negative, else null.
+    shortfallBpsOfCashFlow, // floor(shortfall x 10,000 / operating cash flow) where the free cash flow is negative, else null.
+    expenditureExceedsCashFlow: capitalExpenditure > operatingCashFlow, // True exactly where the stated expenditure exceeds the stated operating cash flow.
+    sharesRoundedDown: true, // Always: each share division floors, so the free share stated is never overstated.
+    sharesMeasuredOnOperatingCashFlow: true, // Always: the shares divide by the operating cash flow actually stated, never by the expenditure or the free cash flow.
+    freeCashFlowIsProfit: false, // Never: profit is an accrual figure; this states cash left after the stated expenditure only.
+    freeCashFlowIsFee: false, // Never: the free cash flow is paid to no one; it restates two stated cash figures.
+    freeCashFlowIsDistribution: false, // Never: nothing here pays the free cash flow out to anyone.
+    capexSplitPriced: false, // Never: whether the expenditure was maintenance or growth is stated nowhere here.
+    workingCapitalPriced: false, // Never: changes in working capital inside the period are priced nowhere here.
+    debtFlowsPriced: false, // Never: debt drawn or repaid inside the period is stated nowhere here.
+    taxesPriced: false, // Never: any tax on the period is stated nowhere here.
   };
 }

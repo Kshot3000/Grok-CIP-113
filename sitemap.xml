@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- No lastmod element here by design (v1.278): scripts/build.mjs stamps the
+<!-- No lastmod element here by design (v1.279): scripts/build.mjs stamps the
      deployed copy with the build date. A hardcoded date went stale at its
      launch value through every release that followed. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

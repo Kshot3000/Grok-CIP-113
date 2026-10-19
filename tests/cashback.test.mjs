@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelCashback } from '../src/domain.js';
 
-// Cashback model (v1.278): a NEW axis — the buyer pays the
+// Cashback model (v1.279): a NEW axis — the buyer pays the
 // FULL purchase amount first and a stated share of it
 // comes back afterwards. The cashback is floor(purchase x
 // rate / 10,000), measured against the full purchase,
