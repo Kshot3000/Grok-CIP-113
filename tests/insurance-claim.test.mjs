@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { modelInsuranceClaim } from '../src/domain.js';
 
-// Insurance claim model (v1.277): a NEW axis — the deposit axis
+// Insurance claim model (v1.278): a NEW axis — the deposit axis
 // closed with its two moments (v1.181), and PRISM priced no claim
 // against stated coverage. The deductible applies FIRST (a claim
 // at or below it pays nothing — the deductible absorbing the

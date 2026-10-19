@@ -18943,7 +18943,7 @@ export function modelAverageCostBasis(input = {}) {
   };
 }
 
-// Simple return model (v1.277): the future-value and
+// Simple return model (v1.278): the future-value and
 // present-value models move a stated amount through time at
 // a stated RATE, the current-yield model states the income
 // a stated price earns per period, and the indexation model
@@ -19016,7 +19016,7 @@ export function modelSimpleReturn(input = {}) {
   };
 }
 
-// Current ratio model (v1.277): the cash-runway model
+// Current ratio model (v1.278): the cash-runway model
 // states how long a stated cash balance lasts at a stated
 // net burn, and the lending models state one loan against
 // its collateral, but what a stated balance sheet's
@@ -19086,6 +19086,85 @@ export function modelCurrentRatio(input = {}) {
     ratioIsFee: false, // Never: the ratio is paid to no one; it restates the stated assets and liabilities.
     assetQualityPriced: false, // Never: whether the assets can be collected or sold at their stated amounts is stated nowhere here.
     timingPriced: false, // Never: when inside the period each amount falls due stands nowhere in the figures.
+    offStatementPriced: false, // Never: obligations standing off the stated figures are priced nowhere here.
+    taxesPriced: false, // Never: any tax on the position is stated nowhere here.
+  };
+}
+
+// Debt-to-equity model (v1.278): the current-ratio model
+// states a stated balance sheet's NEAR-TERM assets against
+// its NEAR-TERM liabilities at one moment, and the lending
+// models state one loan against its collateral, but how
+// the WHOLE stated balance sheet is funded - THE TOTAL
+// LIABILITIES ACTUALLY STATED against THE TOTAL EQUITY
+// ACTUALLY STATED, the leverage standing between creditors
+// and owners - was stated nowhere (verified across every
+// exported function in domain.js: no debt-to-equity,
+// leverage, gearing, or capital-structure model). This
+// model states it exactly in BigInt, all amounts in the
+// same unit: the total capital is THE TOTAL LIABILITIES
+// ACTUALLY STATED plus THE TOTAL EQUITY ACTUALLY STATED,
+// exactly, the debt-to-equity ratio is floor(liabilities
+// x 10,000 / THE EQUITY ACTUALLY STATED) in basis points,
+// and the liabilities and the equity are each stated as
+// basis points of that total capital (preload: total
+// liabilities of 750,000 against total equity of 250,000
+// are funded by total capital of 1,000,000, carry a
+// debt-to-equity ratio of 30,000 bps, and split the
+// capital 7,500 bps liabilities to 2,500 bps equity;
+// values computed mechanically against this model before
+// pinning; see tests/debt-to-equity.test.mjs). Its
+// defining statements are that THE RATIO IS MEASURED ON
+// THE EQUITY, NEVER ON THE TOTAL CAPITAL - stating the
+// liabilities' 7,500 bps share of the capital as the
+// leverage would understate the creditors' claim per unit
+// of equity fourfold on the preload - that THE RATIO IS
+// ROUNDED DOWN, never up, so the leverage it states is
+// never overstated - the ratio times the equity never
+// exceeds the liabilities times 10,000, and one basis
+// point more would exceed it - and that AT EQUITY OF ZERO
+// THERE IS NO FINITE RATIO, stated as no finite ratio
+// rather than refused or infinite, while the whole stated
+// capital is then creditor-funded. Liabilities of zero
+// are stated, not refused: the ratio is zero and the
+// whole capital is equity. The leverage is NOT solvency
+// and NOT profit: it states the stated funding mix only,
+// never whether the debts can be paid as they fall due.
+// What the liabilities cost in interest, when they fall
+// due, what the assets funded by the capital are worth,
+// obligations standing off the stated figures, and taxes
+// NOT priced.
+export function modelDebtToEquity(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const totalLiabilities = toUnits(input.totalLiabilities === undefined ? '0' : input.totalLiabilities, decimals); // Validates liabilities + decimals. Zero is stated, not refused: the ratio is zero and the whole capital is equity.
+  const totalEquity = toUnits(input.totalEquity === undefined ? '0' : input.totalEquity, decimals); // Validates equity + decimals. Zero is stated, not refused: no finite ratio stands, and the whole capital is creditor-funded.
+  const totalCapital = totalLiabilities + totalEquity; // Exactly: every stated unit of funding is a creditor's or an owner's, with nothing added and nothing double-counted.
+  const hasRatio = totalEquity > 0n; // A finite ratio stands exactly where owners fund something; at equity of zero the creditor claim per unit of equity is unbounded and no finite figure is stated.
+  const debtToEquityBps = hasRatio ? totalLiabilities * 10000n / totalEquity : null; // floor(liabilities x 10,000 / equity): THE LEVERAGE, rounded DOWN so it is never overstated; null where no finite ratio stands.
+  const liabilitiesBpsOfCapital = totalCapital > 0n ? totalLiabilities * 10000n / totalCapital : null; // floor(liabilities x 10,000 / capital): the creditors' share of the stated funding, rounded DOWN; null where no capital stands.
+  const equityBpsOfCapital = totalCapital > 0n ? totalEquity * 10000n / totalCapital : null; // floor(equity x 10,000 / capital): the owners' share of the stated funding, rounded DOWN; null where no capital stands.
+  const debtExcess = totalLiabilities > totalEquity ? totalLiabilities - totalEquity : 0n; // The liabilities standing above the equity, exactly; zero where the equity meets or exceeds the liabilities.
+  const equityExcess = totalEquity > totalLiabilities ? totalEquity - totalLiabilities : 0n; // The equity standing above the liabilities, exactly; zero where the liabilities meet or exceed the equity.
+  return {
+    decimals,
+    totalLiabilities, // The stated total liabilities, in the same unit throughout.
+    totalEquity, // The stated total equity, in the same unit throughout.
+    totalCapital, // liabilities + equity, exactly.
+    hasRatio, // True exactly where the equity exceeds zero and a finite ratio stands.
+    debtToEquityBps, // floor(liabilities x 10,000 / equity) where a ratio stands, else null.
+    liabilitiesBpsOfCapital, // floor(liabilities x 10,000 / capital) where capital stands, else null.
+    equityBpsOfCapital, // floor(equity x 10,000 / capital) where capital stands, else null.
+    debtExcess, // max(liabilities - equity, 0), exactly.
+    equityExcess, // max(equity - liabilities, 0), exactly.
+    liabilitiesExceedEquity: totalLiabilities > totalEquity, // True exactly where the stated creditors fund more than the stated owners.
+    ratioRoundedDown: true, // Always: the ratio division floors, so the leverage stated is never overstated.
+    ratioMeasuredOnEquity: true, // Always: the ratio divides by the equity actually stated, never by the total capital.
+    leverageIsSolvency: false, // Never: a stated funding mix states nothing about whether debts can be paid as they fall due.
+    leverageIsProfit: false, // Never: nothing here is earned; the figures restate a stated funding position.
+    leverageIsFee: false, // Never: the ratio is paid to no one; it restates the stated liabilities and equity.
+    interestCostPriced: false, // Never: what the liabilities cost in interest is stated nowhere here.
+    maturityPriced: false, // Never: when the liabilities fall due stands nowhere in the figures.
+    assetValuesPriced: false, // Never: what the assets funded by the capital are worth is stated nowhere here.
     offStatementPriced: false, // Never: obligations standing off the stated figures are priced nowhere here.
     taxesPriced: false, // Never: any tax on the position is stated nowhere here.
   };
