@@ -18943,7 +18943,7 @@ export function modelAverageCostBasis(input = {}) {
   };
 }
 
-// Simple return model (v1.280): the future-value and
+// Simple return model (v1.281): the future-value and
 // present-value models move a stated amount through time at
 // a stated RATE, the current-yield model states the income
 // a stated price earns per period, and the indexation model
@@ -19016,7 +19016,7 @@ export function modelSimpleReturn(input = {}) {
   };
 }
 
-// Current ratio model (v1.280): the cash-runway model
+// Current ratio model (v1.281): the cash-runway model
 // states how long a stated cash balance lasts at a stated
 // net burn, and the lending models state one loan against
 // its collateral, but what a stated balance sheet's
@@ -19091,7 +19091,7 @@ export function modelCurrentRatio(input = {}) {
   };
 }
 
-// Debt-to-equity model (v1.280): the current-ratio model
+// Debt-to-equity model (v1.281): the current-ratio model
 // states a stated balance sheet's NEAR-TERM assets against
 // its NEAR-TERM liabilities at one moment, and the lending
 // models state one loan against its collateral, but how
@@ -19170,7 +19170,7 @@ export function modelDebtToEquity(input = {}) {
   };
 }
 
-// Free cash flow model (v1.280): the cash-runway model
+// Free cash flow model (v1.281): the cash-runway model
 // states how long a stated cash balance lasts at a stated
 // net burn, and the simple-return model states a completed
 // holding on two amounts alone, but what a stated period's
@@ -19252,7 +19252,7 @@ export function modelFreeCashFlow(input = {}) {
   };
 }
 
-// Interest coverage model (v1.280): the debt-to-equity
+// Interest coverage model (v1.281): the debt-to-equity
 // model states how a stated balance sheet is funded and
 // the current-ratio model states one moment's near-term
 // coverage, and the RealFi lab's debtServiceCoverage
@@ -19339,5 +19339,40 @@ export function modelInterestCoverage(input = {}) {
     debtBalancePriced: false, // Never: the balance the interest was charged on is stated nowhere here.
     maturityPriced: false, // Never: when any debt falls due stands nowhere in the figures.
     taxesPriced: false, // Never: the earnings stand before taxes by their stated name, and no tax is taken from them here.
+  };
+}
+
+export function modelDividendPayout(input = {}) {
+  const decimals = input.decimals === undefined ? 6 : Number(input.decimals);
+  const netIncome = toUnits(input.netIncome === undefined ? '0' : input.netIncome, decimals); // Validates net income + decimals. Zero is stated, not refused: no finite payout ratio stands, and any stated distribution stands wholly uncovered.
+  const dividends = toUnits(input.dividends === undefined ? '0' : input.dividends, decimals); // Validates dividends + decimals. Zero is stated, not refused: the payout is zero and the whole stated income is retained.
+  const retainedEarnings = netIncome - dividends; // Signed and exact: THE INCOME LEFT AFTER THE STATED DISTRIBUTION, never floored at zero, so a distribution above the income states a negative figure.
+  const shortfall = retainedEarnings < 0n ? -retainedEarnings : 0n; // The amount by which the stated distribution exceeds the stated income, exactly; zero where the income meets or exceeds the distribution.
+  const hasPayoutRatio = netIncome > 0n; // A finite payout ratio stands exactly where income stands; at zero there is no income to take a share of.
+  const payoutBps = hasPayoutRatio ? dividends * 10000n / netIncome : null; // floor(dividends x 10,000 / net income): THE PAYOUT RATIO, rounded DOWN so it is never overstated, UNCAPPED - it exceeds 10,000 where the distribution exceeds the income; null where no finite ratio stands.
+  const hasRetainedShare = hasPayoutRatio && retainedEarnings >= 0n; // A retained share of the income stands exactly where income stands and the retained figure is not negative.
+  const retainedBps = hasRetainedShare ? retainedEarnings * 10000n / netIncome : null; // floor(retained x 10,000 / net income): the retained share of the income, rounded DOWN; where it stands, payoutBps + retainedBps is 10,000 or one less from the two floorings. Null where no retained share stands.
+  return {
+    decimals,
+    netIncome, // The stated net income for the period, in the same unit throughout.
+    dividends, // The stated distribution to holders for the period, in the same unit throughout.
+    retainedEarnings, // netIncome - dividends, signed and exact, never floored at zero.
+    shortfall, // max(dividends - netIncome, 0), exactly.
+    hasPayoutRatio, // True exactly where the net income exceeds zero and a finite payout ratio stands.
+    payoutBps, // floor(dividends x 10,000 / net income) where a ratio stands, else null; uncapped.
+    hasRetainedShare, // True exactly where a retained share of the income stands.
+    retainedBps, // floor(retained x 10,000 / net income) where a retained share stands, else null.
+    incomeCoversDividends: netIncome >= dividends, // True exactly where the stated income meets or exceeds the stated distribution.
+    dividendsExceedIncome: dividends > netIncome, // True exactly where the stated distribution exceeds the stated income.
+    payoutRoundedDown: true, // Always: the payout division floors, so the share distributed stated is never overstated.
+    payoutMeasuredOnNetIncome: true, // Always: the payout divides by the net income actually stated, never by the distribution itself.
+    payoutIsYield: false, // Never: no price stands here, so nothing here states what a holder earns on what a holding cost.
+    payoutIsReturn: false, // Never: the distribution restated against income is not a return on any stated cost.
+    payoutIsProfit: false, // Never: the payout restates two stated figures; nothing here is earned by this model.
+    distributionIsFee: false, // Never: the distribution is paid to holders, not charged by this model; it is not a fee.
+    pricePriced: false, // Never: no market price for any holding is stated anywhere here.
+    perShareAmountPriced: false, // Never: no share or unit count stands here, so no per-share or per-unit distribution is stated.
+    futureIncomePriced: false, // Never: whether any later period earns or distributes anything stands nowhere in the figures.
+    taxesPriced: false, // Never: the income stands as stated after its own accounting, and no tax on the distribution is taken here.
   };
 }
