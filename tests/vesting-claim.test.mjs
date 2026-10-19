@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { modelVestingClaim } from '../src/domain.js';
 
-// Vesting claim model (v1.274): vesting is not claiming — a
+// Vesting claim model (v1.275): vesting is not claiming — a
 // recipient claims the vested amount in separate steps, so a
 // claim's ceiling is what had vested by the claim period and had
 // not yet been claimed, priced on the vesting schedule model
@@ -208,6 +208,6 @@ test('wiring: app.js imports the model, renders a claim panel, and the README do
   assert.match(app, /modelVestingClaim/);
   assert.match(app, /data-vclaim/);
   assert.match(app, /vesting-claim-output/);
-  assert.match(app, /v1\.274/);
+  assert.match(app, /v1\.275/);
   assert.match(readme, /Vesting claim model/);
 });
